@@ -27,35 +27,37 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 //
-// Created by zhuchen(zhuchen@ctrip.com) on 2019-04-17.
+// Created by zhuchen on 2019-04-30.
 //
 
-#ifndef XREDIS_CRDT_CRDT_H
-#define XREDIS_CRDT_CRDT_H
+#include "../../include/rmutil/test.h"
+#include "../../crdt.h"
 
-#define MODULE_NAME "xredis_crdt"
-#define CRDT_OK 1
-#define CRDT_ERROR 0
+int testBasicMacro() {
+    ASSERT_EQUAL(CRDT_OK, 1);
+    ASSERT_EQUAL(CRDT_ERROR, 0);
+    return 0;
+}
 
-#define SECOND_HIGHER_PRIORITY(first_gid, sec_gid) (sec_gid <= first_gid ? 1 : 0)
+int testGidPriority() {
+    long long base = 2;
+    long long target = 1;
 
+    int result = SECOND_HIGHER_PRIORITY(base, target);
+    ASSERT(result);
 
-//typedef struct CRDT_VectorClockUnit {
-//    long long gid;
-//    long long clock;
-//}VcUnit;
-//
-//
-//typedef struct CRDT_VectorClock {
-//    VcUnit *clocks;
-//}VectorClock;
+    base = 1, target = 2;
+    result = SECOND_HIGHER_PRIORITY(base, target);
+    ASSERT_EQUAL(CRDT_ERROR, result);
 
-typedef struct crdtObject {
-    long long gid;
-    long long timestamp;
-//    VectorClock *vectorClock;
-    void *ptr;
-} cobj;
+    base = 1, target = 1;
+    result = SECOND_HIGHER_PRIORITY(base, target);
+    ASSERT_EQUAL(CRDT_OK, result);
 
+    return 0;
+}
 
-#endif //XREDIS_CRDT_CRDT_H
+TEST_MAIN({
+    TESTFUNC(testBasicMacro);
+    TESTFUNC(testGidPriority);
+});

@@ -38,8 +38,6 @@
 #include "crdt.h"
 #include "config.h"
 
-#define LOCAL_GID 1
-
 /**
  * ==============================================Pre-defined functions=========================================================*/
 
@@ -130,6 +128,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
 }
 
+// CRDT.SET key <val> <gid> <timestamp>
 int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     RedisModule_AutoMemory(ctx);
@@ -222,6 +221,15 @@ int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_OK;
 }
 
+int isReplacable(CRDT_Register* target, long long timestamp, long long gid) {
+    if(target->timestamp < timestamp) {
+        return CRDT_OK;
+    } else if(target->timestamp == timestamp) {
+        return SECOND_HIGHER_PRIORITY(target->gid, gid);
+    }
+    return CRDT_ERROR;
+}
+
 int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleString *val, long long gid, long long timestamp) {
 
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, key,
@@ -237,7 +245,7 @@ int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleS
      * 2. target key exists, but due to LWW, previous one fails
      * either way, we do a update
      * */
-    if(!target || target->timestamp < timestamp) {
+    if(!target || isReplacable(target, timestamp, gid)) {
         CRDT_Register *current = createCrdtRegister();
         current->timestamp = timestamp;
         current->gid = gid;

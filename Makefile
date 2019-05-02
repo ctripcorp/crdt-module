@@ -7,6 +7,9 @@ ifndef RMUTIL_LIBDIR
 	RMUTIL_LIBDIR=./include/rmutil
 endif
 
+PYTHONTEST=python -m unittest -v -b
+ALLMODULES=tests.register_test.CrdtRegisterTest
+
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 
@@ -35,4 +38,22 @@ crdt.so: rmutil crdt.o crdt_register.o config.o
 	$(LD) -o $@ crdt.o crdt_register.o config.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
 
 clean:
-	rm -rf *.xo *.so *.o
+	rm -rf *.xo *.so *.o *.pyc
+
+
+# tests
+
+# unit tests
+test_crdt: tests/unit/test_crdt.c
+	$(CC) -Wall -o $@ $^ -lc -O0
+	@(sh -c ./$@)
+.PHONY: test_crdt
+
+
+# integration tests
+integration_test:
+	$(PYTHONTEST) $(ALLMODULES)
+
+# all tests
+test: test_crdt integration_test
+.PHONY: test

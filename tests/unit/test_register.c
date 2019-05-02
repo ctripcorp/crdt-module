@@ -27,35 +27,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 //
-// Created by zhuchen(zhuchen@ctrip.com) on 2019-04-17.
+// Created by zhuchen on 2019-04-30.
 //
 
-#ifndef XREDIS_CRDT_CRDT_H
-#define XREDIS_CRDT_CRDT_H
-
-#define MODULE_NAME "xredis_crdt"
-#define CRDT_OK 1
-#define CRDT_ERROR 0
-
-#define SECOND_HIGHER_PRIORITY(first_gid, sec_gid) (sec_gid <= first_gid ? 1 : 0)
 
 
-//typedef struct CRDT_VectorClockUnit {
-//    long long gid;
-//    long long clock;
-//}VcUnit;
-//
-//
-//typedef struct CRDT_VectorClock {
-//    VcUnit *clocks;
-//}VectorClock;
-
-typedef struct crdtObject {
-    long long gid;
-    long long timestamp;
-//    VectorClock *vectorClock;
-    void *ptr;
-} cobj;
-
-
-#endif //XREDIS_CRDT_CRDT_H
