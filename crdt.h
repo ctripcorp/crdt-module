@@ -40,22 +40,5 @@
 #define SECOND_HIGHER_PRIORITY(first_gid, sec_gid) (sec_gid <= first_gid ? 1 : 0)
 
 
-//typedef struct CRDT_VectorClockUnit {
-//    long long gid;
-//    long long clock;
-//}VcUnit;
-//
-//
-//typedef struct CRDT_VectorClock {
-//    VcUnit *clocks;
-//}VectorClock;
-
-typedef struct crdtObject {
-    long long gid;
-    long long timestamp;
-//    VectorClock *vectorClock;
-    void *ptr;
-} cobj;
-
 
 #endif //XREDIS_CRDT_CRDT_H

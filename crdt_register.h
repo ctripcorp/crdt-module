@@ -34,15 +34,15 @@
 #define XREDIS_CRDT_CRDT_REGISTER_H
 
 #include "include/rmutil/sds.h"
+#include "ctrip_crdt_common.h"
 #include "include/redismodule.h"
 
-#define CRDT_REGISTER_DATATYPE_NAME "xredisreg"
+#define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
 
 typedef struct CRDT_Register {
-    long long gid;
-    long long timestamp;
+    CrdtCommon common;
     sds val;
-}CRDT_Register;
+} CRDT_Register;
 
 void *createCrdtRegister(void);
 

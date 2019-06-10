@@ -27,27 +27,57 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 //
-// Created by zhuchen on 2019-04-26.
+// Created by zhuchen on 2019-06-07.
 //
 
-#include <rmutil/util.h>
-#include "config.h"
-#include "crdt.h"
+#include "ctrip_crdt_common.h"
 
-CRDT_Config CRDT_GlobalConfig;
+#include <stdlib.h>
 
-int readConfig(RedisModuleString **argv, int argc) {
 
-    if (argc > 1 && RMUtil_ArgIndex("CRDT.GID", argv, argc) >= 0) {
-        long long gid;
+#if defined(CRDT_COMMON_TEST_MAIN)
+#include <stdio.h>
+#include "testhelp.h"
+#include "limits.h"
 
-        if (RMUtil_ParseArgsAfter("CRDT.GID", argv, argc, "l", &gid) != REDISMODULE_OK) {
-            return CRDT_ERROR;
-        }
-        CRDT_GlobalConfig.gid = gid;
+#define UNUSED(x) (void)(x)
+typedef struct nickObject {
+    CrdtCommon common;
+    sds content;
+}nickObject;
 
-        printf("loaded default gid: %lld\r\n", gid);
+void*
+mergeFunc (const void *curVal, const void *value) {
+    if(value == NULL) {
+        return NULL;
     }
-
-    return CRDT_OK;
+    void *dup = zmalloc(1);
+    return dup;
 }
+
+nickObject
+*createNickObject() {
+    nickObject *obj = zmalloc(sizeof(nickObject));
+    printf("[nickObject]%lu\r\n", sizeof(nickObject));
+    obj->content = sdsnew("hello");
+
+    obj->common.vectorClock = sdsnew("1:200");
+    obj->common.merge = mergeFunc;
+    return obj;
+}
+
+int crdtCommonTest(void) {
+    nickObject *obj = createNickObject();
+    CrdtCommon *common = (CrdtCommon *) obj;
+    test_cond("[crdtCommonTest]", sdscmp(sdsnew("1:200"), common->vectorClock) == 0);
+    test_cond("[crdtCommonTest]", sdscmp(sdsnew("hello"), obj->content) == 0);
+    test_report();
+    return 0;
+}
+#endif
+
+#ifdef CRDT_COMMON_TEST_MAIN
+int main(void) {
+    return crdtCommonTest();
+}
+#endif

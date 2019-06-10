@@ -27,23 +27,24 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 //
-// Created by zhuchen on 2019-04-26.
+// Created by zhuchen on 2019-06-07.
 //
 
-#ifndef XREDIS_CRDT_CONFIG_H
-#define XREDIS_CRDT_CONFIG_H
+#ifndef REDIS_CTRIP_CRDT_COMMON_H
+#define REDIS_CTRIP_CRDT_COMMON_H
 
-#include "redismodule.h"
+#include "include/rmutil/sds.h"
 
-#define CONFIG_RUN_ID_SIZE 40
+#define CRDT_MODULE_OBJECT_PREFIX "crdt"
 
-typedef struct {
+typedef void *(*crdtMergeFunc)(void *curVal, void *value);
+typedef struct CrdtCommon {
+    sds vectorClock;
     long long gid;
-    char replid[CONFIG_RUN_ID_SIZE+1];
-} CRDT_Config;
+    long long timestamp;
 
-extern CRDT_Config CRDT_GlobalConfig;
+    //CRDT Merge Function
+    crdtMergeFunc merge;
+} CrdtCommon;
 
-int readConfig(RedisModuleString **argv, int argc);
-
-#endif //XREDIS_CRDT_CONFIG_H
+#endif //REDIS_CTRIP_CRDT_COMMON_H

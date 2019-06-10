@@ -183,6 +183,8 @@ void REDISMODULE_API_FUNC(RedisModule_AutoMemory)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_Replicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_ReplicateVerbatim)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_ReplicateStraightForward)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
+int REDISMODULE_API_FUNC(RedisModule_CrdtReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
+int REDISMODULE_API_FUNC(RedisModule_CrdtReplicateAlsoNormReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 const char *REDISMODULE_API_FUNC(RedisModule_CallReplyStringPtr)(RedisModuleCallReply *reply, size_t *len);
 RedisModuleString *REDISMODULE_API_FUNC(RedisModule_CreateStringFromCallReply)(RedisModuleCallReply *reply);
 int REDISMODULE_API_FUNC(RedisModule_DeleteKey)(RedisModuleKey *key);
@@ -239,6 +241,9 @@ long long REDISMODULE_API_FUNC(RedisModule_Milliseconds)(void);
 void REDISMODULE_API_FUNC(RedisModule_DigestAddStringBuffer)(RedisModuleDigest *md, unsigned char *ele, size_t len);
 void REDISMODULE_API_FUNC(RedisModule_DigestAddLongLong)(RedisModuleDigest *md, long long ele);
 void REDISMODULE_API_FUNC(RedisModule_DigestEndSequence)(RedisModuleDigest *md);
+/* Experimental APIs */
+RedisModuleString *REDISMODULE_API_FUNC(RedisModule_CurrentVectorClock)(RedisModuleCtx *ctx);
+long long REDISMODULE_API_FUNC(RedisModule_CurrentGid)(void);
 
 /* Experimental APIs */
 #ifdef REDISMODULE_EXPERIMENTAL_API
@@ -308,6 +313,8 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(Replicate);
     REDISMODULE_GET_API(ReplicateVerbatim);
     REDISMODULE_GET_API(ReplicateStraightForward);
+    REDISMODULE_GET_API(CrdtReplicate);
+    REDISMODULE_GET_API(CrdtReplicateAlsoNormReplicate);
     REDISMODULE_GET_API(DeleteKey);
     REDISMODULE_GET_API(UnlinkKey);
     REDISMODULE_GET_API(StringSet);
@@ -362,6 +369,8 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(DigestAddStringBuffer);
     REDISMODULE_GET_API(DigestAddLongLong);
     REDISMODULE_GET_API(DigestEndSequence);
+    REDISMODULE_GET_API(CurrentVectorClock);
+    REDISMODULE_GET_API(CurrentGid);
 
 #ifdef REDISMODULE_EXPERIMENTAL_API
     REDISMODULE_GET_API(GetThreadSafeContext);
