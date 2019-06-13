@@ -50,6 +50,12 @@ test_crdt: tests/unit/test_crdt.c
 .PHONY: test_crdt
 
 
+test_crdt_register: tests/unit/test_register.c tpl.c include/rmutil/librmutil.a crdt_register.c include/rmutil/sds.c
+	$(CC) -Wall -o $@ $^ $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc -O0
+	@(sh -c ./$@)
+.PHONY: test_crdt_register
+
+
 # integration tests
 integration_test:
 	$(PYTHONTEST) $(ALLMODULES)

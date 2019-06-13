@@ -14,6 +14,6 @@ static long long ustime(void) {
     return ust;
 }
 
-static long long mstime(void) {
+long long mstime(void) {
     return ustime()/1000;
 }
