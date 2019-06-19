@@ -155,7 +155,10 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
 
     long long gid = RedisModule_CurrentGid();
+    long long delta = 1;
+    RedisModule_IncrLocalVectorClock(delta);
     RedisModuleString *vc = RedisModule_CurrentVectorClock(ctx);
+
     long long timestmap = RedisModule_Milliseconds();
     if(crdtRegisterInsert(ctx, argv[1], argv[2], gid, timestmap, vc) == CRDT_OK) {
         return RedisModule_ReplyWithSimpleString(ctx, "OK");
@@ -180,7 +183,6 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if ((RedisModule_StringToLongLong(argv[4],&timestamp) != REDISMODULE_OK)) {
         return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
     }
-
 
 
     if(crdtRegisterInsert(ctx, argv[1], argv[2], gid, timestamp, argv[5]) == CRDT_OK) {
@@ -264,6 +266,24 @@ int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_OK;
 }
 
+CRDT_Register *createCrdtRegisterUsingCurrentVectorClock(RedisModuleCtx *ctx, RedisModuleString *val,
+                                                         long long gid, long long timestamp) {
+    RedisModuleString *currentVc = RedisModule_CurrentVectorClock(ctx);
+    size_t vcLength;
+    const char *vcStr = RedisModule_StringPtrLen(currentVc, &vcLength);
+    sds vcSds = sdsnewlen(vcStr, vcLength);
+
+    size_t sdsLength;
+    const char *str = RedisModule_StringPtrLen(val, &sdsLength);
+
+    CRDT_Register *current = createCrdtRegister();
+    current->common.gid = gid;
+    current->common.timestamp = timestamp;
+    current->common.vectorClock = vcSds;
+    current->val = sdsnewlen(str, sdsLength);
+    return current;
+
+}
 // CRDT.SET key <val> <gid> <timestamp> <vc>
 // 0         1    2     3      4         5
 int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleString *val,
@@ -278,52 +298,47 @@ int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleS
         target = RedisModule_ModuleTypeGetValue(moduleKey);
     }
 
+    RedisModuleString *currentVc = RedisModule_CurrentVectorClock(ctx);
+
     /* 1. target key not even exist
      * 2. target key exists, but due to LWW, previous one fails
      * either way, we do a update
      * */
-    if(!target || isReplacable(target, timestamp, gid) == CRDT_OK) {
-        CRDT_Register *current = createCrdtRegister();
-        current->common.gid = gid;
-        current->common.timestamp = timestamp;
-
-//        mergeOrIncrVectorClockAndSet(ctx, current, gid, vectorClock);
-        if (gid == RedisModule_CurrentGid()) {
-            long long delta = 1;
-            RedisModule_IncrLocalVectorClock(delta);
-            RedisModuleString *currentVc = RedisModule_CurrentVectorClock(ctx);
-            size_t vcLength;
-            const char *vcStr = RedisModule_StringPtrLen(currentVc, &vcLength);
-            current->common.vectorClock = sdsnewlen(vcStr, vcLength);
-        } else {
-            RedisModule_MergeVectorClock(ctx, gid, vectorClock);
-            RedisModuleString *currentVc = RedisModule_CurrentVectorClock(ctx);
-            size_t vcLength;
-            const char *vcStr = RedisModule_StringPtrLen(currentVc, &vcLength);
-            current->common.vectorClock = sdsnewlen(vcStr, vcLength);
-        }
-        size_t sdsLength;
-        const char *str = RedisModule_StringPtrLen(val, &sdsLength);
-        current->val = sdsnewlen(str, sdsLength);
-
+    int replicate = 0;
+    if(!target || gid == RedisModule_CurrentGid()) {
+        CRDT_Register *current = createCrdtRegisterUsingCurrentVectorClock(ctx, val, gid, timestamp);
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
-    }
+        replicate = 1;
+    } else {
+        if (RedisModule_IsVectorClockMonoIncr(currentVc, vectorClock) == CRDT_OK
+                || isReplacable(target, timestamp, gid) == CRDT_OK) {
 
+            RedisModule_MergeVectorClock(gid, vectorClock);
+            CRDT_Register *current = createCrdtRegisterUsingCurrentVectorClock(ctx, val, gid, timestamp);
+            RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
+            replicate = 1;
+        }
+    }
+    RedisModule_FreeString(ctx, currentVc);
+    currentVc = NULL;
     RedisModule_CloseKey(moduleKey);
 
     /**!!! important: RedisModule_ModuleTypeSetValue will automatically call free function to free the crdtRegister
      * So the next time we free a register, the sds will be an invalid memory space
-     * which , will crash the redis*/
-//    if(target) {
-//        freeCrdtRegister(target);
-//    }
-    RedisModuleString *currentVc = RedisModule_CurrentVectorClock(ctx);
-    if (gid == RedisModule_CurrentGid()) {
-        RedisModule_CrdtReplicateAlsoNormReplicate (ctx, "CRDT.SET", "sslls", key, val, gid, timestamp, currentVc);
-    } else {
-        RedisModule_ReplicateStraightForward(ctx, "CRDT.SET", "sslls", key, val, gid, timestamp, currentVc);
-    }
+     * which , will crash the redis
+     * if(target) {
+        freeCrdtRegister(target);
+        }
+     * */
 
+    //update here
+    if (replicate == 1) {
+        if (gid == RedisModule_CurrentGid()) {
+            RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "sslls", key, val, gid, timestamp, vectorClock);
+        } else {
+            RedisModule_ReplicateStraightForward(ctx, "CRDT.SET", "sslls", key, val, gid, timestamp, vectorClock);
+        }
+    }
     return CRDT_OK;
 }
 

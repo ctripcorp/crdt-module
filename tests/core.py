@@ -1,16 +1,15 @@
-import os
-import subprocess
-import socket
-import redis
-import sys
-
-import random
-import string
-import unittest
 import contextlib
+import os
+import random
+import socket
+import string
+import subprocess
+import sys
 import time
-from redis import ResponseError
+import unittest
 
+import redis
+from redis import ResponseError
 
 LOCAL_GID = 2
 
