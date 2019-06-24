@@ -306,11 +306,14 @@ int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleS
      * */
     int replicate = 0;
     if(!target || gid == RedisModule_CurrentGid()) {
+        RedisModule_MergeVectorClock(gid, vectorClock);
         CRDT_Register *current = createCrdtRegisterUsingCurrentVectorClock(ctx, val, gid, timestamp);
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
         replicate = 1;
     } else {
-        if (RedisModule_IsVectorClockMonoIncr(currentVc, vectorClock) == CRDT_OK
+        sds prevVc = target->common.vectorClock;
+        RedisModuleString *preVcStr = RedisModule_CreateString(ctx, prevVc, sdslen(prevVc));
+        if (RedisModule_IsVectorClockMonoIncr(preVcStr, vectorClock) == CRDT_OK
                 || isReplacable(target, timestamp, gid) == CRDT_OK) {
 
             RedisModule_MergeVectorClock(gid, vectorClock);
@@ -318,6 +321,7 @@ int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleS
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
             replicate = 1;
         }
+        RedisModule_FreeString(ctx, preVcStr);
     }
     RedisModule_FreeString(ctx, currentVc);
     currentVc = NULL;
