@@ -27,25 +27,64 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 //
-// Created by zhuchen on 2019-06-07.
+// Created by zhuchen on 2019-05-10.
 //
 
-#ifndef REDIS_CTRIP_CRDT_COMMON_H
-#define REDIS_CTRIP_CRDT_COMMON_H
+#ifndef REDIS_VECTOR_CLOCK_H
+#define REDIS_VECTOR_CLOCK_H
 
 #include "include/rmutil/sds.h"
-#include "ctrip_vector_clock.h"
 
-#define CRDT_MODULE_OBJECT_PREFIX "crdt"
+// "<gid>:<clock>;<gid>:<clock>"
+#define VECTOR_CLOCK_SEPARATOR ";"
+#define VECTOR_CLOCK_UNIT_SEPARATOR ":"
 
-typedef void *(*crdtMergeFunc)(void *curVal, void *value);
-typedef struct CrdtCommon {
-    int gid;
-    VectorClock *vectorClock;
-    long long timestamp;
+#define min(x, y) x > y ? y : x
 
-    //CRDT Merge Function
-    crdtMergeFunc merge;
-} __attribute__((packed, aligned(4))) CrdtCommon;
+#define max(x, y) x > y ? x : y
 
-#endif //REDIS_CTRIP_CRDT_COMMON_H
+typedef struct VectorClockUnit {
+    long long gid;
+    long long logic_time;
+}VectorClockUnit;
+
+typedef struct VectorClock {
+    VectorClockUnit *clocks;
+    int length;
+}VectorClock;
+
+/**------------------------Vector Clock Lifecycle--------------------------------------*/
+VectorClock*
+newVectorClock(int numVcUnits);
+
+void
+freeVectorClock(VectorClock *vc);
+
+void
+addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time);
+
+VectorClock*
+dupVectorClock(VectorClock *vc);
+
+/**------------------------Vector Clock & sds convertion--------------------------------------*/
+VectorClock*
+sdsToVectorClock(sds vcStr);
+
+sds
+vectorClockToSds(VectorClock *vc);
+
+/**------------------------Vector Clock Util--------------------------------------*/
+void
+sortVectorClock(VectorClock *vc);
+
+VectorClock*
+vectorClockMerge(VectorClock *vc1, VectorClock *vc2);
+
+VectorClockUnit*
+getVectorClockUnit(VectorClock *vc, long long gid);
+
+int
+isVectorClockMonoIncr(VectorClock *current, VectorClock *future);
+
+
+#endif //REDIS_VECTOR_CLOCK_H

@@ -34,6 +34,7 @@
 #include "include/rmutil/sds.h"
 
 #include "crdt_register.h"
+#include "ctrip_vector_clock.h"
 #include "utils.h"
 #include "crdt.h"
 
@@ -49,13 +50,15 @@ int getCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 
 int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleString *val,
-        long long gid, long long timestamp, RedisModuleString *vc);
+                       long long gid, long long timestamp, RedisModuleString *vectorClock);
 
 void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
 
 void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
 
 void AofRewriteCrdtRegister(RedisModuleIO *aof, RedisModuleString *key, void *value);
+
+size_t crdtRegisterMemUsageFunc(const void *value);
 
 void *crdtRegisterMerge(void *currentVal, void *value);
 
@@ -71,7 +74,7 @@ int initRegisterModule(RedisModuleCtx *ctx) {
             .rdb_load = RdbLoadCrdtRegister,
             .rdb_save = RdbSaveCrdtRegister,
             .aof_rewrite = AofRewriteCrdtRegister,
-            .mem_usage = NULL,
+            .mem_usage = crdtRegisterMemUsageFunc,
             .free = freeCrdtRegister,
             .digest = NULL
     };
@@ -106,13 +109,18 @@ int initRegisterModule(RedisModuleCtx *ctx) {
 void *createCrdtRegister(void) {
     CRDT_Register *crdtRegister = RedisModule_Alloc(sizeof(CRDT_Register));
     crdtRegister->common.merge = crdtRegisterMerge;
+    crdtRegister->common.vectorClock = NULL;
+    crdtRegister->common.timestamp = -1;
+    crdtRegister->val = NULL;
     return crdtRegister;
 }
 
 void freeCrdtRegister(void *obj) {
     CRDT_Register *crdtRegister = (CRDT_Register *)obj;
     sdsfree(crdtRegister->val);
-    sdsfree(crdtRegister->common.vectorClock);
+    if(crdtRegister->common.vectorClock) {
+        freeVectorClock(crdtRegister->common.vectorClock);
+    }
     RedisModule_Free(crdtRegister);
 }
 
@@ -129,7 +137,7 @@ CRDT_Register* dupCrdtRegister(const CRDT_Register *val) {
     CRDT_Register *dup = createCrdtRegister();
     dup->common.gid = val->common.gid;
     dup->common.timestamp = val->common.timestamp;
-    dup->common.vectorClock = val->common.vectorClock;
+    dup->common.vectorClock = dupVectorClock(val->common.vectorClock);
     dup->val = sdsdup(val->val);
     return dup;
 }
@@ -139,7 +147,8 @@ void *crdtRegisterMerge(void *currentVal, void *value){
         return value;
     }
     CRDT_Register *curRegister = currentVal, *targetRegister = value;
-    if (isReplacable(curRegister, targetRegister->common.timestamp, targetRegister->common.gid)) {
+    if (isVectorClockMonoIncr(curRegister->common.vectorClock, targetRegister->common.vectorClock) == CRDT_OK
+            || isReplacable(curRegister, targetRegister->common.timestamp, targetRegister->common.gid) == CRDT_OK) {
         return dupCrdtRegister(targetRegister);
     } else {
         return dupCrdtRegister(curRegister);
@@ -260,26 +269,22 @@ int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_ReplyWithString(ctx, result);
     RedisModule_ReplyWithLongLong(ctx, crdtRegister->common.gid);
     RedisModule_ReplyWithLongLong(ctx, crdtRegister->common.timestamp);
-    RedisModule_ReplyWithStringBuffer(ctx, crdtRegister->common.vectorClock, sdslen(crdtRegister->common.vectorClock));
-
+    sds vclockSds = vectorClockToSds(crdtRegister->common.vectorClock);
+    RedisModule_ReplyWithStringBuffer(ctx, vclockSds, sdslen(vclockSds));
+    sdsfree(vclockSds);
     RedisModule_CloseKey(key);
     return REDISMODULE_OK;
 }
 
-CRDT_Register *createCrdtRegisterUsingCurrentVectorClock(RedisModuleCtx *ctx, RedisModuleString *val,
-                                                         long long gid, long long timestamp) {
-    RedisModuleString *currentVc = RedisModule_CurrentVectorClock(ctx);
-    size_t vcLength;
-    const char *vcStr = RedisModule_StringPtrLen(currentVc, &vcLength);
-    sds vcSds = sdsnewlen(vcStr, vcLength);
-
+CRDT_Register *createCrdtRegisterUsingVectorClock(RedisModuleString *val, long long gid,
+                                                    long long timestamp, VectorClock *vclock) {
     size_t sdsLength;
     const char *str = RedisModule_StringPtrLen(val, &sdsLength);
 
     CRDT_Register *current = createCrdtRegister();
     current->common.gid = gid;
     current->common.timestamp = timestamp;
-    current->common.vectorClock = vcSds;
+    current->common.vectorClock = vclock;
     current->val = sdsnewlen(str, sdsLength);
     return current;
 
@@ -289,8 +294,9 @@ CRDT_Register *createCrdtRegisterUsingCurrentVectorClock(RedisModuleCtx *ctx, Re
 int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleString *val,
         long long gid, long long timestamp, RedisModuleString *vectorClock) {
 
-    RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, key,
-                                                    REDISMODULE_READ|REDISMODULE_WRITE);
+    RedisModuleKey *moduleKey;
+    moduleKey = RedisModule_OpenKey(ctx, key,
+                                    REDISMODULE_READ | REDISMODULE_WRITE);
     int type = RedisModule_KeyType(moduleKey);
 
     CRDT_Register *target = NULL;
@@ -298,8 +304,11 @@ int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleS
         target = RedisModule_ModuleTypeGetValue(moduleKey);
     }
 
-    RedisModuleString *currentVc = RedisModule_CurrentVectorClock(ctx);
-
+    size_t vcStrLength;
+    const char *vcStr = RedisModule_StringPtrLen(vectorClock, &vcStrLength);
+    sds vclockSds = sdsnewlen(vcStr, vcStrLength);
+    VectorClock *newVclock = sdsToVectorClock(vclockSds);
+    sdsfree(vclockSds);
     /* 1. target key not even exist
      * 2. target key exists, but due to LWW, previous one fails
      * either way, we do a update
@@ -307,24 +316,20 @@ int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleS
     int replicate = 0;
     if(!target || gid == RedisModule_CurrentGid()) {
         RedisModule_MergeVectorClock(gid, vectorClock);
-        CRDT_Register *current = createCrdtRegisterUsingCurrentVectorClock(ctx, val, gid, timestamp);
+        CRDT_Register *current = createCrdtRegisterUsingVectorClock(val, gid, timestamp, newVclock);
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
         replicate = 1;
     } else {
-        sds prevVc = target->common.vectorClock;
-        RedisModuleString *preVcStr = RedisModule_CreateString(ctx, prevVc, sdslen(prevVc));
-        if (RedisModule_IsVectorClockMonoIncr(preVcStr, vectorClock) == CRDT_OK
+        VectorClock *prevVc = target->common.vectorClock;
+        if (isVectorClockMonoIncr(prevVc, newVclock) == CRDT_OK
                 || isReplacable(target, timestamp, gid) == CRDT_OK) {
 
             RedisModule_MergeVectorClock(gid, vectorClock);
-            CRDT_Register *current = createCrdtRegisterUsingCurrentVectorClock(ctx, val, gid, timestamp);
+            CRDT_Register *current = createCrdtRegisterUsingVectorClock(val, gid, timestamp, newVclock);
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
             replicate = 1;
         }
-        RedisModule_FreeString(ctx, preVcStr);
     }
-    RedisModule_FreeString(ctx, currentVc);
-    currentVc = NULL;
     RedisModule_CloseKey(moduleKey);
 
     /**!!! important: RedisModule_ModuleTypeSetValue will automatically call free function to free the crdtRegister
@@ -360,8 +365,9 @@ void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver) {
     crdtRegister->common.timestamp = RedisModule_LoadSigned(rdb);
     size_t vcLength;
     char* vcStr = RedisModule_LoadStringBuffer(rdb, &vcLength);
-    sds vc = sdsnewlen(vcStr, vcLength);
-    crdtRegister->common.vectorClock = vc;
+    sds vclockSds = sdsnewlen(vcStr, vcLength);
+    crdtRegister->common.vectorClock = sdsToVectorClock(vclockSds);
+    sdsfree(vclockSds);
 
     size_t sdsLength;
     char* str = RedisModule_LoadStringBuffer(rdb, &sdsLength);
@@ -375,11 +381,23 @@ void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value) {
     CRDT_Register *crdtRegister = value;
     RedisModule_SaveSigned(rdb, crdtRegister->common.gid);
     RedisModule_SaveSigned(rdb, crdtRegister->common.timestamp);
-    RedisModule_SaveStringBuffer(rdb, crdtRegister->common.vectorClock, sdslen(crdtRegister->common.vectorClock));
+    sds vclockStr = vectorClockToSds(crdtRegister->common.vectorClock);
+    RedisModule_SaveStringBuffer(rdb, vclockStr, sdslen(vclockStr));
+    sdsfree(vclockStr);
     RedisModule_SaveStringBuffer(rdb, crdtRegister->val, sdslen(crdtRegister->val));
 }
 
 void AofRewriteCrdtRegister(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     CRDT_Register *crdtRegister = (CRDT_Register *) value;
-    RedisModule_EmitAOF(aof, "CRDT.SET", "sslls", key, crdtRegister->val, crdtRegister->common.gid, crdtRegister->common.timestamp, crdtRegister->common.vectorClock);
+    sds vclockSds = vectorClockToSds(crdtRegister->common.vectorClock);
+    RedisModule_EmitAOF(aof, "CRDT.SET", "scllc", key, crdtRegister->val, crdtRegister->common.gid, crdtRegister->common.timestamp, vclockSds);
+    sdsfree(vclockSds);
+}
+
+size_t crdtRegisterMemUsageFunc(const void *value) {
+    CRDT_Register *crdtRegister = (CRDT_Register *) value;
+    size_t valSize = sizeof(CRDT_Register) + sdsAllocSize(crdtRegister->val);
+    int vclcokNum = crdtRegister->common.vectorClock->length;
+    size_t vclockSize = vclcokNum * sizeof(VectorClockUnit) + sizeof(VectorClock);
+    return valSize + vclockSize;
 }

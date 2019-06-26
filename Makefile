@@ -34,8 +34,8 @@ crdt.o: crdt.c version.h
 crdt_register.o: crdt_register.c utils.h
 	$(CC) $(CFLAGS) -c -o $@ crdt_register.c
 
-crdt.so: rmutil crdt.o crdt_register.o ctrip_crdt_common.o
-	$(LD) -o $@ crdt.o crdt_register.o ctrip_crdt_common.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
+crdt.so: rmutil crdt.o crdt_register.o ctrip_crdt_common.o ctrip_vector_clock.o util.o
+	$(LD) -o $@ crdt.o crdt_register.o ctrip_crdt_common.o ctrip_vector_clock.o util.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
 
 clean:
 	rm -rf *.xo *.so *.o *.pyc

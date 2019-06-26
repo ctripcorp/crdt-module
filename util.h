@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2012, CTRIP CORP <RDkjdata at ctrip dot com>
+ * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,26 +26,29 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-//
-// Created by zhuchen on 2019-06-07.
-//
 
-#ifndef REDIS_CTRIP_CRDT_COMMON_H
-#define REDIS_CTRIP_CRDT_COMMON_H
+#ifndef __REDIS_UTIL_H
+#define __REDIS_UTIL_H
 
+#include <stdint.h>
 #include "include/rmutil/sds.h"
-#include "ctrip_vector_clock.h"
 
-#define CRDT_MODULE_OBJECT_PREFIX "crdt"
+int stringmatchlen(const char *p, int plen, const char *s, int slen, int nocase);
+int stringmatch(const char *p, const char *s, int nocase);
+long long memtoll(const char *p, int *err);
+uint32_t digits10(uint64_t v);
+uint32_t sdigits10(int64_t v);
+int ll2string(char *s, size_t len, long long value);
+int string2ll(const char *s, size_t slen, long long *value);
+int string2l(const char *s, size_t slen, long *value);
+int string2ld(const char *s, size_t slen, long double *dp);
+int d2string(char *buf, size_t len, double value);
+int ld2string(char *buf, size_t len, long double value, int humanfriendly);
+sds getAbsolutePath(char *filename);
+int pathIsBaseName(char *path);
 
-typedef void *(*crdtMergeFunc)(void *curVal, void *value);
-typedef struct CrdtCommon {
-    int gid;
-    VectorClock *vectorClock;
-    long long timestamp;
+#ifdef REDIS_TEST
+int utilTest(int argc, char **argv);
+#endif
 
-    //CRDT Merge Function
-    crdtMergeFunc merge;
-} __attribute__((packed, aligned(4))) CrdtCommon;
-
-#endif //REDIS_CTRIP_CRDT_COMMON_H
+#endif
