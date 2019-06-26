@@ -118,10 +118,13 @@ void *createCrdtRegister(void) {
 void freeCrdtRegister(void *obj) {
     CRDT_Register *crdtRegister = (CRDT_Register *)obj;
     sdsfree(crdtRegister->val);
+    crdtRegister->common.merge = NULL;
     if(crdtRegister->common.vectorClock) {
         freeVectorClock(crdtRegister->common.vectorClock);
     }
     RedisModule_Free(crdtRegister);
+    obj = NULL;
+    crdtRegister = NULL;
 }
 
 int isReplacable(CRDT_Register *target, long long timestamp, long long gid) {
@@ -357,7 +360,6 @@ int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleS
 
 void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver) {
     if (encver != 0) {
-        /* RedisModule_Log("warning","Can't load data with version %d", encver);*/
         return NULL;
     }
     CRDT_Register *crdtRegister = createCrdtRegister();
@@ -368,11 +370,13 @@ void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver) {
     sds vclockSds = sdsnewlen(vcStr, vcLength);
     crdtRegister->common.vectorClock = sdsToVectorClock(vclockSds);
     sdsfree(vclockSds);
+    RedisModule_Free(vcStr);
 
     size_t sdsLength;
     char* str = RedisModule_LoadStringBuffer(rdb, &sdsLength);
     sds val = sdsnewlen(str, sdsLength);
     crdtRegister->val = val;
+    RedisModule_Free(str);
 
     return crdtRegister;
 }
