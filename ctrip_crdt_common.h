@@ -39,13 +39,19 @@
 #define CRDT_MODULE_OBJECT_PREFIX "crdt"
 
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
+// RM_CrdtMultiWrappedReplicate should be called during this
+typedef int (*crdtDelFunc)(RedisModuleCtx *ctx, RedisModuleString *key, void *crdtObj);
+//typedef void (*crdtGcFunc)(void *crdtObj);
 typedef struct CrdtCommon {
+    unsigned char deleted;
     int gid;
     VectorClock *vectorClock;
     long long timestamp;
 
     //CRDT Merge Function
     crdtMergeFunc merge;
+    crdtDelFunc delFunc;
+//    crdtGcFunc  gcFunc;
 } __attribute__((packed, aligned(4))) CrdtCommon;
 
 #endif //REDIS_CTRIP_CRDT_COMMON_H

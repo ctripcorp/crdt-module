@@ -38,6 +38,40 @@
 #define CRDT_API_VERSION 1
 
 
+int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+    RedisModule_AutoMemory(ctx);
+
+    if (argc < 2) return RedisModule_WrongArity(ctx);
+
+    int numl = 0;
+
+    for(int i = 1; i < argc; i++) {
+        RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[i], REDISMODULE_WRITE);
+        // non-exist keys
+        if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
+            continue;
+        }
+        void *crdtObj = RedisModule_ModuleTypeGetValue(key);
+        CrdtCommon *crdtCommon = (CrdtCommon *) crdtObj;
+        numl += crdtCommon->delFunc(ctx, argv[i], crdtObj);
+
+        RedisModule_CloseKey(key);
+    }
+
+    RedisModule_ReplyWithLongLong(ctx, numl);
+    return REDISMODULE_OK;
+}
+
+VectorClock *getVectorClockFromString(RedisModuleString *vectorClockStr) {
+    size_t vcStrLength;
+    const char *vcStr = RedisModule_StringPtrLen(vectorClockStr, &vcStrLength);
+    sds vclockSds = sdsnewlen(vcStr, vcStrLength);
+    VectorClock *vclock = sdsToVectorClock(vclockSds);
+    sdsfree(vclockSds);
+    return vclock;
+}
+
 /* This function must be present on each Redis module. It is used in order to
  * register the commands into the Redis server. */
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -51,6 +85,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         RedisModule_Log(ctx, "warning", "register module -- register failed");
         return REDISMODULE_ERR;
     }
+
+    if (RedisModule_CreateCommand(ctx,"del",
+                                  delCommand,"write deny-oom",1,-1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
 
     return REDISMODULE_OK;
 }

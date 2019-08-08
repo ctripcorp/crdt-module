@@ -33,6 +33,9 @@
 #ifndef XREDIS_CRDT_CRDT_H
 #define XREDIS_CRDT_CRDT_H
 
+#include "ctrip_vector_clock.h"
+#include "include/redismodule.h"
+
 #define MODULE_NAME "xredis_crdt"
 #define CRDT_OK 1
 #define CRDT_ERROR 0
@@ -40,5 +43,8 @@
 #define SECOND_HIGHER_PRIORITY(first_gid, sec_gid) (sec_gid <= first_gid ? 1 : 0)
 
 
+int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
+
+VectorClock *getVectorClockFromString(RedisModuleString *redisModuleString);
 
 #endif //XREDIS_CRDT_CRDT_H
