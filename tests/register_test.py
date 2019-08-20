@@ -35,4 +35,4 @@ class CrdtRegisterTest(BaseModuleTestCase):
         self.assertTrue(current_milli_time() - _timestmap < 5)
 
     def testCrdtSet(self):
-        self.assertCmdOk('crdt.set', 'key', 'val', LOCAL_GID, current_milli_time())
+        self.assertCmdOk('crdt.set', 'key', LOCAL_GID, current_milli_time(), 'val')

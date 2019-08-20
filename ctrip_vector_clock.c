@@ -34,6 +34,7 @@
 #include "include/rmutil/sds.h"
 #include "include/rmutil/alloc.h"
 #include "util.h"
+#include "crdt.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -150,6 +151,9 @@ void sortVectorClock(VectorClock *vc) {
 
 VectorClockUnit*
 getVectorClockUnit(VectorClock *vc, long long gid) {
+    if (vc == NULL || !vc->length) {
+        return NULL;
+    }
     for(int i = 0; i < vc->length; i++) {
         if(vc->clocks[i].gid ==  gid) {
             return &(vc->clocks[i]);
@@ -160,8 +164,17 @@ getVectorClockUnit(VectorClock *vc, long long gid) {
 
 VectorClock*
 vectorClockMerge(VectorClock *vc1, VectorClock *vc2) {
+    if (vc1 == NULL && vc2 == NULL) {
+        return NULL;
+    }
+    if (vc1 == NULL) {
+        return dupVectorClock(vc2);
+    }
+    if (vc2 == NULL) {
+        return dupVectorClock(vc1);
+    }
     VectorClock *result = dupVectorClock(vc1);
-    for(int i = 0; i < vc2->length; i++) {
+    for (int i = 0; i < vc2->length; i++) {
         VectorClockUnit *target;
         if(!(target = getVectorClockUnit(result, vc2->clocks[i].gid))) {
             addVectorClockUnit(result, vc2->clocks[i].gid, vc2->clocks[i].logic_time);
@@ -176,22 +189,35 @@ vectorClockMerge(VectorClock *vc1, VectorClock *vc2) {
 int
 isVectorClockMonoIncr(VectorClock *current, VectorClock *future) {
     if (current == NULL || future == NULL) {
-        return 0;
+        return CRDT_ERROR;
     }
 
-    if(current->length > future->length) {
-        return 1;
+    if (current->length > future->length) {
+        return CRDT_ERROR;
     }
 
     for (int i = 0; i < current->length; i++) {
-        VectorClockUnit *vcu1 = &current->clocks[i];
-        VectorClockUnit *vcu2 = getVectorClockUnit(future, vcu1->gid);
-        if (vcu2 == NULL || vcu2->logic_time < vcu1->logic_time) {
-            return 0;
+        VectorClockUnit *currentVcu = &current->clocks[i];
+        VectorClockUnit *futureVcu = getVectorClockUnit(future, currentVcu->gid);
+        if (futureVcu == NULL || futureVcu->logic_time < currentVcu->logic_time) {
+            return CRDT_ERROR;
         }
     }
-    return 1;
+    return CRDT_OK;
 }
+
+VectorClock*
+getUnitVectorClock(VectorClock *vclock, int gid) {
+    if(vclock == NULL) {
+        return NULL;
+    }
+    VectorClockUnit *vectorClockUnit = getVectorClockUnit(vclock, gid);
+    VectorClock *result = newVectorClock(1);
+    result->clocks[0].gid = gid;
+    result->clocks[0].logic_time = vectorClockUnit->logic_time;
+    return result;
+}
+
 
 
 #if defined(VECTOR_CLOCK_TEST_MAIN)

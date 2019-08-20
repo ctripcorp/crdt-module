@@ -17,6 +17,7 @@
 /* API flags and constants */
 #define REDISMODULE_READ (1<<0)
 #define REDISMODULE_WRITE (1<<1)
+#define REDISMODULE_TOMBSTONE (1<<2)
 
 #define REDISMODULE_LIST_HEAD 0
 #define REDISMODULE_LIST_TAIL 1
@@ -118,8 +119,6 @@ typedef void (*RedisModuleTypeRewriteFunc)(RedisModuleIO *aof, RedisModuleString
 typedef size_t (*RedisModuleTypeMemUsageFunc)(const void *value);
 typedef void (*RedisModuleTypeDigestFunc)(RedisModuleDigest *digest, void *value);
 typedef void (*RedisModuleTypeFreeFunc)(void *value);
-typedef void *(*moduleTypeSerializeFunc)(void *value);
-typedef void *(*moduleTypeDeserializeFunc)(RedisModuleString *value);
 
 #define REDISMODULE_TYPE_METHOD_VERSION 1
 typedef struct RedisModuleTypeMethods {
@@ -130,8 +129,6 @@ typedef struct RedisModuleTypeMethods {
     RedisModuleTypeMemUsageFunc mem_usage;
     RedisModuleTypeDigestFunc digest;
     RedisModuleTypeFreeFunc free;
-    moduleTypeSerializeFunc serialize;
-    moduleTypeDeserializeFunc deserialize;
 } RedisModuleTypeMethods;
 
 #define REDISMODULE_GET_API(name) \
@@ -251,7 +248,8 @@ void *REDISMODULE_API_FUNC(RedisModule_CurrentVectorClock)(void);
 long long REDISMODULE_API_FUNC(RedisModule_CurrentGid)(void);
 void REDISMODULE_API_FUNC(RedisModule_IncrLocalVectorClock) (long long delta);
 void REDISMODULE_API_FUNC(RedisModule_MergeVectorClock) (long long gid, void *vclock);
-int REDISMODULE_API_FUNC(RedisModule_IsVectorClockMonoIncr) (RedisModuleString *current, RedisModuleString *future);
+int REDISMODULE_API_FUNC(RedisModule_ModuleTombstoneSetValue) (RedisModuleKey *key, RedisModuleType *mt, void *value);
+void *REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetTombstone)(RedisModuleKey *key);
 
 /* Experimental APIs */
 #ifdef REDISMODULE_EXPERIMENTAL_API
@@ -382,7 +380,8 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(CurrentGid);
     REDISMODULE_GET_API(IncrLocalVectorClock);
     REDISMODULE_GET_API(MergeVectorClock);
-    REDISMODULE_GET_API(IsVectorClockMonoIncr);
+    REDISMODULE_GET_API(ModuleTombstoneSetValue);
+    REDISMODULE_GET_API(ModuleTypeGetTombstone);
 
 #ifdef REDISMODULE_EXPERIMENTAL_API
     REDISMODULE_GET_API(GetThreadSafeContext);

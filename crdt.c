@@ -44,18 +44,24 @@ int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     if (argc < 2) return RedisModule_WrongArity(ctx);
 
-    int numl = 0;
+    int numl = 0, dirty, tmp;
 
     for(int i = 1; i < argc; i++) {
-        RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[i], REDISMODULE_WRITE);
-        // non-exist keys
-        if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
-            continue;
+        tmp = numl;
+        RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[i], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+        // if not found, skip this step
+        if (RedisModule_KeyType(key) != REDISMODULE_KEYTYPE_EMPTY) {
+            void *crdtObj = RedisModule_ModuleTypeGetValue(key);
+            if (crdtObj == NULL) {
+                continue;
+            }
+            CrdtCommon *crdtCommon = (CrdtCommon *) crdtObj;
+            numl += crdtCommon->delFunc(ctx, argv[i], key, crdtObj);
         }
-        void *crdtObj = RedisModule_ModuleTypeGetValue(key);
-        CrdtCommon *crdtCommon = (CrdtCommon *) crdtObj;
-        numl += crdtCommon->delFunc(ctx, argv[i], crdtObj);
-
+        dirty = numl - tmp;
+        if (dirty > 0) {
+            RedisModule_DeleteKey(key);
+        }
         RedisModule_CloseKey(key);
     }
 
@@ -87,7 +93,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     }
 
     if (RedisModule_CreateCommand(ctx,"del",
-                                  delCommand,"write deny-oom",1,-1,1) == REDISMODULE_ERR)
+                                  delCommand,"write",1,-1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     return REDISMODULE_OK;

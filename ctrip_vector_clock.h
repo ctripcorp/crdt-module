@@ -86,5 +86,7 @@ getVectorClockUnit(VectorClock *vc, long long gid);
 int
 isVectorClockMonoIncr(VectorClock *current, VectorClock *future);
 
+VectorClock*
+getUnitVectorClock(VectorClock *vclock, int gid);
 
 #endif //REDIS_VECTOR_CLOCK_H

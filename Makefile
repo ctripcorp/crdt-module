@@ -8,7 +8,7 @@ ifndef RMUTIL_LIBDIR
 endif
 
 PYTHONTEST=python -m unittest -v -b
-ALLMODULES=tests.register_test.CrdtRegisterTest
+ALLMODULES=tests.register_test.CrdtRegisterTest tests.crdt_test.CrdtTest
 
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
