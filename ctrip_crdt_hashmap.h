@@ -27,31 +27,63 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 //
-// Created by zhuchen on 2019-06-07.
+// Created by zhuchen on 2019/9/4.
 //
 
-#ifndef REDIS_CTRIP_CRDT_COMMON_H
-#define REDIS_CTRIP_CRDT_COMMON_H
+#ifndef XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H
+#define XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H
 
 #include "include/rmutil/sds.h"
-#include "ctrip_vector_clock.h"
+#include "ctrip_crdt_common.h"
+#include "include/redismodule.h"
 
-#define CRDT_MODULE_OBJECT_PREFIX "crdt"
+#define CRDT_HASH_DATATYPE_NAME "crdt_hash"
 
-typedef void *(*crdtMergeFunc)(void *curVal, void *value);
+typedef struct CRDT_Hash {
+    CrdtCommon common;
+//    dict *map;
+} CRDT_Map;
 
-// RM_CrdtMultiWrappedReplicate should be called during this
-//typedef int (*crdtDelFunc)(RedisModuleCtx *ctx, RedisModuleKey *key, void *crdtObj);
-typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
 
-typedef struct CrdtCommon {
-    int gid;
-    VectorClock *vectorClock;
-    long long timestamp;
+//uint64_t dictSdsHash(const void *key) {
+//    return dictGenHashFunction((unsigned char*)key, sdslen((char*)key));
+//}
+//
+//int dictSdsKeyCompare(void *privdata, const void *key1,
+//                      const void *key2)
+//{
+//    int l1,l2;
+//    DICT_NOTUSED(privdata);
+//
+//    l1 = sdslen((sds)key1);
+//    l2 = sdslen((sds)key2);
+//    if (l1 != l2) return 0;
+//    return 1;
+////    return memcmp(key1, key2, l1) == 0;
+//}
+//
+//void dictSdsDestructor(void *privdata, void *val)
+//{
+//    DICT_NOTUSED(privdata);
+//
+//    sdsfree(val);
+//}
+//
+/////* Db->dict, keys are sds strings, vals are Redis objects. */
+//dictType dbDictType = {
+//        dictSdsHash,                /* hash function */
+//        NULL,                       /* key dup */
+//        NULL,                       /* val dup */
+//        dictSdsKeyCompare,          /* key compare */
+//        dictSdsDestructor,          /* key destructor */
+//        freeCrdtRegister   /* val destructor */
+//};
+//
+//void *createCrdtHash(void);
+//
+//void freeCrdtHash(void *crdtHash);
+//
+int initCrdtHashModule(RedisModuleCtx *ctx);
 
-    //CRDT Merge Function
-    crdtMergeFunc merge;
-    crdtDelFunc delFunc;
-} __attribute__((packed, aligned(4))) CrdtCommon;
 
-#endif //REDIS_CTRIP_CRDT_COMMON_H
+#endif //XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H

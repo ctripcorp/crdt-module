@@ -1,7 +1,13 @@
-/* SDSLib 2.0 -- A C dynamic strings library
+/* redisassert.h -- Drop in replacemnet assert.h that prints the stack trace
+ *                  in the Redis logs.
  *
- * Copyright (c) 2006-2015, Salvatore Sanfilippo <antirez at gmail dot com>
- * Copyright (c) 2015, Redis Labs, Inc
+ * This file should be included instead of "assert.h" inside libraries used by
+ * Redis that are using assertions, so instead of Redis disappearing with
+ * SIGABORT, we get the details and stack trace inside the log file.
+ *
+ * ----------------------------------------------------------------------------
+ *
+ * Copyright (c) 2006-2012, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,19 +35,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* SDS allocator selection.
- *
- * This file is used in order to change the SDS allocator at compile time.
- * Just define the following defines to what you want to use. Also add
- * the include of your alternate allocator if needed (not needed in order
- * to use the default libc allocator). */
+#ifndef __REDIS_ASSERT_H__
+#define __REDIS_ASSERT_H__
 
-#if defined(__MACH__)
-#include <stdlib.h>
-#else
-#include <malloc.h>
+#include <unistd.h> /* for _exit() */
+
+#define assert(_e) ((_e)?(void)0 : (_serverAssert(#_e,__FILE__,__LINE__),_exit(1)))
+#define panic(...) _serverPanic(__FILE__,__LINE__,__VA_ARGS__),_exit(1)
+
+void _serverAssert(char *estr, char *file, int line);
+void _serverPanic(const char *file, int line, const char *msg, ...);
+
 #endif
-#include "zmalloc.h"
-#define s_malloc malloc
-#define s_realloc realloc
-#define s_free free

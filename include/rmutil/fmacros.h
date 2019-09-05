@@ -1,7 +1,5 @@
-/* SDSLib 2.0 -- A C dynamic strings library
- *
- * Copyright (c) 2006-2015, Salvatore Sanfilippo <antirez at gmail dot com>
- * Copyright (c) 2015, Redis Labs, Inc
+/*
+ * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,19 +27,35 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* SDS allocator selection.
- *
- * This file is used in order to change the SDS allocator at compile time.
- * Just define the following defines to what you want to use. Also add
- * the include of your alternate allocator if needed (not needed in order
- * to use the default libc allocator). */
+#ifndef _REDIS_FMACRO_H
+#define _REDIS_FMACRO_H
 
-#if defined(__MACH__)
-#include <stdlib.h>
-#else
-#include <malloc.h>
+#define _BSD_SOURCE
+
+#if defined(__linux__)
+#define _GNU_SOURCE
+#define _DEFAULT_SOURCE
 #endif
-#include "zmalloc.h"
-#define s_malloc malloc
-#define s_realloc realloc
-#define s_free free
+
+#if defined(_AIX)
+#define _ALL_SOURCE
+#endif
+
+#if defined(__linux__) || defined(__OpenBSD__)
+#define _XOPEN_SOURCE 700
+/*
+ * On NetBSD, _XOPEN_SOURCE undefines _NETBSD_SOURCE and
+ * thus hides inet_aton etc.
+ */
+#elif !defined(__NetBSD__)
+#define _XOPEN_SOURCE
+#endif
+
+#if defined(__sun)
+#define _POSIX_C_SOURCE 199506L
+#endif
+
+#define _LARGEFILE_SOURCE
+#define _FILE_OFFSET_BITS 64
+
+#endif
