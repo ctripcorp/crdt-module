@@ -52,17 +52,11 @@ int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleString *val,
                        long long gid, long long timestamp, VectorClock *vclock);
 
-void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
-
-void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
-
 void AofRewriteCrdtRegister(RedisModuleIO *aof, RedisModuleString *key, void *value);
 
 size_t crdtRegisterMemUsageFunc(const void *value);
 
 void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value);
-
-void *crdtRegisterMerge(void *currentVal, void *value);
 
 int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value);
 
@@ -117,6 +111,7 @@ int initRegisterModule(RedisModuleCtx *ctx) {
 
 void *createCrdtRegister(void) {
     CRDT_Register *crdtRegister = RedisModule_Alloc(sizeof(CRDT_Register));
+    crdtRegister->common.gid = -1;
     crdtRegister->common.merge = crdtRegisterMerge;
     crdtRegister->common.delFunc = crdtRegisterDelete;
     crdtRegister->common.vectorClock = NULL;
@@ -182,7 +177,7 @@ int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
 
     freeVectorClock(crdtRegister->common.vectorClock);
     crdtRegister->common.vectorClock = vclock;
-    crdtRegister->common.gid = gid;
+    crdtRegister->common.gid = (int) gid;
     crdtRegister->common.timestamp = timestamp;
 
     CRDT_Register *tombstoneCrdtRegister = dupCrdtRegister(crdtRegister);
@@ -307,7 +302,7 @@ int getCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
         return RedisModule_ReplyWithNull(ctx);
     } else if (RedisModule_ModuleTypeGetType(key) != CrdtRegister) {
-        return RedisModule_ReplyWithError(ctx, "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
     } else {
         crdtRegister = RedisModule_ModuleTypeGetValue(key);
     }
@@ -414,7 +409,7 @@ int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleS
     int replicate = 0;
     // newly added element
     if (target == NULL) {
-        if (notDeleted(moduleKey, vclock) == CRDT_OK) {
+        if (!isPartialOrderDeleted(moduleKey, vclock)) {
             opVectorClock = vectorClockMerge(NULL, vclock);
             CRDT_Register *current = createCrdtRegisterUsingVectorClock(val, gid, timestamp, opVectorClock);
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);

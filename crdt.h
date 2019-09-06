@@ -40,6 +40,9 @@
 #define CRDT_OK 1
 #define CRDT_ERROR 0
 
+#define CRDT_YES 1
+#define CRDT_NO 0
+
 #define SECOND_HIGHER_PRIORITY(first_gid, sec_gid) (sec_gid <= first_gid ? 1 : 0)
 
 

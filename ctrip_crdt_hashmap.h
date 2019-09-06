@@ -33,57 +33,36 @@
 #ifndef XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H
 #define XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H
 
+#include <string.h>
+
 #include "include/rmutil/sds.h"
 #include "ctrip_crdt_common.h"
 #include "include/redismodule.h"
+#include "include/rmutil/dict.h"
 
 #define CRDT_HASH_DATATYPE_NAME "crdt_hash"
 
+#define HASHTABLE_MIN_FILL        10
+
+#define UINT64_MAX        18446744073709551615ULL
+#define RDB_LENERR UINT64_MAX
+
+#define OBJ_HASH_KEY 1
+#define OBJ_HASH_VALUE 2
+
 typedef struct CRDT_Hash {
     CrdtCommon common;
-//    dict *map;
-} CRDT_Map;
+    dict *map;
+} CRDT_Hash;
 
 
-//uint64_t dictSdsHash(const void *key) {
-//    return dictGenHashFunction((unsigned char*)key, sdslen((char*)key));
-//}
-//
-//int dictSdsKeyCompare(void *privdata, const void *key1,
-//                      const void *key2)
-//{
-//    int l1,l2;
-//    DICT_NOTUSED(privdata);
-//
-//    l1 = sdslen((sds)key1);
-//    l2 = sdslen((sds)key2);
-//    if (l1 != l2) return 0;
-//    return 1;
-////    return memcmp(key1, key2, l1) == 0;
-//}
-//
-//void dictSdsDestructor(void *privdata, void *val)
-//{
-//    DICT_NOTUSED(privdata);
-//
-//    sdsfree(val);
-//}
-//
-/////* Db->dict, keys are sds strings, vals are Redis objects. */
-//dictType dbDictType = {
-//        dictSdsHash,                /* hash function */
-//        NULL,                       /* key dup */
-//        NULL,                       /* val dup */
-//        dictSdsKeyCompare,          /* key compare */
-//        dictSdsDestructor,          /* key destructor */
-//        freeCrdtRegister   /* val destructor */
-//};
-//
-//void *createCrdtHash(void);
-//
-//void freeCrdtHash(void *crdtHash);
-//
+void *createCrdtHash(void);
+
+void freeCrdtHash(void *crdtHash);
+
 int initCrdtHashModule(RedisModuleCtx *ctx);
+
+int crdtHtNeedsResize(dict *dict);
 
 
 #endif //XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H

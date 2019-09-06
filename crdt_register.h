@@ -48,7 +48,15 @@ void *createCrdtRegister(void);
 
 void freeCrdtRegister(void *crdtRegister);
 
+CRDT_Register* dupCrdtRegister(const CRDT_Register *val);
+
 int initRegisterModule(RedisModuleCtx *ctx);
+
+void *crdtRegisterMerge(void *currentVal, void *value);
+
+void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
+
+void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
 
 
 #endif //XREDIS_CRDT_CRDT_REGISTER_H

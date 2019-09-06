@@ -94,7 +94,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     }
 
     if(initCrdtHashModule(ctx) != REDISMODULE_OK) {
-        RedisModule_Log(ctx, "warning", "register module -- register failed");
+        RedisModule_Log(ctx, "warning", "hash module -- register failed");
         return REDISMODULE_ERR;
     }
 

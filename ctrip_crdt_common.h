@@ -35,6 +35,7 @@
 
 #include "include/rmutil/sds.h"
 #include "ctrip_vector_clock.h"
+#include "redismodule.h"
 
 #define CRDT_MODULE_OBJECT_PREFIX "crdt"
 
@@ -54,4 +55,5 @@ typedef struct CrdtCommon {
     crdtDelFunc delFunc;
 } __attribute__((packed, aligned(4))) CrdtCommon;
 
+int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 #endif //REDIS_CTRIP_CRDT_COMMON_H

@@ -31,8 +31,21 @@
 //
 
 #include "ctrip_crdt_common.h"
+#include "crdt.h"
 
 #include <stdlib.h>
+
+int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock) {
+    void *tombstone = RedisModule_ModuleTypeGetTombstone(key);
+    if (tombstone == NULL) {
+        return CRDT_NO;
+    }
+    CrdtCommon *common = tombstone;
+    if (isVectorClockMonoIncr(vclock, common->vectorClock) == CRDT_OK) {
+        return CRDT_YES;
+    }
+    return CRDT_NO;
+}
 
 
 #if defined(CRDT_COMMON_TEST_MAIN)

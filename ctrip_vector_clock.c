@@ -189,21 +189,21 @@ vectorClockMerge(VectorClock *vc1, VectorClock *vc2) {
 int
 isVectorClockMonoIncr(VectorClock *current, VectorClock *future) {
     if (current == NULL || future == NULL) {
-        return CRDT_ERROR;
+        return CRDT_NO;
     }
 
     if (current->length > future->length) {
-        return CRDT_ERROR;
+        return CRDT_NO;
     }
 
     for (int i = 0; i < current->length; i++) {
         VectorClockUnit *currentVcu = &current->clocks[i];
         VectorClockUnit *futureVcu = getVectorClockUnit(future, currentVcu->gid);
         if (futureVcu == NULL || futureVcu->logic_time < currentVcu->logic_time) {
-            return CRDT_ERROR;
+            return CRDT_NO;
         }
     }
-    return CRDT_OK;
+    return CRDT_YES;
 }
 
 VectorClock*
