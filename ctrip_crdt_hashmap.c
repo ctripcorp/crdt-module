@@ -32,7 +32,7 @@
 
 #include "ctrip_crdt_hashmap.h"
 #include "crdt_register.h"
-#include "util.h"
+#include "utils.h"
 
 
 /***
@@ -72,12 +72,54 @@ size_t crdtHashMemUsageFunc(const void *value);
 
 void crdtHashDigestFunc(RedisModuleDigest *md, void *value);
 
+
+CRDT_Hash *dupCrdtHash(CRDT_Hash *current) {
+    CRDT_Hash *copy = createCrdtHash();
+    dictIterator *di = dictGetIterator(current->map);
+    dictEntry *de;
+
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        CRDT_Register *crdtRegister = dictGetVal(de);
+
+        dictAdd(copy->map, sdsdup(field), dupCrdtRegister(crdtRegister));
+    }
+    dictReleaseIterator(di);
+    return copy;
+}
 /* --------------------------------------------------------------------------
  * CrdtCommon API for Hash type
  * -------------------------------------------------------------------------- */
 
 void *crdtHashMerge(void *currentVal, void *value) {
-    return value;
+
+    CRDT_Hash *curHash = currentVal, *targetHash = value;
+    if (curHash == NULL) {
+        return dupCrdtHash(targetHash);
+    }
+    CRDT_Hash *result = dupCrdtHash(curHash);
+
+    dictIterator *di = dictGetIterator(targetHash->map);
+    dictEntry *de, *existDe;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        CRDT_Register *crdtRegister = dictGetVal(de);
+
+        existDe = dictFind(result->map, field);
+        if (existDe == NULL) {
+            dictAdd(result->map, sdsdup(field), dupCrdtRegister(crdtRegister));
+        } else {
+            CRDT_Register *currentRegister = dictGetVal(de);
+            CRDT_Register *newRegister = crdtRegisterMerge(currentRegister, crdtRegister);
+            freeCrdtRegister(dictGetVal(de));
+            dictGetVal(existDe) = newRegister;
+        }
+
+    }
+    dictReleaseIterator(di);
+
+    return result;
+
 }
 
 int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
