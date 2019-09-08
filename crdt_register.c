@@ -119,7 +119,9 @@ void *createCrdtRegister(void) {
 
 void freeCrdtRegister(void *obj) {
     CRDT_Register *crdtRegister = (CRDT_Register *)obj;
-    sdsfree(crdtRegister->val);
+    if (crdtRegister->val) {
+        sdsfree(crdtRegister->val);
+    }
     crdtRegister->common.merge = NULL;
     crdtRegister->common.delFunc = NULL;
     if(crdtRegister->common.vectorClock) {
@@ -142,7 +144,9 @@ CRDT_Register* dupCrdtRegister(const CRDT_Register *val) {
     dup->common.gid = val->common.gid;
     dup->common.timestamp = val->common.timestamp;
     dup->common.vectorClock = dupVectorClock(val->common.vectorClock);
-    dup->val = sdsdup(val->val);
+    if (val->val) {
+        dup->val = sdsdup(val->val);
+    }
     return dup;
 }
 
@@ -397,7 +401,6 @@ int getCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
 
     if(!crdtRegister->val) {
-        RedisModule_Log(ctx, "warning", "empty val for key");
         RedisModule_CloseKey(key);
         return RedisModule_ReplyWithNull(ctx);
     }
