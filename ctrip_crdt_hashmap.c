@@ -33,7 +33,9 @@
 #include "ctrip_crdt_hashmap.h"
 #include "crdt_register.h"
 #include "utils.h"
+#include "crdt.h"
 
+static RedisModuleType *CrdtHash;
 
 /***
  * ==================================== Predefined functions ===========================================*/
@@ -75,6 +77,8 @@ void crdtHashDigestFunc(RedisModuleDigest *md, void *value);
 
 CRDT_Hash *dupCrdtHash(CRDT_Hash *current) {
     CRDT_Hash *copy = createCrdtHash();
+    copy->common.gid = current->common.gid;
+    copy->common.vectorClock = dupVectorClock(current->common.vectorClock);
     dictIterator *di = dictGetIterator(current->map);
     dictEntry *de;
 
@@ -111,7 +115,7 @@ void *crdtHashMerge(void *currentVal, void *value) {
         } else {
             CRDT_Register *currentRegister = dictGetVal(de);
             CRDT_Register *newRegister = crdtRegisterMerge(currentRegister, crdtRegister);
-            freeCrdtRegister(dictGetVal(de));
+            freeCrdtRegister(currentRegister);
             dictGetVal(existDe) = newRegister;
         }
 
@@ -123,12 +127,34 @@ void *crdtHashMerge(void *currentVal, void *value) {
 }
 
 int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
+    if(value == NULL) {
+        return 0;
+    }
+    RedisModuleKey *moduleKey = (RedisModuleKey *) key;
+    CRDT_Hash *crdtHash = (CRDT_Hash *) value;
+
+    long long gid = RedisModule_CurrentGid();
+    long long timestamp = mstime();
+    RedisModule_IncrLocalVectorClock(1);
+    VectorClock *vclock = RedisModule_CurrentVectorClock();
+
+    freeVectorClock(crdtHash->common.vectorClock);
+    crdtHash->common.vectorClock = vclock;
+    crdtHash->common.gid = (int) gid;
+    crdtHash->common.timestamp = timestamp;
+    dictEmpty(crdtHash->map, NULL);
+
+    CRDT_Hash *tombstoneCrdtRegister = dupCrdtHash(crdtHash);
+    RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstoneCrdtRegister);
+
+    sds vcSds = vectorClockToSds(vclock);
+    RedisModule_CrdtMultiWrappedReplicate(ctx, "CRDT.DEL_Hash", "sllc", keyRobj, gid, timestamp, vcSds);
+    sdsfree(vcSds);
+
     return 1;
 }
 /***
  * ==================================== CRDT Hash Module Init ===========================================*/
-
-static RedisModuleType *CrdtHash;
 
 int initCrdtHashModule(RedisModuleCtx *ctx) {
     RedisModuleTypeMethods tm = {
@@ -274,7 +300,7 @@ void freeCrdtHash(void *obj) {
 /* --------------------------------------------------------------------------
  * Internal API for Hash type
  * -------------------------------------------------------------------------- */
-CRDT_Hash *crdtHashTypeLookupWriteOrCreate(RedisModuleCtx *ctx, RedisModuleString *key) {
+CRDT_Hash *crdtHashTypeLookupWriteOrCreate(RedisModuleCtx *ctx, RedisModuleString *key, int gid, VectorClock *vclock) {
     RedisModuleKey *moduleKey;
     moduleKey = RedisModule_OpenKey(ctx, key,
                                     REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);
@@ -293,19 +319,22 @@ CRDT_Hash *crdtHashTypeLookupWriteOrCreate(RedisModuleCtx *ctx, RedisModuleStrin
             return NULL;
         }
     }
+    VectorClock *currentVc = target->common.vectorClock;
+    target->common.gid = gid;
+    target->common.vectorClock = vectorClockMerge(currentVc, vclock);
+    if (currentVc != NULL) {
+        freeVectorClock(currentVc);
+    }
     return target;
 }
 
-#define HASH_SET_TAKE_FIELD (1<<0)
-#define HASH_SET_TAKE_VALUE (1<<1)
-#define HASH_SET_COPY 0
-int crdtHashTypeSet(CRDT_Hash *o, RedisModuleString *argv1, RedisModuleString *argv2,
-        int gid, long long timestamp, VectorClock *vclock, int flags) {
+int crdtHashTypeSet(CRDT_Hash *o, RedisModuleString *fieldArgv, RedisModuleString *valArgv,
+                    int gid, long long timestamp, VectorClock *vclock) {
 
     int update = 0;
 
-    sds field = moduleString2Sds(argv1);
-    sds val = moduleString2Sds(argv2);
+    sds field = moduleString2Sds(fieldArgv);
+    sds val = moduleString2Sds(valArgv);
     CRDT_Register *value = createCrdtRegister();
     value->common.gid = gid;
     value->common.timestamp = timestamp;
@@ -315,37 +344,16 @@ int crdtHashTypeSet(CRDT_Hash *o, RedisModuleString *argv1, RedisModuleString *a
     dictEntry *de = dictFind(o->map, field);
 
     if (de) {
-        freeCrdtRegister(dictGetVal(de));
-        if (flags & HASH_SET_TAKE_VALUE) {
-            dictGetVal(de) = value;
-            value = NULL;
-        } else {
-            dictGetVal(de) = dupCrdtRegister(value);
-        }
+        CRDT_Register *current = dictGetVal(de);
+        dictGetVal(de) = crdtRegisterMerge(current, value);
+        freeCrdtRegister(current);
+        freeCrdtRegister(value);
+        sdsfree(field);
         update = 1;
     } else {
-        sds f;
-        CRDT_Register *v;
-        if (flags & HASH_SET_TAKE_FIELD) {
-            f = field;
-            field = NULL;
-        } else {
-            f = sdsdup(field);
-        }
-        if (flags & HASH_SET_TAKE_VALUE) {
-            v = value;
-            value = NULL;
-        } else {
-            v = dupCrdtRegister(value);
-        }
-        dictAdd(o->map,f,v);
+        dictAdd(o->map, field, value);
     }
 
-
-    /* Free SDS strings we did not referenced elsewhere if the flags
-     * want this function to be responsible. */
-    if (flags & HASH_SET_TAKE_FIELD && field) sdsfree(field);
-    if (flags & HASH_SET_TAKE_VALUE && value) freeCrdtRegister(value);
     return update;
 }
 
@@ -381,8 +389,6 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // and due to the op-based crdt, we do an update or effect, which, we believe the vclock is (1:101), because is locally changed
     // and we will let the under layer logic deal with the real op clock
     VectorClock *currentVectorClock = RedisModule_CurrentVectorClock();
-    VectorClock *opVectorClock = getUnitVectorClock(currentVectorClock, gid);
-    freeVectorClock(currentVectorClock);
     long long timestamp = RedisModule_Milliseconds();
 
 
@@ -393,12 +399,26 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         return RedisModule_ReplyWithError(ctx, "wrong number of arguments for HSET/HMSET");
     }
 
-    if ((crdtHash = crdtHashTypeLookupWriteOrCreate(ctx,argv[1])) == NULL) {
+    if ((crdtHash = crdtHashTypeLookupWriteOrCreate(ctx,argv[1], (int) gid, currentVectorClock)) == NULL) {
         return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);;
     }
 
-    for (i = 2; i < argc; i += 2)
-        created += !crdtHashTypeSet(crdtHash, argv[i], argv[i+1], (int) gid, timestamp, opVectorClock, HASH_SET_COPY);
+    for (i = 2; i < argc; i += 2) {
+        created += !crdtHashTypeSet(crdtHash, argv[i], argv[i + 1], (int) gid, timestamp, currentVectorClock);
+    }
+
+    /*
+     * sent to both my slaves and my peer slaves */
+    // "CRDT.HSET", <key>, <gid>, <timestamp>, <vclockStr>, <argc>, <field> <val> <field> <val> . . .);
+    sds vclockStr = vectorClockToSds(currentVectorClock);
+    size_t argc_repl = (size_t) (argc - 2);
+    void *argv_repl = (void *) (argv + 2);
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.HSET", "sllclv", argv[1], gid, timestamp, vclockStr, argc-2, argv_repl, argc_repl);
+    sdsfree(vclockStr);
+
+    if (currentVectorClock) {
+        freeVectorClock(currentVectorClock);
+    }
 
     /* HMSET (deprecated) and HSET return value is different. */
     char *cmdname = moduleString2Sds(argv[0]);
@@ -527,12 +547,12 @@ int hmgetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
 
     RedisModule_ReplyWithArray(ctx, argc-2);
-    int result = 1;
+
     for (i = 2; i < argc; i++) {
-        result &= addCrdtHashFieldToReply(ctx, crdtHash, argv[i]);
+        addCrdtHashFieldToReply(ctx, crdtHash, argv[i]);
     }
     RedisModule_CloseKey(key);
-    return result;
+    return REDISMODULE_OK;
 }
 
 int genericHgetallCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int flags) {
@@ -607,9 +627,99 @@ int hgetallCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
  * CRDT API for Hash type
  * -------------------------------------------------------------------------- */
 
-
+// "CRDT.HSET", <key>, <gid>, <timestamp>, <vclockStr>,  <length> <field> <val> <field> <val> . . .);
+//   0           1        2       3           4           5       6
 int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    return REDISMODULE_OK;
+
+    RedisModule_AutoMemory(ctx);
+    if (argc < 5) return RedisModule_WrongArity(ctx);
+
+    long long gid;
+    if ((RedisModule_StringToLongLong(argv[2],&gid) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    }
+
+    long long timestamp;
+    if ((RedisModule_StringToLongLong(argv[3],&timestamp) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    }
+
+    long long length;
+    if ((RedisModule_StringToLongLong(argv[5],&length) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    }
+
+    VectorClock *vclock = getVectorClockFromString(argv[4]);
+    RedisModule_MergeVectorClock(gid, vclock);
+
+    RedisModuleKey *moduleKey;
+    moduleKey = RedisModule_OpenKey(ctx, argv[1],
+                                    REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);
+    int type = RedisModule_KeyType(moduleKey);
+
+    CRDT_Hash *target = NULL;
+    if (type != REDISMODULE_KEYTYPE_EMPTY) {
+        target = RedisModule_ModuleTypeGetValue(moduleKey);
+    }
+    if (type != REDISMODULE_KEYTYPE_EMPTY && RedisModule_ModuleTypeGetType(moduleKey) != CrdtHash) {
+        RedisModule_CloseKey(moduleKey);
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    }
+    if (isPartialOrderDeleted(moduleKey, vclock)) {
+        return RedisModule_ReplyWithSimpleString(ctx, "OK");
+    }
+    /* 1. target key not exist, and not deleted(tombstone)
+     * 2. target key exists(so tombstone is meaningless, because a key is already exist), but due to LWW, previous one fails
+     * either way, we do a update
+     * */
+    /**!!! important: RedisModule_ModuleTypeSetValue will automatically call free function to free the crdtRegister
+     * So the next time we free a register, the sds will be an invalid memory space
+     * which , will crash the redis, don't call below command
+     * if(target) {
+        freeCrdtHash(target);
+        }
+     * */
+    VectorClock *opVectorClock = NULL;
+    long long i;
+    // newly added element
+    if (target == NULL) {
+        opVectorClock = vectorClockMerge(NULL, vclock);
+        CRDT_Hash *crdtHash = createCrdtHash();
+        crdtHash->common.vectorClock = dupVectorClock(opVectorClock);
+        crdtHash->common.timestamp = timestamp;
+        crdtHash->common.gid = (int) gid;
+        for (i = 6; i < argc; i+=2) {
+            crdtHashTypeSet(crdtHash, argv[i], argv[i + 1], (int) gid, timestamp, opVectorClock);
+        }
+        RedisModule_ModuleTypeSetValue(moduleKey, CrdtHash, crdtHash);
+    } else {
+        VectorClock *currentVclock = target->common.vectorClock;
+        opVectorClock = vectorClockMerge(currentVclock, vclock);
+        freeVectorClock(target->common.vectorClock);
+
+        target->common.vectorClock = dupVectorClock(opVectorClock);
+        target->common.timestamp = max(target->common.timestamp, timestamp);
+        target->common.gid = (int) gid;
+
+        for (i = 6; i < argc; i+=2) {
+            crdtHashTypeSet(target, argv[i], argv[i + 1], (int) gid, timestamp, opVectorClock);
+        }
+    }
+    RedisModule_CloseKey(moduleKey);
+
+    /*
+     * don't spread the command, as it comes from either our master or master's peer master
+     * either way, the command would be propagated by the outside logic control
+     * please see function @fun processInputBuffer()*/
+    if (opVectorClock != NULL) {
+        freeVectorClock(opVectorClock);
+    }
+
+    if (vclock) {
+        freeVectorClock(vclock);
+    }
+
+    return RedisModule_ReplyWithSimpleString(ctx, "OK");
 }
 
 int CRDT_HGetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {

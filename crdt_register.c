@@ -234,7 +234,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     tombstone->common.vectorClock = vclock;
     tombstone->common.timestamp = timestamp;
     tombstone->common.gid = gid;
-    tombstone->val = NULL;
+    tombstone->val = sdsempty();
     RedisModule_ModuleTombstoneSetValue(key, CrdtRegister, tombstone);
     RedisModule_CloseKey(key);
 
@@ -255,11 +255,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // Here, we consider the op vclock we're trying to broadcasting is our vcu wrapped vector clock
     // for example, our gid is 1,  our vector clock is (1:100,2:1,3:100)
     // A set operation will firstly drive the vclock into (1:101,2:1,3:100).
-    // and due to the op-based crdt, we do an update or effect, which, we believe the vclock is (1:101), because is locally changed
-    // and we will let the under layer logic deal with the real op clock
     VectorClock *currentVectorClock = RedisModule_CurrentVectorClock();
-    VectorClock *opVectorClock = getUnitVectorClock(currentVectorClock, gid);
-    freeVectorClock(currentVectorClock);
 
     RedisModuleKey *moduleKey;
     moduleKey = RedisModule_OpenKey(ctx, argv[1],
@@ -279,10 +275,12 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         freeCrdtRegister(target);
         }
      * */
+    VectorClock *opVectorClock = NULL;
     if (target) {
-        VectorClock *toFree = opVectorClock;
-        opVectorClock = vectorClockMerge(opVectorClock, target->common.vectorClock);
-        freeVectorClock(toFree);
+        opVectorClock = vectorClockMerge(target->common.vectorClock, currentVectorClock);
+        freeVectorClock(currentVectorClock);
+    } else {
+        opVectorClock = currentVectorClock;
     }
     long long timestamp = mstime();
     CRDT_Register *current = createCrdtRegisterUsingVectorClock(argv[2], gid, timestamp, opVectorClock);
@@ -292,9 +290,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     /*
      * sent to both my slaves and my peer slaves */
     sds vclockStr = vectorClockToSds(opVectorClock);
-    if (gid == RedisModule_CurrentGid()) {
-        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllc", argv[1], argv[2], gid, timestamp, vclockStr);
-    }
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllc", argv[1], argv[2], gid, timestamp, vclockStr);
     sdsfree(vclockStr);
 
     if (opVectorClock != NULL) {
