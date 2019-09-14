@@ -49,7 +49,6 @@ typedef struct CrdtCommon {
     int gid;
     VectorClock *vectorClock;
     long long timestamp;
-
     //CRDT Merge Function
     crdtMergeFunc merge;
     crdtDelFunc delFunc;

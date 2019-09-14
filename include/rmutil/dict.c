@@ -42,6 +42,7 @@
 #include <stdarg.h>
 #include <limits.h>
 #include <sys/time.h>
+#include <assert.h>
 
 #include "dict.h"
 #include "zmalloc.h"

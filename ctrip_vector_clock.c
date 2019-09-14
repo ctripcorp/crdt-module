@@ -50,6 +50,9 @@ newVectorClock(int numVcUnits) {
 
 void
 freeVectorClock(VectorClock *vc) {
+    if (vc == NULL) {
+        return;
+    }
     free(vc->clocks);
     free(vc);
 }

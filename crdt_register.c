@@ -118,6 +118,9 @@ void *createCrdtRegister(void) {
 }
 
 void freeCrdtRegister(void *obj) {
+    if (obj == NULL) {
+        return;
+    }
     CRDT_Register *crdtRegister = (CRDT_Register *)obj;
     if (crdtRegister->val) {
         sdsfree(crdtRegister->val);
@@ -153,7 +156,7 @@ CRDT_Register* dupCrdtRegister(const CRDT_Register *val) {
 CRDT_Register *createCrdtRegisterUsingVectorClock(RedisModuleString *val, long long gid,
                                                   long long timestamp, VectorClock *vclock) {
     CRDT_Register *crdtRegister = createCrdtRegister();
-    crdtRegister->common.gid = gid;
+    crdtRegister->common.gid = (int) gid;
     crdtRegister->common.timestamp = timestamp;
     crdtRegister->common.vectorClock = dupVectorClock(vclock);
     crdtRegister->val = moduleString2Sds(val);
@@ -230,13 +233,19 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         }
     }
 
-    CRDT_Register *tombstone = createCrdtRegister();
-    tombstone->common.vectorClock = vclock;
+    CRDT_Register *tombstone = RedisModule_ModuleTypeGetTombstone(key);
+    if (tombstone == NULL) {
+        tombstone = createCrdtRegister();
+    }
+    tombstone->common.vectorClock = vectorClockMerge(tombstone->common.vectorClock, vclock);
     tombstone->common.timestamp = timestamp;
-    tombstone->common.gid = gid;
+    tombstone->common.gid = (int) gid;
     tombstone->val = sdsempty();
     RedisModule_ModuleTombstoneSetValue(key, CrdtRegister, tombstone);
     RedisModule_CloseKey(key);
+    if (vclock) {
+        freeVectorClock(vclock);
+    }
 
     return RedisModule_ReplyWithLongLong(ctx, deleted);
 }
