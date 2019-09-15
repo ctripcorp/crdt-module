@@ -27,70 +27,44 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 //
-// Created by zhuchen on 2019-06-07.
+// Created by zhuchen on 2019/9/4.
 //
 
+#ifndef XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H
+#define XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H
+
+#include <string.h>
+
+#include "include/rmutil/sds.h"
 #include "ctrip_crdt_common.h"
-#include "crdt.h"
+#include "include/redismodule.h"
+#include "include/rmutil/dict.h"
 
-#include <stdlib.h>
+#define CRDT_HASH_DATATYPE_NAME "crdt_hash"
 
-int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock) {
-    void *tombstone = RedisModule_ModuleTypeGetTombstone(key);
-    if (tombstone == NULL) {
-        return CRDT_NO;
-    }
-    CrdtCommon *common = tombstone;
-    if (isVectorClockMonoIncr(vclock, common->vectorClock) == CRDT_OK) {
-        return CRDT_YES;
-    }
-    return CRDT_NO;
-}
+#define HASHTABLE_MIN_FILL        10
 
+#define UINT64_MAX        18446744073709551615ULL
+#define RDB_LENERR UINT64_MAX
 
-#if defined(CRDT_COMMON_TEST_MAIN)
-#include <stdio.h>
-#include "testhelp.h"
-#include "limits.h"
+#define OBJ_HASH_KEY 1
+#define OBJ_HASH_VALUE 2
 
-#define UNUSED(x) (void)(x)
-typedef struct nickObject {
+typedef struct CRDT_Hash {
     CrdtCommon common;
-    sds content;
-}nickObject;
+    int remvAll;
+    VectorClock *maxdvc;
+    dict *map;
+} CRDT_Hash;
 
-void*
-mergeFunc (const void *curVal, const void *value) {
-    if(value == NULL) {
-        return NULL;
-    }
-    void *dup = zmalloc(1);
-    return dup;
-}
 
-nickObject
-*createNickObject() {
-    nickObject *obj = zmalloc(sizeof(nickObject));
-    printf("[nickObject]%lu\r\n", sizeof(nickObject));
-    obj->content = sdsnew("hello");
+void *createCrdtHash(void);
 
-    obj->common.vectorClock = sdsnew("1:200");
-    obj->common.merge = mergeFunc;
-    return obj;
-}
+void freeCrdtHash(void *crdtHash);
 
-int crdtCommonTest(void) {
-    nickObject *obj = createNickObject();
-    CrdtCommon *common = (CrdtCommon *) obj;
-    test_cond("[crdtCommonTest]", sdscmp(sdsnew("1:200"), common->vectorClock) == 0);
-    test_cond("[crdtCommonTest]", sdscmp(sdsnew("hello"), obj->content) == 0);
-    test_report();
-    return 0;
-}
-#endif
+int initCrdtHashModule(RedisModuleCtx *ctx);
 
-#ifdef CRDT_COMMON_TEST_MAIN
-int main(void) {
-    return crdtCommonTest();
-}
-#endif
+int crdtHtNeedsResize(dict *dict);
+
+
+#endif //XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H

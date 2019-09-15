@@ -49,20 +49,11 @@ int getCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 
 int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 
-int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleString *val,
-                       long long gid, long long timestamp, VectorClock *vclock);
-
-void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
-
-void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
-
 void AofRewriteCrdtRegister(RedisModuleIO *aof, RedisModuleString *key, void *value);
 
 size_t crdtRegisterMemUsageFunc(const void *value);
 
 void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value);
-
-void *crdtRegisterMerge(void *currentVal, void *value);
 
 int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value);
 
@@ -117,6 +108,7 @@ int initRegisterModule(RedisModuleCtx *ctx) {
 
 void *createCrdtRegister(void) {
     CRDT_Register *crdtRegister = RedisModule_Alloc(sizeof(CRDT_Register));
+    crdtRegister->common.gid = -1;
     crdtRegister->common.merge = crdtRegisterMerge;
     crdtRegister->common.delFunc = crdtRegisterDelete;
     crdtRegister->common.vectorClock = NULL;
@@ -126,8 +118,13 @@ void *createCrdtRegister(void) {
 }
 
 void freeCrdtRegister(void *obj) {
+    if (obj == NULL) {
+        return;
+    }
     CRDT_Register *crdtRegister = (CRDT_Register *)obj;
-    sdsfree(crdtRegister->val);
+    if (crdtRegister->val) {
+        sdsfree(crdtRegister->val);
+    }
     crdtRegister->common.merge = NULL;
     crdtRegister->common.delFunc = NULL;
     if(crdtRegister->common.vectorClock) {
@@ -150,8 +147,20 @@ CRDT_Register* dupCrdtRegister(const CRDT_Register *val) {
     dup->common.gid = val->common.gid;
     dup->common.timestamp = val->common.timestamp;
     dup->common.vectorClock = dupVectorClock(val->common.vectorClock);
-    dup->val = sdsdup(val->val);
+    if (val->val) {
+        dup->val = sdsdup(val->val);
+    }
     return dup;
+}
+
+CRDT_Register *createCrdtRegisterUsingVectorClock(RedisModuleString *val, long long gid,
+                                                  long long timestamp, VectorClock *vclock) {
+    CRDT_Register *crdtRegister = createCrdtRegister();
+    crdtRegister->common.gid = (int) gid;
+    crdtRegister->common.timestamp = timestamp;
+    crdtRegister->common.vectorClock = dupVectorClock(vclock);
+    crdtRegister->val = moduleString2Sds(val);
+    return crdtRegister;
 }
 
 void *crdtRegisterMerge(void *currentVal, void *value) {
@@ -182,7 +191,7 @@ int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
 
     freeVectorClock(crdtRegister->common.vectorClock);
     crdtRegister->common.vectorClock = vclock;
-    crdtRegister->common.gid = gid;
+    crdtRegister->common.gid = (int) gid;
     crdtRegister->common.timestamp = timestamp;
 
     CRDT_Register *tombstoneCrdtRegister = dupCrdtRegister(crdtRegister);
@@ -224,13 +233,19 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         }
     }
 
-    CRDT_Register *tombstone = createCrdtRegister();
-    tombstone->common.vectorClock = vclock;
+    CRDT_Register *tombstone = RedisModule_ModuleTypeGetTombstone(key);
+    if (tombstone == NULL) {
+        tombstone = createCrdtRegister();
+    }
+    tombstone->common.vectorClock = vectorClockMerge(tombstone->common.vectorClock, vclock);
     tombstone->common.timestamp = timestamp;
-    tombstone->common.gid = gid;
-    tombstone->val = NULL;
+    tombstone->common.gid = (int) gid;
+    tombstone->val = sdsempty();
     RedisModule_ModuleTombstoneSetValue(key, CrdtRegister, tombstone);
     RedisModule_CloseKey(key);
+    if (vclock) {
+        freeVectorClock(vclock);
+    }
 
     return RedisModule_ReplyWithLongLong(ctx, deleted);
 }
@@ -249,23 +264,53 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // Here, we consider the op vclock we're trying to broadcasting is our vcu wrapped vector clock
     // for example, our gid is 1,  our vector clock is (1:100,2:1,3:100)
     // A set operation will firstly drive the vclock into (1:101,2:1,3:100).
-    // and due to the op-based crdt, we do an update or effect, which, we believe the vclock is (1:101), because is locally changed
-    // and we will let the under layer logic deal with the real op clock
     VectorClock *currentVectorClock = RedisModule_CurrentVectorClock();
-    VectorClock *opVectorClock = getUnitVectorClock(currentVectorClock, gid);
-    freeVectorClock(currentVectorClock);
 
-    if(crdtRegisterInsert(ctx, argv[1], argv[2], gid, mstime(), opVectorClock) == CRDT_OK) {
-        freeVectorClock(opVectorClock);
-        return RedisModule_ReplyWithSimpleString(ctx, "OK");
-    } else {
-        freeVectorClock(opVectorClock);
-        return RedisModule_ReplyWithError(ctx, "");
+    RedisModuleKey *moduleKey;
+    moduleKey = RedisModule_OpenKey(ctx, argv[1],
+                                    REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);
+    int type = RedisModule_KeyType(moduleKey);
+
+    CRDT_Register *target = NULL;
+    if (type != REDISMODULE_KEYTYPE_EMPTY) {
+        target = RedisModule_ModuleTypeGetValue(moduleKey);
     }
+
+    /**!!! important: RedisModule_ModuleTypeSetValue will automatically call free function to free the crdtRegister
+     * So the next time we free a register, the sds will be an invalid memory space
+     * which , will crash the redis
+     * do not call --
+     * if(target) {
+        freeCrdtRegister(target);
+        }
+     * */
+    VectorClock *opVectorClock = NULL;
+    if (target) {
+        opVectorClock = vectorClockMerge(target->common.vectorClock, currentVectorClock);
+        freeVectorClock(currentVectorClock);
+    } else {
+        opVectorClock = currentVectorClock;
+    }
+    long long timestamp = mstime();
+    CRDT_Register *current = createCrdtRegisterUsingVectorClock(argv[2], gid, timestamp, opVectorClock);
+    RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
+    RedisModule_CloseKey(moduleKey);
+
+    /*
+     * sent to both my slaves and my peer slaves */
+    sds vclockStr = vectorClockToSds(opVectorClock);
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllc", argv[1], argv[2], gid, timestamp, vclockStr);
+    sdsfree(vclockStr);
+
+    if (opVectorClock != NULL) {
+        freeVectorClock(opVectorClock);
+    }
+
+    return RedisModule_ReplyWithSimpleString(ctx, "OK");
 }
 
-// CRDT.SET key <val> <gid> <timestamp> <vc>
-// 0         1    2     3      4         5
+// CRDT.SET key <val> <gid> <timestamp> <vc> <expire-at-milli>
+// 0         1    2     3      4         5        6
 int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     RedisModule_AutoMemory(ctx);
@@ -283,13 +328,61 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     VectorClock *vclock = getVectorClockFromString(argv[5]);
     RedisModule_MergeVectorClock(gid, vclock);
-    if(crdtRegisterInsert(ctx, argv[1], argv[2], gid, timestamp, vclock) == CRDT_OK) {
-        freeVectorClock(vclock);
-        return RedisModule_ReplyWithSimpleString(ctx, "OK");
-    } else {
-        freeVectorClock(vclock);
-        return RedisModule_ReplyWithError(ctx, "Execute fail");
+
+    RedisModuleKey *moduleKey;
+    moduleKey = RedisModule_OpenKey(ctx, argv[1],
+                                    REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);
+    int type = RedisModule_KeyType(moduleKey);
+
+    CRDT_Register *target = NULL;
+    if (type != REDISMODULE_KEYTYPE_EMPTY) {
+        target = RedisModule_ModuleTypeGetValue(moduleKey);
     }
+
+    /* 1. target key not exist, and not deleted(tombstone)
+     * 2. target key exists(so tombstone is meaningless, because a key is already exist), but due to LWW, previous one fails
+     * either way, we do a update
+     * */
+    /**!!! important: RedisModule_ModuleTypeSetValue will automatically call free function to free the crdtRegister
+     * So the next time we free a register, the sds will be an invalid memory space
+     * which , will crash the redis, don't call below command
+     * if(target) {
+        freeCrdtRegister(target);
+        }
+     * */
+    VectorClock *opVectorClock = NULL;
+    // newly added element
+    if (target == NULL) {
+        if (!isPartialOrderDeleted(moduleKey, vclock)) {
+            opVectorClock = vectorClockMerge(NULL, vclock);
+            CRDT_Register *current = createCrdtRegisterUsingVectorClock(argv[2], gid, timestamp, opVectorClock);
+            RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
+        }
+    } else {
+        VectorClock *currentVclock = target->common.vectorClock;
+        if (isVectorClockMonoIncr(currentVclock, vclock) == CRDT_OK
+            || isReplacable(target, timestamp, gid) == CRDT_OK) {
+
+            opVectorClock = vectorClockMerge(currentVclock, vclock);
+            CRDT_Register *current = createCrdtRegisterUsingVectorClock(argv[2], gid, timestamp, opVectorClock);
+            RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
+        }
+    }
+    RedisModule_CloseKey(moduleKey);
+
+    /*
+     * don't spread the command, as it comes from either our master or master's peer master
+     * either way, the command would be propagated by the outside logic control
+     * please see function @fun processInputBuffer()*/
+    if (opVectorClock != NULL) {
+        freeVectorClock(opVectorClock);
+    }
+
+    if (vclock) {
+        freeVectorClock(vclock);
+    }
+
+    return RedisModule_ReplyWithSimpleString(ctx, "OK");
 }
 
 
@@ -307,13 +400,12 @@ int getCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
         return RedisModule_ReplyWithNull(ctx);
     } else if (RedisModule_ModuleTypeGetType(key) != CrdtRegister) {
-        return RedisModule_ReplyWithError(ctx, "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
     } else {
         crdtRegister = RedisModule_ModuleTypeGetValue(key);
     }
 
     if(!crdtRegister->val) {
-        RedisModule_Log(ctx, "warning", "empty val for key");
         RedisModule_CloseKey(key);
         return RedisModule_ReplyWithNull(ctx);
     }
@@ -365,96 +457,6 @@ int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     sdsfree(vclockSds);
     RedisModule_CloseKey(key);
     return REDISMODULE_OK;
-}
-
-CRDT_Register *createCrdtRegisterUsingVectorClock(RedisModuleString *val, long long gid,
-                                                    long long timestamp, VectorClock *vclock) {
-    size_t sdsLength;
-    const char *str = RedisModule_StringPtrLen(val, &sdsLength);
-
-    CRDT_Register *current = createCrdtRegister();
-    current->common.gid = gid;
-    current->common.timestamp = timestamp;
-    current->common.vectorClock = dupVectorClock(vclock);
-    current->val = sdsnewlen(str, sdsLength);
-    return current;
-
-}
-
-int notDeleted(RedisModuleKey *key, VectorClock *vclock) {
-    CRDT_Register *tombstone = RedisModule_ModuleTypeGetTombstone(key);
-    if (tombstone == NULL) {
-        return CRDT_OK;
-    }
-    if (isVectorClockMonoIncr(vclock, tombstone->common.vectorClock) == CRDT_OK) {
-        return CRDT_ERROR;
-    }
-    return CRDT_OK;
-}
-// CRDT.SET key <val> <gid> <timestamp> <vc>
-// 0         1    2     3      4         5
-int crdtRegisterInsert(RedisModuleCtx *ctx, RedisModuleString *key, RedisModuleString *val,
-        long long gid, long long timestamp, VectorClock *vclock) {
-
-    RedisModuleKey *moduleKey;
-    moduleKey = RedisModule_OpenKey(ctx, key,
-                                    REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);
-    int type = RedisModule_KeyType(moduleKey);
-
-    CRDT_Register *target = NULL;
-    if (type != REDISMODULE_KEYTYPE_EMPTY) {
-        target = RedisModule_ModuleTypeGetValue(moduleKey);
-    }
-
-    /* 1. target key not exist, and not deleted(tombstone)
-     * 2. target key exists(so tombstone is meaningless, because a key is already exist), but due to LWW, previous one fails
-     * either way, we do a update
-     * */
-    VectorClock *opVectorClock = NULL;
-    int replicate = 0;
-    // newly added element
-    if (target == NULL) {
-        if (notDeleted(moduleKey, vclock) == CRDT_OK) {
-            opVectorClock = vectorClockMerge(NULL, vclock);
-            CRDT_Register *current = createCrdtRegisterUsingVectorClock(val, gid, timestamp, opVectorClock);
-            RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
-            replicate = 1;
-        }
-    } else {
-        VectorClock *currentVclock = target->common.vectorClock;
-        if (isVectorClockMonoIncr(currentVclock, vclock) == CRDT_OK
-                || isReplacable(target, timestamp, gid) == CRDT_OK) {
-
-            opVectorClock = vectorClockMerge(currentVclock, vclock);
-            CRDT_Register *current = createCrdtRegisterUsingVectorClock(val, gid, timestamp, opVectorClock);
-            RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
-            replicate = 1;
-        }
-    }
-    RedisModule_CloseKey(moduleKey);
-
-    /**!!! important: RedisModule_ModuleTypeSetValue will automatically call free function to free the crdtRegister
-     * So the next time we free a register, the sds will be an invalid memory space
-     * which , will crash the redis
-     * if(target) {
-        freeCrdtRegister(target);
-        }
-     * */
-
-    //update here
-    if (replicate == 1) {
-        sds vclockStr = vectorClockToSds(opVectorClock);
-        if (gid == RedisModule_CurrentGid()) {
-            RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllc", key, val, gid, timestamp, vclockStr);
-        } else {
-            RedisModule_ReplicateStraightForward(ctx, "CRDT.SET", "ssllc", key, val, gid, timestamp, vclockStr);
-        }
-        sdsfree(vclockStr);
-    }
-    if (opVectorClock != NULL) {
-        freeVectorClock(opVectorClock);
-    }
-    return CRDT_OK;
 }
 
 /**

@@ -1,5 +1,13 @@
-/*
- * Copyright (c) 2009-2012, CTRIP CORP <RDkjdata at ctrip dot com>
+/* redisassert.h -- Drop in replacemnet assert.h that prints the stack trace
+ *                  in the Redis logs.
+ *
+ * This file should be included instead of "assert.h" inside libraries used by
+ * Redis that are using assertions, so instead of Redis disappearing with
+ * SIGABORT, we get the details and stack trace inside the log file.
+ *
+ * ----------------------------------------------------------------------------
+ *
+ * Copyright (c) 2006-2012, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,37 +34,16 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-//
-// Created by zhuchen(zhuchen at ctrip dot com) on 2019-04-16.
-//
 
-#ifndef XREDIS_CRDT_CRDT_REGISTER_H
-#define XREDIS_CRDT_CRDT_REGISTER_H
+#ifndef __REDIS_ASSERT_H__
+#define __REDIS_ASSERT_H__
 
-#include "include/rmutil/sds.h"
-#include "ctrip_crdt_common.h"
-#include "include/redismodule.h"
+#include <unistd.h> /* for _exit() */
 
-#define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
+#define assert(_e) ((_e)?(void)0 : (_serverAssert(#_e,__FILE__,__LINE__),_exit(1)))
+#define panic(...) _serverPanic(__FILE__,__LINE__,__VA_ARGS__),_exit(1)
 
-typedef struct CRDT_Register {
-    CrdtCommon common;
-    sds val;
-} CRDT_Register;
+void _serverAssert(char *estr, char *file, int line);
+void _serverPanic(const char *file, int line, const char *msg, ...);
 
-void *createCrdtRegister(void);
-
-void freeCrdtRegister(void *crdtRegister);
-
-CRDT_Register* dupCrdtRegister(const CRDT_Register *val);
-
-int initRegisterModule(RedisModuleCtx *ctx);
-
-void *crdtRegisterMerge(void *currentVal, void *value);
-
-void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
-
-void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
-
-
-#endif //XREDIS_CRDT_CRDT_REGISTER_H
+#endif

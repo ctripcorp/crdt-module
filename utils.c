@@ -17,3 +17,9 @@ static long long ustime(void) {
 long long mstime(void) {
     return ustime()/1000;
 }
+
+sds moduleString2Sds(RedisModuleString *argv) {
+    size_t sdsLength;
+    const char *str = RedisModule_StringPtrLen(argv, &sdsLength);
+    return sdsnewlen(str, sdsLength);
+}

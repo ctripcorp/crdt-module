@@ -534,6 +534,11 @@ int ld2string(char *buf, size_t len, long double value, int humanfriendly) {
     return l;
 }
 
+sds moduleString2Sds(RedisModuleString *argv) {
+    size_t sdsLength;
+    const char *str = RedisModule_StringPtrLen(argv, &sdsLength);
+    return sdsnewlen(str, sdsLength);
+}
 
 
 #ifdef REDIS_TEST

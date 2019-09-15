@@ -32,6 +32,7 @@
 
 #include <stdint.h>
 #include "include/rmutil/sds.h"
+#include "tpl.h"
 
 int stringmatchlen(const char *p, int plen, const char *s, int slen, int nocase);
 int stringmatch(const char *p, const char *s, int nocase);
@@ -46,6 +47,7 @@ int d2string(char *buf, size_t len, double value);
 int ld2string(char *buf, size_t len, long double value, int humanfriendly);
 sds getAbsolutePath(char *filename);
 int pathIsBaseName(char *path);
+sds moduleString2Sds(RedisModuleString *argv);
 
 #ifdef REDIS_TEST
 int utilTest(int argc, char **argv);

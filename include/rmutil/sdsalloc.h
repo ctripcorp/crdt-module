@@ -41,7 +41,7 @@
 #else
 #include <malloc.h>
 #endif
-//#include "zmalloc.h"
+#include "zmalloc.h"
 #define s_malloc malloc
 #define s_realloc realloc
 #define s_free free

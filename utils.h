@@ -7,4 +7,6 @@
 
 long long mstime();
 
+sds moduleString2Sds(RedisModuleString *argv);
+
 #endif //XREDIS_CRDT_UTILS_H

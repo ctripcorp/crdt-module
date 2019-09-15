@@ -50,6 +50,9 @@ newVectorClock(int numVcUnits) {
 
 void
 freeVectorClock(VectorClock *vc) {
+    if (vc == NULL) {
+        return;
+    }
     free(vc->clocks);
     free(vc);
 }
@@ -69,6 +72,9 @@ addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time) {
 
 VectorClock*
 dupVectorClock(VectorClock *vc) {
+    if (!vc) {
+        return NULL;
+    }
     VectorClock *dup = newVectorClock(vc->length);
     memcpy(dup->clocks, vc->clocks, vc->length * sizeof(VectorClockUnit));
     return dup;
@@ -80,6 +86,9 @@ sdsToVectorClockUnit(sds vcUnitStr, VectorClockUnit *vcUnit);
 // "<gid>:<clock>;<gid>:<clock>"
 VectorClock*
 sdsToVectorClock(sds vcStr) {
+    if (sdslen(vcStr) == 0) {
+        return NULL;
+    }
     int numVcUnits, clockNum;
     sds *vcUnits = sdssplitlen(vcStr, sdslen(vcStr), VECTOR_CLOCK_SEPARATOR, 1, &numVcUnits);
     if(numVcUnits <= 0 || !vcUnits) {
@@ -189,21 +198,21 @@ vectorClockMerge(VectorClock *vc1, VectorClock *vc2) {
 int
 isVectorClockMonoIncr(VectorClock *current, VectorClock *future) {
     if (current == NULL || future == NULL) {
-        return CRDT_ERROR;
+        return CRDT_NO;
     }
 
     if (current->length > future->length) {
-        return CRDT_ERROR;
+        return CRDT_NO;
     }
 
     for (int i = 0; i < current->length; i++) {
         VectorClockUnit *currentVcu = &current->clocks[i];
         VectorClockUnit *futureVcu = getVectorClockUnit(future, currentVcu->gid);
         if (futureVcu == NULL || futureVcu->logic_time < currentVcu->logic_time) {
-            return CRDT_ERROR;
+            return CRDT_NO;
         }
     }
-    return CRDT_OK;
+    return CRDT_YES;
 }
 
 VectorClock*

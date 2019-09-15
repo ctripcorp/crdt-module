@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2012, CTRIP CORP <RDkjdata at ctrip dot com>
+ * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,37 +26,36 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-//
-// Created by zhuchen(zhuchen at ctrip dot com) on 2019-04-16.
-//
 
-#ifndef XREDIS_CRDT_CRDT_REGISTER_H
-#define XREDIS_CRDT_CRDT_REGISTER_H
+#ifndef _REDIS_FMACRO_H
+#define _REDIS_FMACRO_H
 
-#include "include/rmutil/sds.h"
-#include "ctrip_crdt_common.h"
-#include "include/redismodule.h"
+#define _BSD_SOURCE
 
-#define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
+#if defined(__linux__)
+#define _GNU_SOURCE
+#define _DEFAULT_SOURCE
+#endif
 
-typedef struct CRDT_Register {
-    CrdtCommon common;
-    sds val;
-} CRDT_Register;
+#if defined(_AIX)
+#define _ALL_SOURCE
+#endif
 
-void *createCrdtRegister(void);
+#if defined(__linux__) || defined(__OpenBSD__)
+#define _XOPEN_SOURCE 700
+/*
+ * On NetBSD, _XOPEN_SOURCE undefines _NETBSD_SOURCE and
+ * thus hides inet_aton etc.
+ */
+#elif !defined(__NetBSD__)
+#define _XOPEN_SOURCE
+#endif
 
-void freeCrdtRegister(void *crdtRegister);
+#if defined(__sun)
+#define _POSIX_C_SOURCE 199506L
+#endif
 
-CRDT_Register* dupCrdtRegister(const CRDT_Register *val);
+#define _LARGEFILE_SOURCE
+#define _FILE_OFFSET_BITS 64
 
-int initRegisterModule(RedisModuleCtx *ctx);
-
-void *crdtRegisterMerge(void *currentVal, void *value);
-
-void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
-
-void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
-
-
-#endif //XREDIS_CRDT_CRDT_REGISTER_H
+#endif
