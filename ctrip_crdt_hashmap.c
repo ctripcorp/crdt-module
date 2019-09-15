@@ -81,16 +81,19 @@ CRDT_Hash *dupCrdtHash(CRDT_Hash *current) {
     CRDT_Hash *copy = createCrdtHash();
     copy->common.gid = current->common.gid;
     copy->common.vectorClock = dupVectorClock(current->common.vectorClock);
-    dictIterator *di = dictGetIterator(current->map);
-    dictEntry *de;
 
-    while((de = dictNext(di)) != NULL) {
-        sds field = dictGetKey(de);
-        CRDT_Register *crdtRegister = dictGetVal(de);
+    if (dictSize(current->map)) {
+        dictIterator *di = dictGetIterator(current->map);
+        dictEntry *de;
 
-        dictAdd(copy->map, sdsdup(field), dupCrdtRegister(crdtRegister));
+        while ((de = dictNext(di)) != NULL) {
+            sds field = dictGetKey(de);
+            CRDT_Register *crdtRegister = dictGetVal(de);
+
+            dictAdd(copy->map, sdsdup(field), dupCrdtRegister(crdtRegister));
+        }
+        dictReleaseIterator(di);
     }
-    dictReleaseIterator(di);
     return copy;
 }
 /* --------------------------------------------------------------------------
@@ -149,8 +152,12 @@ int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
     crdtHash->common.timestamp = timestamp;
     dictEmpty(crdtHash->map, NULL);
 
-    CRDT_Hash *tombstoneCrdtRegister = dupCrdtHash(crdtHash);
-    RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstoneCrdtRegister);
+    CRDT_Hash *tombstone = dupCrdtHash(crdtHash);
+    tombstone->remvAll = CRDT_YES;
+    tombstone->maxdvc = dupVectorClock(crdtHash->common.vectorClock);
+    freeVectorClock(tombstone->common.vectorClock);
+    tombstone->common.vectorClock = dupVectorClock(vclock);
+    RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstone);
 
     sds vcSds = vectorClockToSds(vclock);
     sds maxDeletedVclock = vectorClockToSds(crdtHash->common.vectorClock);
@@ -314,12 +321,10 @@ void freeCrdtHash(void *obj) {
     }
     crdtHash->common.merge = NULL;
     crdtHash->common.delFunc = NULL;
-    if (crdtHash->common.vectorClock) {
-        freeVectorClock(crdtHash->common.vectorClock);
-    }
-    if (crdtHash->maxdvc) {
-        freeVectorClock(crdtHash->maxdvc);
-    }
+
+    freeVectorClock(crdtHash->common.vectorClock);
+    freeVectorClock(crdtHash->maxdvc);
+
     RedisModule_Free(crdtHash);
 }
 
@@ -398,15 +403,59 @@ int crdtHashTypeSet(CRDT_Hash *crdtHash, CRDT_Hash *tombstone, RedisModuleString
  * Return 1 on deleted and 0 on not found.
  * crdtHash could be NULL, as it might be deleted already/or not yet
  * and we need to store the tombstone*/
-int crdtHashTypeDelete(CRDT_Hash *crdtHash, sds field, CRDT_Hash *tombstone, int gid, VectorClock *vclock) {
+int crdtHashTypeDelete(CRDT_Hash *crdtHash, sds field, CRDT_Hash *tombstone, int gid, VectorClock *vclock, VectorClock *maxDelVclock) {
     int deleted = 0;
     dictEntry *de;
     CRDT_Register *crdtRegister;
     if (crdtHash != NULL) {
         de = dictFind(crdtHash->map, field);
+        if (!de) {
+            return deleted;
+        }
         crdtRegister = dictGetVal(de);
-        if (!isVectorClockMonoIncr(crdtRegister->common.vectorClock, vclock)) {
+        if (!isVectorClockMonoIncr(crdtRegister->common.vectorClock, maxDelVclock)) {
             // delete happens-before the hset operation, do nothing
+            return deleted;
+        }
+
+        if (dictDelete(crdtHash->map, field) == DICT_OK) {
+            deleted = 1;
+            /* Always check if the dictionary needs a resize after a delete. */
+            if (crdtHtNeedsResize(crdtHash->map)) dictResize(crdtHash->map);
+        }
+    }
+    de = dictFind(tombstone->map, field);
+    int toCreate = 0;
+    if (de) {
+        crdtRegister = dictGetVal(de);
+    } else {
+        crdtRegister = createCrdtRegister();
+        toCreate = 1;
+    }
+    VectorClock *toFree = crdtRegister->common.vectorClock;
+    crdtRegister->common.gid = gid;
+    crdtRegister->common.vectorClock = dupVectorClock(vclock);
+    if (toFree) {
+        freeVectorClock(toFree);
+    }
+
+    if (toCreate) {
+        dictAdd(tombstone->map, sdsdup(field), crdtRegister);
+    }
+    return deleted;
+}
+
+/* Delete an element from a hash.
+ * Return 1 on deleted and 0 on not found.
+ * crdtHash could be NULL, as it might be deleted already/or not yet
+ * and we need to store the tombstone*/
+static int hashTypeDelete(CRDT_Hash *crdtHash, sds field, CRDT_Hash *tombstone, int gid, VectorClock *vclock) {
+    int deleted = 0;
+    dictEntry *de;
+    CRDT_Register *crdtRegister;
+    if (crdtHash != NULL) {
+        de = dictFind(crdtHash->map, field);
+        if (!de) {
             return deleted;
         }
 
@@ -533,20 +582,12 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (tombstone == NULL) {
         tombstone = createCrdtHash();
         tombstone->common.gid = (int) RedisModule_CurrentGid();
-        tombstone->common.vectorClock = NULL;
+        tombstone->common.vectorClock = dupVectorClock(vclock);
+        RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstone);
     }
     for (j = 2; j < argc; j++) {
         sds field = moduleString2Sds(argv[j]);
-        dictEntry *de = dictFind(crdtHash->map, field);
-        if (!de) {
-            continue;
-        } else {
-            dictEntry *tombstoneDe = dictFind(tombstone->map, field);
-            CRDT_Register *current = tombstoneDe == NULL ? NULL : dictGetVal(tombstoneDe);
-            dictAdd(tombstone->map, field, crdtRegisterMerge(current, dictGetVal(de)));
-            freeCrdtRegister(current);
-        }
-        if (crdtHashTypeDelete(crdtHash, field, tombstone, (int) gid, vclock)) {
+        if (hashTypeDelete(crdtHash, field, tombstone, (int) gid, vclock)) {
             deleted++;
             if (dictSize(crdtHash->map) == 0) {
                 sdsfree(field);
@@ -563,6 +604,8 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     void *argv_repl = (void *) (argv + 2);
     //CRDT.REM_HASH <key> gid timestamp <del-op-vclock> <field1> <field2> ...
     RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.REM_HASH", "sllcv", argv[1], gid, timestamp, vcStr, argv_repl, argc_repl);
+    sdsfree(vcStr);
+    freeVectorClock(vclock);
 
     return RedisModule_ReplyWithLongLong(ctx, deleted);
 }
@@ -741,9 +784,6 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
     }
 
-    VectorClock *vclock = getVectorClockFromString(argv[4]);
-    RedisModule_MergeVectorClock(gid, vclock);
-
     RedisModuleKey *moduleKey;
     moduleKey = RedisModule_OpenKey(ctx, argv[1],
                                     REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);
@@ -754,6 +794,9 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         RedisModule_CloseKey(moduleKey);
         return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
     }
+
+    VectorClock *vclock = getVectorClockFromString(argv[4]);
+    RedisModule_MergeVectorClock(gid, vclock);
     if (type != REDISMODULE_KEYTYPE_EMPTY) {
         target = RedisModule_ModuleTypeGetValue(moduleKey);
     }
@@ -769,7 +812,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // newly added element
     if (target == NULL) {
         CRDT_Hash *crdtHash = createCrdtHash();
-        crdtHash->common.vectorClock = vectorClockMerge(crdtHash->common.vectorClock, vclock);
+        crdtHash->common.vectorClock = vectorClockMerge(NULL, vclock);
         crdtHash->common.timestamp = timestamp;
         crdtHash->common.gid = (int) gid;
         for (i = 6; i < argc; i+=2) {
@@ -783,7 +826,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     } else {
         VectorClock *currentVclock = target->common.vectorClock;
         opVectorClock = vectorClockMerge(currentVclock, vclock);
-        freeVectorClock(target->common.vectorClock);
+        freeVectorClock(currentVclock);
 
         target->common.vectorClock = dupVectorClock(opVectorClock);
         target->common.timestamp = max(target->common.timestamp, timestamp);
@@ -799,7 +842,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
      * don't spread the command, as it comes from either our master or master's peer master
      * either way, the command would be propagated by the outside logic control
      * please see function @fun processInputBuffer()*/
-    if (opVectorClock != NULL) {
+    if (opVectorClock) {
         freeVectorClock(opVectorClock);
     }
 
@@ -821,13 +864,24 @@ int CRDT_DelHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     if (argc < 4) return RedisModule_WrongArity(ctx);
 
     long long gid;
-    if ((RedisModule_StringToLongLong(argv[2],&gid) != REDISMODULE_OK)) {
-        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    if ((RedisModule_StringToLongLong(argv[2], &gid) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx, "ERR invalid value: must be a signed 64 bit integer");
     }
 
     long long timestamp;
-    if ((RedisModule_StringToLongLong(argv[3],&timestamp) != REDISMODULE_OK)) {
-        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    if ((RedisModule_StringToLongLong(argv[3], &timestamp) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx, "ERR invalid value: must be a signed 64 bit integer");
+    }
+
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+    int type = RedisModule_KeyType(key);
+
+    CRDT_Hash *crdtHash = NULL;
+    if (type != REDISMODULE_KEYTYPE_EMPTY && RedisModule_ModuleTypeGetType(key) != CrdtHash) {
+        RedisModule_CloseKey(key);
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    } else {
+        crdtHash = RedisModule_ModuleTypeGetValue(key);
     }
 
     VectorClock *vclock = getVectorClockFromString(argv[4]);
@@ -835,13 +889,13 @@ int CRDT_DelHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
 
     VectorClock *maxDelVclock = getVectorClockFromString(argv[5]);
 
-    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
-
     CRDT_Hash *tombstone = RedisModule_ModuleTypeGetTombstone(key);
     // This deleted has been deprecated
     if (tombstone != NULL && isVectorClockMonoIncr(vclock, tombstone->common.vectorClock)) {
+        freeVectorClock(maxDelVclock);
+        freeVectorClock(vclock);
         RedisModule_CloseKey(key);
-        return REDISMODULE_OK;
+        return RedisModule_ReplyWithLongLong(ctx, 0);
     }
 
     if (tombstone == NULL) {
@@ -849,29 +903,28 @@ int CRDT_DelHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         RedisModule_ModuleTombstoneSetValue(key, CrdtHash, tombstone);
     }
     VectorClock *toFree = tombstone->common.vectorClock;
-    tombstone->common.vectorClock = vectorClockMerge(tombstone->common.vectorClock, vclock);
-    tombstone->maxdvc = vectorClockMerge(tombstone->maxdvc, maxDelVclock);
+    tombstone->common.vectorClock = vectorClockMerge(toFree, vclock);
+    freeVectorClock(toFree);
+
+    toFree = tombstone->maxdvc;
+    tombstone->maxdvc = vectorClockMerge(toFree, maxDelVclock);
+    freeVectorClock(toFree);
+
     tombstone->remvAll = CRDT_YES;
     tombstone->common.timestamp = timestamp;
     tombstone->common.gid = (int) gid;
-    freeVectorClock(toFree);
-
-    CRDT_Hash *crdtHash = NULL;
-    if (RedisModule_KeyType(key) != REDISMODULE_KEYTYPE_EMPTY) {
-        crdtHash = RedisModule_ModuleTypeGetValue(key);
-    }
 
     int deleted = 0;
     if (crdtHash != NULL) {
         dictIterator *di = dictGetSafeIterator(crdtHash->map);
         dictEntry *de;
 
-        while((de = dictNext(di)) != NULL) {
+        while ((de = dictNext(di)) != NULL) {
             CRDT_Register *crdtRegister = dictGetVal(de);
             if (isVectorClockMonoIncr(crdtRegister->common.vectorClock, maxDelVclock)) {
                 sds field = dictGetKey(de);
-                crdtHashTypeDelete(crdtHash, field, tombstone, (int) gid, vclock);
-                deleted ++;
+                crdtHashTypeDelete(crdtHash, field, tombstone, (int) gid, vclock, maxDelVclock);
+                deleted++;
             }
         }
         dictReleaseIterator(di);
@@ -930,7 +983,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     int i, deleted = 0;
     for (i = 5; i < argc; i++) {
         sds field = moduleString2Sds(argv[i]);
-        if (crdtHashTypeDelete(crdtHash, field, tombstone, (int) gid, vclock)) {
+        if (crdtHashTypeDelete(crdtHash, field, tombstone, (int) gid, vclock, vclock)) {
             deleted++;
             if (dictSize(crdtHash->map) == 0) {
                 RedisModule_DeleteKey(key);
@@ -956,10 +1009,19 @@ void *RdbLoadCrdtHash(RedisModuleIO *rdb, int encver) {
     CRDT_Hash *crdtHash = createCrdtHash();
     crdtHash->common.gid = RedisModule_LoadSigned(rdb);
     crdtHash->common.timestamp = RedisModule_LoadSigned(rdb);
-    size_t vcLength;
+
+    size_t vcLength, strLength;
     char* vcStr = RedisModule_LoadStringBuffer(rdb, &vcLength);
     sds vclockSds = sdsnewlen(vcStr, vcLength);
     crdtHash->common.vectorClock = sdsToVectorClock(vclockSds);
+    sdsfree(vclockSds);
+    RedisModule_Free(vcStr);
+
+    crdtHash->remvAll = RedisModule_LoadSigned(rdb);
+
+    vcStr = RedisModule_LoadStringBuffer(rdb, &vcLength);
+    vclockSds = sdsnewlen(vcStr, vcLength);
+    crdtHash->maxdvc = sdsToVectorClock(vclockSds);
     sdsfree(vclockSds);
     RedisModule_Free(vcStr);
 
@@ -973,13 +1035,13 @@ void *RdbLoadCrdtHash(RedisModuleIO *rdb, int encver) {
     while (len > 0) {
         len--;
         /* Load encoded strings */
-        RedisModuleString *fld = RedisModule_LoadString(rdb);
-        field = moduleString2Sds(fld);
+        char* str = RedisModule_LoadStringBuffer(rdb, &strLength);
+        field = sdsnewlen(str, strLength);
         value = RdbLoadCrdtRegister(rdb, encver);
 
         /* Add pair to hash table */
         dictAdd(crdtHash->map, field, value);
-        RedisModule_Free(fld);
+        RedisModule_Free(str);
     }
 
     return crdtHash;
@@ -992,8 +1054,12 @@ void RdbSaveCrdtHash(RedisModuleIO *rdb, void *value) {
     sds vclockStr = vectorClockToSds(crdtHash->common.vectorClock);
     RedisModule_SaveStringBuffer(rdb, vclockStr, sdslen(vclockStr));
     sdsfree(vclockStr);
+    RedisModule_SaveSigned(rdb, crdtHash->remvAll);
+    vclockStr = vectorClockToSds(crdtHash->maxdvc);
+    RedisModule_SaveStringBuffer(rdb, vclockStr, sdslen(vclockStr));
+    sdsfree(vclockStr);
 
-    dictIterator *di = dictGetIterator(crdtHash->map);
+    dictIterator *di = dictGetSafeIterator(crdtHash->map);
     dictEntry *de;
     RedisModule_SaveUnsigned(rdb, dictSize(crdtHash->map));
 

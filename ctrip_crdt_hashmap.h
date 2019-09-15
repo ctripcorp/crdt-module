@@ -52,7 +52,7 @@
 
 typedef struct CRDT_Hash {
     CrdtCommon common;
-    unsigned char remvAll;
+    int remvAll;
     VectorClock *maxdvc;
     dict *map;
 } CRDT_Hash;

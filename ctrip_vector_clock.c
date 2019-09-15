@@ -72,6 +72,9 @@ addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time) {
 
 VectorClock*
 dupVectorClock(VectorClock *vc) {
+    if (!vc) {
+        return NULL;
+    }
     VectorClock *dup = newVectorClock(vc->length);
     memcpy(dup->clocks, vc->clocks, vc->length * sizeof(VectorClockUnit));
     return dup;
@@ -83,6 +86,9 @@ sdsToVectorClockUnit(sds vcUnitStr, VectorClockUnit *vcUnit);
 // "<gid>:<clock>;<gid>:<clock>"
 VectorClock*
 sdsToVectorClock(sds vcStr) {
+    if (sdslen(vcStr) == 0) {
+        return NULL;
+    }
     int numVcUnits, clockNum;
     sds *vcUnits = sdssplitlen(vcStr, sdslen(vcStr), VECTOR_CLOCK_SEPARATOR, 1, &numVcUnits);
     if(numVcUnits <= 0 || !vcUnits) {
