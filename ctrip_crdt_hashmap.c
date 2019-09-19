@@ -161,7 +161,7 @@ int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
 
     sds vcSds = vectorClockToSds(vclock);
     sds maxDeletedVclock = vectorClockToSds(crdtHash->common.vectorClock);
-    RedisModule_CrdtMultiWrappedReplicate(ctx, "CRDT.DEL_Hash", "sllcc", keyRobj, gid, timestamp, vcSds, maxDeletedVclock);
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_Hash", "sllcc", keyRobj, gid, timestamp, vcSds, maxDeletedVclock);
     sdsfree(vcSds);
     sdsfree(maxDeletedVclock);
 
@@ -527,7 +527,7 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     sds vclockStr = vectorClockToSds(currentVectorClock);
     size_t argc_repl = (size_t) (argc - 2);
     void *argv_repl = (void *) (argv + 2);
-    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.HSET", "sllclv", argv[1], gid, timestamp, vclockStr, argc-2, argv_repl, argc_repl);
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.HSET", "sllclv", argv[1], gid, timestamp, vclockStr, (long long) (argc-2), argv_repl, argc_repl);
     sdsfree(vclockStr);
 
     if (currentVectorClock) {
@@ -809,10 +809,12 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     VectorClock *opVectorClock = NULL;
     long long i;
+    int replicate = CRDT_YES;
     // newly added element
     if (target == NULL) {
         CRDT_Hash *crdtHash = createCrdtHash();
-        crdtHash->common.vectorClock = vectorClockMerge(NULL, vclock);
+        opVectorClock = vectorClockMerge(NULL, vclock);;
+        crdtHash->common.vectorClock = dupVectorClock(opVectorClock);
         crdtHash->common.timestamp = timestamp;
         crdtHash->common.gid = (int) gid;
         for (i = 6; i < argc; i+=2) {
@@ -821,6 +823,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         if (dictSize(crdtHash->map) != 0) {
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtHash, crdtHash);
         } else {
+            replicate = CRDT_NO;
             freeCrdtHash(crdtHash);
         }
     } else {
@@ -838,10 +841,21 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     RedisModule_CloseKey(moduleKey);
 
-    /*
-     * don't spread the command, as it comes from either our master or master's peer master
-     * either way, the command would be propagated by the outside logic control
-     * please see function @fun processInputBuffer()*/
+    // "CRDT.HSET", <key>, <gid>, <timestamp>, <vclockStr>, <argc>, <field> <val> <field> <val> . . .);
+    if (replicate) {
+        sds vclockStr = vectorClockToSds(opVectorClock);
+        size_t argc_repl = (size_t) (argc - 2);
+        void *argv_repl = (void *) (argv + 2);
+        if (gid == RedisModule_CurrentGid()) {
+            RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.HSET", "sllclv", argv[1], gid, timestamp, vclockStr,
+                                                       (long long) (argc - 2), argv_repl, argc_repl);
+        } else {
+            RedisModule_ReplicateStraightForward(ctx, "CRDT.HSET", "sllclv", argv[1], gid, timestamp, vclockStr,
+                                                 (long long) (argc - 2), argv_repl, argc_repl);
+        }
+        sdsfree(vclockStr);
+    }
+
     if (opVectorClock) {
         freeVectorClock(opVectorClock);
     }
@@ -932,6 +946,19 @@ int CRDT_DelHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
             RedisModule_DeleteKey(key);
         }
     }
+
+    //CRDT.DEL_HASH <key> gid timestamp <del-op-vclock> <max-deleted-vclock>
+    // 0              1    2     3           4                  5
+    sds vclockStr = vectorClockToSds(vclock);
+    size_t argc_repl = (size_t) (argc - 1);
+    void *argv_repl = (void *) (argv + 1);
+    if (gid == RedisModule_CurrentGid()) {
+        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_HASH", "v", argv_repl, argc_repl);
+    } else {
+        RedisModule_ReplicateStraightForward(ctx, "CRDT.DEL_HASH", "v", argv_repl, argc_repl);
+    }
+    sdsfree(vclockStr);
+
     RedisModule_CloseKey(key);
     if (vclock) {
         freeVectorClock(vclock);
@@ -992,6 +1019,19 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         sdsfree(field);
     }
     RedisModule_CloseKey(key);
+
+    //CRDT.REM_HASH <key> gid timestamp <del-op-vclock> <field1> <field2> ....
+    // 0              1    2     3           4             5
+    sds vclockStr = vectorClockToSds(vclock);
+    size_t argc_repl = (size_t) (argc - 1);
+    void *argv_repl = (void *) (argv + 1);
+    if (gid == RedisModule_CurrentGid()) {
+        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.REM_HASH", "v", argv_repl, argc_repl);
+    } else {
+        RedisModule_ReplicateStraightForward(ctx, "CRDT.REM_HASH", "v", argv_repl, argc_repl);
+    }
+    sdsfree(vclockStr);
+
     if (vclock) {
         freeVectorClock(vclock);
     }

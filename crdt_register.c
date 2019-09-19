@@ -198,7 +198,7 @@ int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
     RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstoneCrdtRegister);
 
     sds vcSds = vectorClockToSds(vclock);
-    RedisModule_CrdtMultiWrappedReplicate(ctx, "CRDT.DEL_REG", "sllc", keyRobj, gid, timestamp, vcSds);
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", keyRobj, gid, timestamp, vcSds);
     sdsfree(vcSds);
 
     return 1;
@@ -246,6 +246,14 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     if (vclock) {
         freeVectorClock(vclock);
     }
+
+    sds vcSds = vectorClockToSds(vclock);
+    if (gid == RedisModule_CurrentGid()) {
+        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", argv[1], gid, timestamp, vcSds);
+    } else {
+        RedisModule_ReplicateStraightForward(ctx, "CRDT.DEL_REG", "sllc", argv[1], gid, timestamp, vcSds);
+    }
+    sdsfree(vcSds);
 
     return RedisModule_ReplyWithLongLong(ctx, deleted);
 }
@@ -350,6 +358,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         freeCrdtRegister(target);
         }
      * */
+    int replicate = CRDT_NO;
     VectorClock *opVectorClock = NULL;
     // newly added element
     if (target == NULL) {
@@ -357,6 +366,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             opVectorClock = vectorClockMerge(NULL, vclock);
             CRDT_Register *current = createCrdtRegisterUsingVectorClock(argv[2], gid, timestamp, opVectorClock);
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
+            replicate = CRDT_YES;
         }
     } else {
         VectorClock *currentVclock = target->common.vectorClock;
@@ -366,14 +376,20 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             opVectorClock = vectorClockMerge(currentVclock, vclock);
             CRDT_Register *current = createCrdtRegisterUsingVectorClock(argv[2], gid, timestamp, opVectorClock);
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
+            replicate = CRDT_YES;
         }
     }
     RedisModule_CloseKey(moduleKey);
 
-    /*
-     * don't spread the command, as it comes from either our master or master's peer master
-     * either way, the command would be propagated by the outside logic control
-     * please see function @fun processInputBuffer()*/
+    if (replicate) {
+        sds vclockStr = vectorClockToSds(opVectorClock);
+        if (gid == RedisModule_CurrentGid()) {
+            RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllc", argv[1], argv[2], gid, timestamp, vclockStr);
+        } else {
+            RedisModule_ReplicateStraightForward(ctx, "CRDT.SET", "ssllc", argv[1], argv[2], gid, timestamp, vclockStr);
+        }
+        sdsfree(vclockStr);
+    }
     if (opVectorClock != NULL) {
         freeVectorClock(opVectorClock);
     }
