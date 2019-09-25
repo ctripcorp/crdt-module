@@ -841,11 +841,12 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     RedisModule_CloseKey(moduleKey);
 
-    // "CRDT.HSET", <key>, <gid>, <timestamp>, <vclockStr>, <argc>, <field> <val> <field> <val> . . .);
+    // "CRDT.HSET", <key>, <gid>, <timestamp>, <vclockStr>,  <length> <field> <val> <field> <val> . . .);
+    //   0           1        2       3           4           5       6
     if (replicate) {
         sds vclockStr = vectorClockToSds(opVectorClock);
-        size_t argc_repl = (size_t) (argc - 2);
-        void *argv_repl = (void *) (argv + 2);
+        size_t argc_repl = (size_t) (argc - 6);
+        void *argv_repl = (void *) (argv + 6);
         if (gid == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.HSET", "sllclv", argv[1], gid, timestamp, vclockStr,
                                                        (long long) (argc - 2), argv_repl, argc_repl);
