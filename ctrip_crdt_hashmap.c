@@ -849,10 +849,10 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         void *argv_repl = (void *) (argv + 6);
         if (gid == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.HSET", "sllclv", argv[1], gid, timestamp, vclockStr,
-                                                       (long long) (argc - 2), argv_repl, argc_repl);
+                                                       (long long) (argc - 6), argv_repl, argc_repl);
         } else {
             RedisModule_ReplicateStraightForward(ctx, "CRDT.HSET", "sllclv", argv[1], gid, timestamp, vclockStr,
-                                                 (long long) (argc - 2), argv_repl, argc_repl);
+                                                 (long long) (argc - 6), argv_repl, argc_repl);
         }
         sdsfree(vclockStr);
     }

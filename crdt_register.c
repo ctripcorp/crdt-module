@@ -243,9 +243,6 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     tombstone->val = sdsempty();
     RedisModule_ModuleTombstoneSetValue(key, CrdtRegister, tombstone);
     RedisModule_CloseKey(key);
-    if (vclock) {
-        freeVectorClock(vclock);
-    }
 
     sds vcSds = vectorClockToSds(vclock);
     if (gid == RedisModule_CurrentGid()) {
@@ -255,6 +252,9 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     }
     sdsfree(vcSds);
 
+    if (vclock) {
+        freeVectorClock(vclock);
+    }
     return RedisModule_ReplyWithLongLong(ctx, deleted);
 }
 
