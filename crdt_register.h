@@ -58,5 +58,6 @@ void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
 
 void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
 
+sds crdtRegisterInfo(CRDT_Register *crdtRegister);
 
 #endif //XREDIS_CRDT_CRDT_REGISTER_H

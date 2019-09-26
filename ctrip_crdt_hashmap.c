@@ -362,8 +362,8 @@ CRDT_Hash *crdtHashTypeLookupWriteOrCreate(RedisModuleCtx *ctx, RedisModuleStrin
     return target;
 }
 
-int crdtHashTypeSet(CRDT_Hash *crdtHash, CRDT_Hash *tombstone, RedisModuleString *fieldArgv, RedisModuleString *valArgv,
-                    int gid, long long timestamp, VectorClock *vclock) {
+int crdtHashTypeSet(RedisModuleCtx *ctx, RedisModuleString *key, CRDT_Hash *crdtHash, CRDT_Hash *tombstone,
+        RedisModuleString *fieldArgv, RedisModuleString *valArgv, int gid, long long timestamp, VectorClock *vclock) {
 
     int update = 0;
     dictEntry *de;
@@ -388,6 +388,16 @@ int crdtHashTypeSet(CRDT_Hash *crdtHash, CRDT_Hash *tombstone, RedisModuleString
     if (de) {
         CRDT_Register *current = dictGetVal(de);
         dictGetVal(de) = crdtRegisterMerge(current, value);
+        if (!isVectorClockMonoIncr(current->common.vectorClock, value->common.vectorClock)) {
+            const char* keyStr = RedisModule_StringPtrLen(key, NULL);
+            sds prev = crdtRegisterInfo(current);
+            sds future = crdtRegisterInfo(dictGetVal(de));
+            RedisModule_Log(ctx, "warning", "[CONFLICT][CRDT-HASH] {key: %s, field: %s} [prev] {%s} [future] {%s}",
+                    keyStr, field, prev, future);
+            sdsfree(prev);
+            sdsfree(future);
+            RedisModule_IncrCrdtConflict();
+        }
         freeCrdtRegister(current);
         freeCrdtRegister(value);
         sdsfree(field);
@@ -518,7 +528,7 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
 
     for (i = 2; i < argc; i += 2) {
-        created += !crdtHashTypeSet(crdtHash, NULL, argv[i], argv[i + 1], (int) gid, timestamp, currentVectorClock);
+        created += !crdtHashTypeSet(ctx, argv[1], crdtHash, NULL, argv[i], argv[i + 1], (int) gid, timestamp, currentVectorClock);
     }
 
     /*
@@ -818,7 +828,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         crdtHash->common.timestamp = timestamp;
         crdtHash->common.gid = (int) gid;
         for (i = 6; i < argc; i+=2) {
-            crdtHashTypeSet(crdtHash, tombstone, argv[i], argv[i + 1], (int) gid, timestamp, crdtHash->common.vectorClock);
+            crdtHashTypeSet(ctx, argv[1], crdtHash, tombstone, argv[i], argv[i + 1], (int) gid, timestamp, crdtHash->common.vectorClock);
         }
         if (dictSize(crdtHash->map) != 0) {
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtHash, crdtHash);
@@ -836,7 +846,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         target->common.gid = (int) gid;
 
         for (i = 6; i < argc; i+=2) {
-            crdtHashTypeSet(target, tombstone, argv[i], argv[i + 1], (int) gid, timestamp, opVectorClock);
+            crdtHashTypeSet(ctx, argv[1], target, tombstone, argv[i], argv[i + 1], (int) gid, timestamp, vclock);
         }
     }
     RedisModule_CloseKey(moduleKey);
