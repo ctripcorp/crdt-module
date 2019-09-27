@@ -113,6 +113,7 @@ void *createCrdtRegister(void) {
     crdtRegister->common.delFunc = crdtRegisterDelete;
     crdtRegister->common.vectorClock = NULL;
     crdtRegister->common.timestamp = -1;
+    crdtRegister->common.type = CRDT_REGISTER_TYPE;
     crdtRegister->val = NULL;
     return crdtRegister;
 }
@@ -234,7 +235,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     }
 
     CRDT_Register *tombstone = RedisModule_ModuleTypeGetTombstone(key);
-    if (tombstone == NULL) {
+    if (tombstone == NULL || tombstone->common.type != CRDT_REGISTER_TYPE) {
         tombstone = createCrdtRegister();
     }
     tombstone->common.vectorClock = vectorClockMerge(tombstone->common.vectorClock, vclock);
@@ -280,6 +281,9 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     int type = RedisModule_KeyType(moduleKey);
 
     CRDT_Register *target = NULL;
+    if (type != REDISMODULE_KEYTYPE_EMPTY && RedisModule_ModuleTypeGetType(moduleKey) != CrdtRegister) {
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    }
     if (type != REDISMODULE_KEYTYPE_EMPTY) {
         target = RedisModule_ModuleTypeGetValue(moduleKey);
     }
@@ -343,6 +347,9 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     int type = RedisModule_KeyType(moduleKey);
 
     CRDT_Register *target = NULL;
+    if (type != REDISMODULE_KEYTYPE_EMPTY && RedisModule_ModuleTypeGetType(moduleKey) != CrdtRegister) {
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    }
     if (type != REDISMODULE_KEYTYPE_EMPTY) {
         target = RedisModule_ModuleTypeGetValue(moduleKey);
     }

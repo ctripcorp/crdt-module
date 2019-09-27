@@ -303,6 +303,7 @@ void *createCrdtHash(void) {
     crdtHash->common.vectorClock = NULL;
     crdtHash->common.timestamp = -1;
     crdtHash->common.gid = (int) RedisModule_CurrentGid();
+    crdtHash->common.type = CRDT_HASH_TYPE;
 
     crdtHash->maxdvc = NULL;
     crdtHash->remvAll = CRDT_NO;
@@ -589,7 +590,7 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     VectorClock *vclock = RedisModule_CurrentVectorClock();
 
     CRDT_Hash *tombstone = RedisModule_ModuleTypeGetTombstone(moduleKey);
-    if (tombstone == NULL) {
+    if (tombstone == NULL || tombstone->common.type != CRDT_HASH_TYPE) {
         tombstone = createCrdtHash();
         tombstone->common.gid = (int) RedisModule_CurrentGid();
         tombstone->common.vectorClock = dupVectorClock(vclock);
@@ -923,7 +924,7 @@ int CRDT_DelHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         return RedisModule_ReplyWithLongLong(ctx, 0);
     }
 
-    if (tombstone == NULL) {
+    if (tombstone == NULL || tombstone->common.type != CRDT_HASH_TYPE) {
         tombstone = createCrdtHash();
         RedisModule_ModuleTombstoneSetValue(key, CrdtHash, tombstone);
     }
@@ -1003,7 +1004,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
 
     CRDT_Hash *tombstone = RedisModule_ModuleTypeGetTombstone(key);
-    if (tombstone == NULL) {
+    if (tombstone == NULL || tombstone->common.type != CRDT_HASH_TYPE) {
         tombstone = createCrdtHash();
         RedisModule_ModuleTombstoneSetValue(key, CrdtHash, tombstone);
     }
