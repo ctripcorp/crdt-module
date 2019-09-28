@@ -225,6 +225,18 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     RedisModule_MergeVectorClock(gid, vclock);
 
     RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+
+    CRDT_Register *tombstone = RedisModule_ModuleTypeGetTombstone(key);
+    if (tombstone == NULL || tombstone->common.type != CRDT_REGISTER_TYPE) {
+        tombstone = createCrdtRegister();
+        tombstone->val = sdsnew("deleted");
+        RedisModule_ModuleTombstoneSetValue(key, CrdtRegister, tombstone);
+    }
+    VectorClock *toFree = tombstone->common.vectorClock;
+    tombstone->common.vectorClock = dupVectorClock(vclock);
+    tombstone->common.timestamp = timestamp;
+    tombstone->common.gid = (int) gid;
+
     unsigned char deleted = 0;
     if (RedisModule_KeyType(key) != REDISMODULE_KEYTYPE_EMPTY) {
         CRDT_Register *crdtObj = RedisModule_ModuleTypeGetValue(key);
@@ -233,16 +245,6 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
             deleted = 1;
         }
     }
-
-    CRDT_Register *tombstone = RedisModule_ModuleTypeGetTombstone(key);
-    if (tombstone == NULL || tombstone->common.type != CRDT_REGISTER_TYPE) {
-        tombstone = createCrdtRegister();
-    }
-    tombstone->common.vectorClock = vectorClockMerge(tombstone->common.vectorClock, vclock);
-    tombstone->common.timestamp = timestamp;
-    tombstone->common.gid = (int) gid;
-    tombstone->val = sdsempty();
-    RedisModule_ModuleTombstoneSetValue(key, CrdtRegister, tombstone);
     RedisModule_CloseKey(key);
 
     sds vcSds = vectorClockToSds(vclock);
@@ -255,6 +257,10 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
     if (vclock) {
         freeVectorClock(vclock);
+    }
+
+    if (toFree) {
+        freeVectorClock(toFree);
     }
     return RedisModule_ReplyWithLongLong(ctx, deleted);
 }
@@ -513,6 +519,7 @@ void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver) {
     }
     CRDT_Register *crdtRegister = createCrdtRegister();
     crdtRegister->common.gid = RedisModule_LoadSigned(rdb);
+    crdtRegister->common.type = CRDT_REGISTER_TYPE;
     crdtRegister->common.timestamp = RedisModule_LoadSigned(rdb);
     size_t vcLength;
     char* vcStr = RedisModule_LoadStringBuffer(rdb, &vcLength);
