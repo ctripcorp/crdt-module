@@ -392,13 +392,18 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             CRDT_Register *current;
             if (isReplacable(target, timestamp, gid) == CRDT_OK) {
                 opVectorClock = vectorClockMerge(currentVclock, vclock);
-                current = createCrdtRegisterUsingVectorClock(argv[2], gid, timestamp, opVectorClock);
+                current = createCrdtRegisterUsingVectorClock(argv[2], gid, timestamp, vclock);
                 sds info1 = crdtRegisterInfo(target);
                 sds info2 = crdtRegisterInfo(current);
                 RedisModule_Log(ctx, "warning", "[CONFLICT][CRDT-Register][replace] current: {%s}, future: {%s}",
                                 info1, info2);
                 sdsfree(info1);
                 sdsfree(info2);
+                // update vector clock: because we want to print out the conflict info first, but we still need the correct vector clock
+                // that's why I decide to update vclock here
+                freeVectorClock(current->common.vectorClock);
+                current->common.vectorClock = dupVectorClock(opVectorClock);
+
                 RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
                 replicate = CRDT_YES;
             } else {

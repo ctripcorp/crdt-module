@@ -392,10 +392,12 @@ int crdtHashTypeSet(RedisModuleCtx *ctx, RedisModuleString *key, CRDT_Hash *crdt
         if (!isVectorClockMonoIncr(current->common.vectorClock, value->common.vectorClock)) {
             const char* keyStr = RedisModule_StringPtrLen(key, NULL);
             sds prev = crdtRegisterInfo(current);
+            sds income = crdtRegisterInfo(value);
             sds future = crdtRegisterInfo(dictGetVal(de));
-            RedisModule_Log(ctx, "warning", "[CONFLICT][CRDT-HASH] {key: %s, field: %s} [prev] {%s} [future] {%s}",
-                    keyStr, field, prev, future);
+            RedisModule_Log(ctx, "warning", "[CONFLICT][CRDT-HASH] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
+                    keyStr, field, prev, income, future);
             sdsfree(prev);
+            sdsfree(income);
             sdsfree(future);
             RedisModule_IncrCrdtConflict();
         }
