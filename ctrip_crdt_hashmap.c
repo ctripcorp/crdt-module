@@ -394,7 +394,7 @@ int crdtHashTypeSet(RedisModuleCtx *ctx, RedisModuleString *key, CRDT_Hash *crdt
             sds prev = crdtRegisterInfo(current);
             sds income = crdtRegisterInfo(value);
             sds future = crdtRegisterInfo(dictGetVal(de));
-            RedisModule_Log(ctx, "warning", "[CONFLICT][CRDT-HASH] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
+            RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-HASH] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
                     keyStr, field, prev, income, future);
             sdsfree(prev);
             sdsfree(income);

@@ -395,7 +395,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
                 current = createCrdtRegisterUsingVectorClock(argv[2], gid, timestamp, vclock);
                 sds info1 = crdtRegisterInfo(target);
                 sds info2 = crdtRegisterInfo(current);
-                RedisModule_Log(ctx, "warning", "[CONFLICT][CRDT-Register][replace] current: {%s}, future: {%s}",
+                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][replace] current: {%s}, future: {%s}",
                                 info1, info2);
                 sdsfree(info1);
                 sdsfree(info2);
@@ -409,7 +409,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             } else {
                 current = createCrdtRegisterUsingVectorClock(argv[2], gid, timestamp, vclock);
                 sds info1 = crdtRegisterInfo(target), info2 = crdtRegisterInfo(current);
-                RedisModule_Log(ctx, "warning", "[CONFLICT][CRDT-Register][drop] current: {%s}, dropped: {%s}",
+                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][drop] current: {%s}, dropped: {%s}",
                                 info1, info2);
                 sdsfree(info1);
                 sdsfree(info2);

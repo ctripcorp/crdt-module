@@ -43,8 +43,11 @@
 #define CRDT_YES 1
 #define CRDT_NO 0
 
-#define SECOND_HIGHER_PRIORITY(first_gid, sec_gid) (sec_gid <= first_gid ? 1 : 0)
+#define CRDT_DEFAULT_LOG_LEVEL "warning"
 
+char *logLevel;
+
+#define SECOND_HIGHER_PRIORITY(first_gid, sec_gid) (sec_gid <= first_gid ? 1 : 0)
 
 int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 

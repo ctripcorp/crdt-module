@@ -70,6 +70,22 @@ int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_OK;
 }
 
+int crdtDebugCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+    RedisModule_AutoMemory(ctx);
+
+    if (argc < 2) return RedisModule_WrongArity(ctx);
+
+    const char *cmd = RedisModule_StringPtrLen(argv[1], NULL);
+    if (!strcasecmp(cmd,"loglevel")) {
+        sdsfree(logLevel);
+        logLevel = sdsnew(RedisModule_StringPtrLen(argv[2], NULL));
+    } else {
+        RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    }
+    return RedisModule_ReplyWithSimpleString(ctx, "OK");
+}
+
 VectorClock *getVectorClockFromString(RedisModuleString *vectorClockStr) {
     size_t vcStrLength;
     const char *vcStr = RedisModule_StringPtrLen(vectorClockStr, &vcStrLength);
@@ -85,6 +101,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     REDISMODULE_NOT_USED(argv);
     REDISMODULE_NOT_USED(argc);
 
+    logLevel = sdsnew(CRDT_DEFAULT_LOG_LEVEL);
     if (RedisModule_Init(ctx, MODULE_NAME, CRDT_API_VERSION, REDISMODULE_APIVER_1)
         == REDISMODULE_ERR) return REDISMODULE_ERR;
 
@@ -100,6 +117,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
     if (RedisModule_CreateCommand(ctx,"del",
                                   delCommand,"write",1,-1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+
+    if (RedisModule_CreateCommand(ctx,"crdt.debug",
+                                  crdtDebugCommand,"write",1,-1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     return REDISMODULE_OK;
