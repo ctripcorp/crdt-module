@@ -676,17 +676,14 @@ int hgetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 int hmgetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     /* Don't abort when the key cannot be found. Non-existing keys are empty
      * hashes, where HMGET should respond with a series of null bulks. */
-    CRDT_Hash *crdtHash;
+    CRDT_Hash *crdtHash = NULL;
     int i;
 
     RedisModule_AutoMemory(ctx);
 
     RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
 
-    if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
-        RedisModule_CloseKey(key);
-        return RedisModule_ReplyWithNull(ctx);
-    } else if (RedisModule_ModuleTypeGetType(key) != CrdtHash) {
+    if (RedisModule_KeyType(key) != REDISMODULE_KEYTYPE_EMPTY && RedisModule_ModuleTypeGetType(key) != CrdtHash) {
         RedisModule_CloseKey(key);
         return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
     } else {
@@ -718,7 +715,7 @@ int genericHgetallCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
     if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
         RedisModule_CloseKey(key);
-        return RedisModule_ReplyWithNull(ctx);
+        return RedisModule_ReplyWithArray(ctx, 0);
     } else if (RedisModule_ModuleTypeGetType(key) != CrdtHash) {
         RedisModule_CloseKey(key);
         return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
