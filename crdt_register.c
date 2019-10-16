@@ -169,9 +169,13 @@ void *crdtRegisterMerge(void *currentVal, void *value) {
     if (currentVal == NULL) {
         return dupCrdtRegister(value);
     }
-    if (isVectorClockMonoIncr(curRegister->common.vectorClock, targetRegister->common.vectorClock) == CRDT_OK
-            || isReplacable(curRegister, targetRegister->common.timestamp, targetRegister->common.gid) == CRDT_OK) {
+    if (isVectorClockMonoIncr(curRegister->common.vectorClock, targetRegister->common.vectorClock) == CRDT_OK) {
         return dupCrdtRegister(targetRegister);
+    } else if(isReplacable(curRegister, targetRegister->common.timestamp, targetRegister->common.gid) == CRDT_OK) {
+        CRDT_Register *result = dupCrdtRegister(targetRegister);
+        freeVectorClock(result->common.vectorClock);
+        result->common.vectorClock = vectorClockMerge(curRegister->common.vectorClock, targetRegister->common.vectorClock);
+        return result;
     } else {
         return dupCrdtRegister(curRegister);
     }
