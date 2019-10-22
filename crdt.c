@@ -49,21 +49,21 @@ int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     for(int i = 1; i < argc; i++) {
         tmp = numl;
-        RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[i], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+        RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv[i], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
         // if not found, skip this step
-        if (RedisModule_KeyType(key) != REDISMODULE_KEYTYPE_EMPTY) {
-            void *crdtObj = RedisModule_ModuleTypeGetValue(key);
+        if (RedisModule_KeyType(moduleKey) != REDISMODULE_KEYTYPE_EMPTY) {
+            void *crdtObj = RedisModule_ModuleTypeGetValue(moduleKey);
             if (crdtObj == NULL) {
                 continue;
             }
             CrdtCommon *crdtCommon = (CrdtCommon *) crdtObj;
-            numl += crdtCommon->delFunc(ctx, argv[i], key, crdtObj);
+            numl += crdtCommon->delFunc(ctx, argv[i], moduleKey, crdtObj);
         }
         dirty = numl - tmp;
         if (dirty > 0) {
-            RedisModule_DeleteKey(key);
+            RedisModule_DeleteKey(moduleKey);
         }
-        RedisModule_CloseKey(key);
+        RedisModule_CloseKey(moduleKey);
     }
 
     RedisModule_ReplyWithLongLong(ctx, numl);

@@ -31,8 +31,8 @@
 #define __REDIS_UTIL_H
 
 #include <stdint.h>
+#include "include/redismodule.h"
 #include "include/rmutil/sds.h"
-#include "tpl.h"
 
 int stringmatchlen(const char *p, int plen, const char *s, int slen, int nocase);
 int stringmatch(const char *p, const char *s, int nocase);

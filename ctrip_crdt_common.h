@@ -53,6 +53,7 @@ typedef struct CrdtCommon {
     //CRDT Merge Function
     crdtMergeFunc merge;
     crdtDelFunc delFunc;
+    //todo: getVectorClock()
 } __attribute__((packed, aligned(4))) CrdtCommon;
 
 int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);

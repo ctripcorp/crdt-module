@@ -13,3 +13,10 @@
 
 `redis-cli get key`
 `redis-cli crdt.get key`
+
+
+## Develop
+
+### Mem Alloc/Free
+- For temporary used mem/struct, using `Redis Module's` auto memory alloc.
+- For permanent used mem/struct, pass a flag to tell function whether to copy or take directly

@@ -125,7 +125,7 @@ cleanup:
     }
 }
 
-
+//todo: use redis module auto mem control, to alloc mem (all local/temp variables)
 sds
 vectorClockToSds(VectorClock *vc) {
     if(!vc || vc->length < 1) {

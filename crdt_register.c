@@ -38,6 +38,7 @@
 #include "utils.h"
 #include "crdt.h"
 
+#define DELETED_TAG "deleted"
 /**
  * ==============================================Pre-defined functions=========================================================*/
 
@@ -164,6 +165,7 @@ CRDT_Register *createCrdtRegisterUsingVectorClock(RedisModuleString *val, long l
     return crdtRegister;
 }
 
+//todo: flag to decide whether re-use
 void *crdtRegisterMerge(void *currentVal, void *value) {
     CRDT_Register *curRegister = currentVal, *targetRegister = value;
     if (currentVal == NULL) {
@@ -181,26 +183,29 @@ void *crdtRegisterMerge(void *currentVal, void *value) {
     }
 }
 
+/*
+ * return 0: nothing deleted
+ * return 1: delete 1 crdt register
+ * broadcast the CRDT.DEL_REG then
+ * */
 int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
     if(value == NULL) {
         return 0;
     }
     RedisModuleKey *moduleKey = (RedisModuleKey *) key;
-    CRDT_Register *crdtRegister = (CRDT_Register *) value;
-
 
     long long gid = RedisModule_CurrentGid();
     long long timestamp = mstime();
     RedisModule_IncrLocalVectorClock(1);
     VectorClock *vclock = RedisModule_CurrentVectorClock();
 
-    freeVectorClock(crdtRegister->common.vectorClock);
-    crdtRegister->common.vectorClock = vclock;
-    crdtRegister->common.gid = (int) gid;
-    crdtRegister->common.timestamp = timestamp;
+    CRDT_Register *tombstone = createCrdtRegister();
+    tombstone->common.vectorClock = vclock;
+    tombstone->common.gid = (int) gid;
+    tombstone->common.timestamp = timestamp;
+    tombstone->val = sdsnewlen(DELETED_TAG, 7);
 
-    CRDT_Register *tombstoneCrdtRegister = dupCrdtRegister(crdtRegister);
-    RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstoneCrdtRegister);
+    RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstone);
 
     sds vcSds = vectorClockToSds(vclock);
     RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", keyRobj, gid, timestamp, vcSds);
@@ -233,7 +238,8 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     CRDT_Register *tombstone = RedisModule_ModuleTypeGetTombstone(key);
     if (tombstone == NULL || tombstone->common.type != CRDT_REGISTER_TYPE) {
         tombstone = createCrdtRegister();
-        tombstone->val = sdsnew("deleted");
+        tombstone->val = sdsnewlen(DELETED_TAG, 7);
+        tombstone->common.vectorClock = dupVectorClock(vclock);
         RedisModule_ModuleTombstoneSetValue(key, CrdtRegister, tombstone);
     }
     VectorClock *toFree = tombstone->common.vectorClock;
