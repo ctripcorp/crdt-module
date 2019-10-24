@@ -41,6 +41,8 @@
 
 #define DELETED_TAG "deleted"
 
+#define DELETED_TAG_SIZE 7
+
 typedef struct CRDT_Register {
     CrdtCommon common;
     sds val;

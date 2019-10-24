@@ -446,15 +446,17 @@ int crdtHashTypeDelete(CRDT_Hash *crdtHash, sds field, CRDT_Hash *tombstone, int
 
     if (flag & CRDT_HASH_REM) {
         crdtRegister = createCrdtRegister();
-        crdtRegister->val = sdsnewlen(DELETED_TAG, 7);
+        crdtRegister->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
         VectorClock *toFree = crdtRegister->common.vectorClock;
         crdtRegister->common.gid = gid;
         crdtRegister->common.vectorClock = dupVectorClock(vclock);
         if (toFree) {
             freeVectorClock(toFree);
         }
-
-        dictAdd(tombstone->map, sdsdup(field), crdtRegister);
+        sds fieldKey = sdsdup(field);
+        if (!dictReplace(tombstone->map, fieldKey, crdtRegister)) {
+            sdsfree(fieldKey);
+        }
     }
 
     return deleted;

@@ -202,7 +202,7 @@ int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
     tombstone->common.vectorClock = vclock;
     tombstone->common.gid = (int) gid;
     tombstone->common.timestamp = timestamp;
-    tombstone->val = sdsnewlen(DELETED_TAG, 7);
+    tombstone->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
 
     RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstone);
 
@@ -237,7 +237,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     CRDT_Register *tombstone = RedisModule_ModuleTypeGetTombstone(key);
     if (tombstone == NULL || tombstone->common.type != CRDT_REGISTER_TYPE) {
         tombstone = createCrdtRegister();
-        tombstone->val = sdsnewlen(DELETED_TAG, 7);
+        tombstone->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
         tombstone->common.vectorClock = dupVectorClock(vclock);
         RedisModule_ModuleTombstoneSetValue(key, CrdtRegister, tombstone);
     }
