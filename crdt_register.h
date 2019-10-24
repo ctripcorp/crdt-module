@@ -39,6 +39,8 @@
 
 #define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
 
+#define DELETED_TAG "deleted"
+
 typedef struct CRDT_Register {
     CrdtCommon common;
     sds val;

@@ -446,7 +446,7 @@ int crdtHashTypeDelete(CRDT_Hash *crdtHash, sds field, CRDT_Hash *tombstone, int
 
     if (flag & CRDT_HASH_REM) {
         crdtRegister = createCrdtRegister();
-
+        crdtRegister->val = sdsnewlen(DELETED_TAG, 7);
         VectorClock *toFree = crdtRegister->common.vectorClock;
         crdtRegister->common.gid = gid;
         crdtRegister->common.vectorClock = dupVectorClock(vclock);

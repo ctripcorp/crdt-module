@@ -20,3 +20,13 @@
 ### Mem Alloc/Free
 - For temporary used mem/struct, using `Redis Module's` auto memory alloc.
 - For permanent used mem/struct, pass a flag to tell function whether to copy or take directly
+
+
+
+### Mem Leak Check
+
+``` makefile
+ make distclean
+ make OPTIMIZATION=-O0 MALLOC=libc
+ tclsh8.5 tests/test_crdt.tcl --valgrind --clients 1
+```

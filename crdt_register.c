@@ -38,7 +38,6 @@
 #include "utils.h"
 #include "crdt.h"
 
-#define DELETED_TAG "deleted"
 /**
  * ==============================================Pre-defined functions=========================================================*/
 
