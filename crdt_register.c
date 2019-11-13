@@ -326,7 +326,8 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     /*
      * sent to both my slaves and my peer slaves */
     sds vclockStr = vectorClockToSds(opVectorClock);
-    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllc", argv[1], argv[2], gid, timestamp, vclockStr);
+    long long expire = 0;
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllcl", argv[1], argv[2], gid, timestamp, vclockStr, expire);
     sdsfree(vclockStr);
 
     if (opVectorClock != NULL) {
@@ -355,6 +356,11 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     VectorClock *vclock = getVectorClockFromString(argv[5]);
     RedisModule_MergeVectorClock(gid, vclock);
+
+    long long expire;
+    if ((RedisModule_StringToLongLong(argv[6], &expire) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    }
 
     RedisModuleKey *moduleKey;
     moduleKey = RedisModule_OpenKey(ctx, argv[1],
@@ -432,9 +438,9 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (replicate) {
         sds vclockStr = vectorClockToSds(opVectorClock);
         if (gid == RedisModule_CurrentGid()) {
-            RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllc", argv[1], argv[2], gid, timestamp, vclockStr);
+            RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllcl", argv[1], argv[2], gid, timestamp, vclockStr, expire);
         } else {
-            RedisModule_ReplicateStraightForward(ctx, "CRDT.SET", "ssllc", argv[1], argv[2], gid, timestamp, vclockStr);
+            RedisModule_ReplicateStraightForward(ctx, "CRDT.SET", "ssllcl", argv[1], argv[2], gid, timestamp, vclockStr, expire);
         }
         sdsfree(vclockStr);
     }
