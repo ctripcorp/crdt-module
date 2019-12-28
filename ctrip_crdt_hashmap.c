@@ -118,7 +118,7 @@ void *crdtHashMerge(void *currentVal, void *value) {
         if (existDe == NULL) {
             dictAdd(result->map, sdsdup(field), dupCrdtRegister(crdtRegister));
         } else {
-            CRDT_Register *currentRegister = dictGetVal(de);
+            CRDT_Register *currentRegister = dictGetVal(existDe);
             CRDT_Register *newRegister = crdtRegisterMerge(currentRegister, crdtRegister);
             freeCrdtRegister(currentRegister);
             dictGetVal(existDe) = newRegister;
