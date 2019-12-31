@@ -493,6 +493,7 @@ static int hashTypeDelete(CRDT_Hash *crdtHash, sds field, CRDT_Hash *tombstone, 
     VectorClock *toFree = crdtRegister->common.vectorClock;
     crdtRegister->common.gid = gid;
     crdtRegister->common.vectorClock = dupVectorClock(vclock);
+    crdtRegister->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
     if (toFree) {
         freeVectorClock(toFree);
     }
