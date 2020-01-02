@@ -375,6 +375,7 @@ int crdtHashTypeSet(RedisModuleCtx *ctx, RedisModuleString *key, CRDT_Hash *crdt
         CRDT_Register *crdtRegister = dictGetVal(de);
         if (isVectorClockMonoIncr(vclock, crdtRegister->common.vectorClock)) {
             // has been deleted already
+            if(field) sdsfree(field);
             return update;
         }
     }
@@ -822,9 +823,11 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (tombstone != NULL) {
         //todo: if delete all
         if (tombstone->common.type == CRDT_HASH_TYPE && isVectorClockMonoIncr(vclock, tombstone->maxdvc)) {
+            if (vclock) freeVectorClock(vclock); 
             RedisModule_CloseKey(moduleKey);
             return RedisModule_ReplyWithSimpleString(ctx, "OK");
         } else if (tombstone->common.type != CRDT_HASH_TYPE && isVectorClockMonoIncr(vclock, tombstone->common.vectorClock)) {
+            if (vclock) freeVectorClock(vclock); 
             RedisModule_CloseKey(moduleKey);
             return RedisModule_ReplyWithSimpleString(ctx, "OK");
         }
