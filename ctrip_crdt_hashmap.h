@@ -39,6 +39,7 @@
 #include "ctrip_crdt_common.h"
 #include "include/redismodule.h"
 #include "include/rmutil/dict.h"
+#include "crdt_util.h"
 
 #define CRDT_HASH_DATATYPE_NAME "crdt_hash"
 

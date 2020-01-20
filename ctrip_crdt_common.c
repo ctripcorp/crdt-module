@@ -47,7 +47,52 @@ int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock) {
     return CRDT_NO;
 }
 
-
+int isConflictCommon(int result) {
+    if(result > COMPARE_COMMON_VECTORCLOCK_GT || result < COMPARE_COMMON_VECTORCLOCK_LT) {
+        return CRDT_OK;
+    }
+    return CRDT_NO;
+}
+int compareCommon(CrdtCommon* old_common, CrdtCommon* new_common) {
+    if (isVectorClockMonoIncr(old_common->vectorClock, new_common->vectorClock) == CRDT_OK) {
+        return COMPARE_COMMON_VECTORCLOCK_GT;
+    } else if (isVectorClockMonoIncr(new_common->vectorClock, old_common->vectorClock) == CRDT_OK) {
+        return COMPARE_COMMON_VECTORCLOCK_LT;
+    } 
+    if(old_common->timestamp < new_common->timestamp) {
+        return COMPARE_COMMON_TIMESTAMPE_GT;
+    }else if (old_common->timestamp > new_common->timestamp) {
+        return COMPARE_COMMON_TIMESTAMPE_LT;
+    }
+    if(old_common->gid > new_common->gid) {
+        return COMPARE_COMMON_GID_GT;
+    }else if(old_common->gid < new_common->gid) {
+        return COMPARE_COMMON_GID_LT;
+    }
+    return COMPARE_COMMON_EQUAL;
+}
+CrdtCommon* createCommon(int gid, long long timestamp, VectorClock* vclock) {
+    CrdtCommon* common = RedisModule_Alloc(sizeof(CrdtCommon));
+    common->gid = gid;
+    common->timestamp = timestamp;
+    common->vectorClock = vclock;
+    return common;    
+}
+CrdtCommon* createIncrCommon() {
+    long long gid = RedisModule_CurrentGid();
+    RedisModule_IncrLocalVectorClock(1);
+    // Abstract the logic of local set to match the common process
+    // Here, we consider the op vclock we're trying to broadcasting is our vcu wrapped vector clock
+    // for example, our gid is 1,  our vector clock is (1:100,2:1,3:100)
+    // A set operation will firstly drive the vclock into (1:101,2:1,3:100).
+    VectorClock *currentVectorClock = RedisModule_CurrentVectorClock();
+    long long timestamp = RedisModule_Milliseconds();
+    return createCommon(gid, timestamp, currentVectorClock);
+}
+void freeCommon(CrdtCommon* common) {
+    freeVectorClock(common->vectorClock);
+    RedisModule_Free(common);
+}
 #if defined(CRDT_COMMON_TEST_MAIN)
 #include <stdio.h>
 #include "testhelp.h"
@@ -87,6 +132,7 @@ int crdtCommonTest(void) {
     test_report();
     return 0;
 }
+
 #endif
 
 #ifdef CRDT_COMMON_TEST_MAIN

@@ -36,6 +36,7 @@
 #include "include/rmutil/sds.h"
 #include "ctrip_crdt_common.h"
 #include "include/redismodule.h"
+#include "crdt_util.h"
 
 #define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
 
@@ -64,4 +65,6 @@ void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
 
 sds crdtRegisterInfo(CRDT_Register *crdtRegister);
 
+CRDT_Register* addRegister(void *tombstone, CrdtCommon* common, sds value);
+int tryUpdateRegister(void* data, CrdtCommon* common, CRDT_Register* reg, sds value);
 #endif //XREDIS_CRDT_CRDT_REGISTER_H
