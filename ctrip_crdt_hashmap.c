@@ -645,9 +645,12 @@ static int addCrdtHashFieldToReply(RedisModuleCtx *ctx, CRDT_Hash *crdtHash, Red
     if (crdtHash == NULL) {
         return RedisModule_ReplyWithNull(ctx);
     }
-    sds fld = moduleString2Sds(field);
+    sds fld = RedisModule_GetSds(field);
+    if(fld == NULL) {
+        RedisModule_ReplyWithError(ctx, "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return RedisModule_ReplyWithNull(ctx);
+    }
     CRDT_Register *crdtRegister = hashTypeGetFromHashTable(crdtHash, fld);
-    sdsfree(fld);
     if (crdtRegister == NULL) {
         return RedisModule_ReplyWithNull(ctx);
     } else {
@@ -896,8 +899,50 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     return RedisModule_ReplyWithSimpleString(ctx, "OK");
 }
-
+// "CRDT.HGET", <key>, <field>
+//   0           1        2      
+// <value>  <gid>  <timestamp> <vectorClock>
+//  0        1      2           3
 int CRDT_HGetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    RedisModule_AutoMemory(ctx);
+
+    if (argc != 3) return RedisModule_WrongArity(ctx);
+
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+
+    CRDT_Hash *crdtHash;
+
+    if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
+        RedisModule_CloseKey(key);
+        return RedisModule_ReplyWithNull(ctx);
+    } else if (RedisModule_ModuleTypeGetType(key) != CrdtHash) {
+        RedisModule_CloseKey(key);
+        return RedisModule_ReplyWithError(ctx, "WRONGTYPE Operation against a key holding the wrong kind of value");
+    } else {
+        crdtHash = RedisModule_ModuleTypeGetValue(key);
+    }
+    
+    if (crdtHash == NULL) {
+        return RedisModule_ReplyWithNull(ctx);
+    }
+    sds fld = RedisModule_GetSds(argv[2]);
+    if(fld == NULL) {
+        RedisModule_ReplyWithError(ctx, "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return RedisModule_ReplyWithNull(ctx);
+    }
+    CRDT_Register *crdtRegister = hashTypeGetFromHashTable(crdtHash, fld);     
+    if (crdtRegister == NULL) {
+        return RedisModule_ReplyWithNull(ctx);
+    } 
+
+    RedisModule_ReplyWithArray(ctx, 4);
+    RedisModule_ReplyWithStringBuffer(ctx, crdtRegister->val, sdslen(crdtRegister->val)); 
+    RedisModule_ReplyWithLongLong(ctx, crdtRegister->common.gid);
+    RedisModule_ReplyWithLongLong(ctx, crdtRegister->common.timestamp);
+    sds vclockSds = vectorClockToSds(crdtRegister->common.vectorClock);
+    RedisModule_ReplyWithStringBuffer(ctx, vclockSds, sdslen(vclockSds));
+    sdsfree(vclockSds);
+    RedisModule_CloseKey(key);
     return REDISMODULE_OK;
 }
 
