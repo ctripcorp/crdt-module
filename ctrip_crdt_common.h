@@ -56,5 +56,18 @@ typedef struct CrdtCommon {
     //todo: getVectorClock()
 } __attribute__((packed, aligned(4))) CrdtCommon;
 
+CrdtCommon* createCommon(int gid, long long timestamp, VectorClock* vclock);
+CrdtCommon* createIncrCommon();
+void freeCommon(CrdtCommon* common);
+
+#define COMPARE_COMMON_VECTORCLOCK_GT 1
+#define COMPARE_COMMON_VECTORCLOCK_LT -1
+#define COMPARE_COMMON_TIMESTAMPE_GT 2
+#define COMPARE_COMMON_TIMESTAMPE_LT -2
+#define COMPARE_COMMON_GID_GT 3
+#define COMPARE_COMMON_GID_LT -3
+#define COMPARE_COMMON_EQUAL 0
+int compareCommon(CrdtCommon* a, CrdtCommon* b);
+int isConflictCommon(int result);
 int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 #endif //REDIS_CTRIP_CRDT_COMMON_H
