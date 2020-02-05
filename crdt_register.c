@@ -192,18 +192,23 @@ void *crdtRegisterMerge(void *currentVal, void *value) {
  * return 1: delete 1 crdt register
  * broadcast the CRDT.DEL_REG then
  * */
-int crdtRegisterDelete(void *ctx, void *keyRobj, void*key, void *value) {
+int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
     if(value == NULL) {
         return CRDT_ERROR;
     }
+    RedisModuleKey *moduleKey = (RedisModuleKey *) key;
     if(!isRegister(value)) {
+        const char* keyStr = RedisModule_StringPtrLen(moduleKey, NULL);
+        CrdtCommon* v = (CrdtCommon*)value;
+        RedisModule_Log(ctx, logLevel, "[TYPE CONFLICT][CRDT-Register][crdtRegisterDelete] key:{%s} ,prev: {%s} ",
+                            keyStr ,v->type);
         return CRDT_ERROR;
     }
-    RedisModuleKey *moduleKey = (RedisModuleKey *) key;
+    
     CrdtCommon* common= createIncrCommon();
     
     CRDT_Register *tombstone = createCrdtRegister();
-    setCommonClone(tombstone, common);
+    crdtCommonCp(common, tombstone);
     tombstone->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
     RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstone);
 
@@ -247,7 +252,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         tombstone = createCrdtRegister();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstone);
     }
-    mergeCommon(tombstone, common);
+    crdtCommonMerge(tombstone, common);
     if(tombstone->val) sdsfree(tombstone->val);
     tombstone->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
 
@@ -572,7 +577,7 @@ CRDT_Register* addRegister(void *data, CrdtCommon* common, sds value) {
         }
     }
     CRDT_Register* r = createCrdtRegister();
-    setCommonClone(r, common);
+    crdtCommonCp(common, r);
     r->val = sdsdup(value);
     return r;
 }

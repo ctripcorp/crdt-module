@@ -66,9 +66,9 @@ void freeCommon(CrdtCommon* common);
 #define COMPARE_COMMON_GID_GT 3
 #define COMPARE_COMMON_GID_LT -3
 #define COMPARE_COMMON_EQUAL 0
-int compareCommon(CrdtCommon* a, CrdtCommon* b);
+int compareCommon(CrdtCommon *a, CrdtCommon *b);
 int isConflictCommon(int result);
-void setCommonClone(CrdtCommon* obj, CrdtCommon* common);
-void mergeCommon(CrdtCommon*obj , CrdtCommon* common);
+void crdtCommonCp(CrdtCommon *from, CrdtCommon* to);
+void crdtCommonMerge(CrdtCommon *target , CrdtCommon* other);
 int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 #endif //REDIS_CTRIP_CRDT_COMMON_H

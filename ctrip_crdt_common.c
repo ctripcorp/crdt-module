@@ -54,19 +54,19 @@ int isConflictCommon(int result) {
     return CRDT_NO;
 }
 
-void setCommonClone(CrdtCommon* obj, CrdtCommon* common) {
-    VectorClock* clock =  obj->vectorClock;
-    obj->gid = common->gid;
-    obj->timestamp = common->timestamp;
-    obj->vectorClock = dupVectorClock(common->vectorClock);
+void crdtCommonCp(CrdtCommon* from, CrdtCommon* to) {
+    VectorClock* clock =  to->vectorClock;
+    to->gid = from->gid;
+    to->timestamp = from->timestamp;
+    to->vectorClock = dupVectorClock(from->vectorClock);
     freeVectorClock(clock);
 }
 
-void mergeCommon(CrdtCommon* obj , CrdtCommon* common) {
-    VectorClock* clock =  obj->vectorClock;
-    obj->gid = common->gid;
-    obj->timestamp = common->timestamp;
-    obj->vectorClock = vectorClockMerge(clock, common->vectorClock);
+void crdtCommonMerge(CrdtCommon* target , CrdtCommon* other) {
+    VectorClock* clock =  target->vectorClock;
+    target->gid = other->gid;
+    target->timestamp = other->timestamp;
+    target->vectorClock = vectorClockMerge(clock, other->vectorClock);
     freeVectorClock(clock);
 }
 

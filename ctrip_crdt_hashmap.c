@@ -154,7 +154,7 @@ int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
     dictEmpty(current->map, NULL);
 
     CRDT_Hash* tombstone = createCrdtHash();
-    setCommonClone(tombstone, common);
+    crdtCommonCp(common, tombstone);
     tombstone->remvAll = CRDT_YES;
     tombstone->maxdvc = dupVectorClock(current->common.vectorClock);
     RedisModuleKey *moduleKey = (RedisModuleKey *) key;
@@ -651,7 +651,7 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     sds field = RedisModule_GetSds(argv[2]);
     
     if(addHash(tombstone, common, field, tvalue) == CRDT_OK) {
-        mergeCommon(tombstone, common);
+        crdtCommonMerge(tombstone, common);
     }
     sdsfree(tvalue);
 
@@ -924,7 +924,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
         tombstone = createCrdtHash();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstone);
     }
-    mergeCommon(tombstone, common);
+    crdtCommonMerge(tombstone, common);
     VectorClock* freeMaxdvc = tombstone->maxdvc;
     tombstone->maxdvc = vectorClockMerge(tombstone->maxdvc, common->vectorClock);
     freeVectorClock(freeMaxdvc);
@@ -998,7 +998,7 @@ int addHash(CRDT_Hash* hash,CrdtCommon* common, sds field, sds value) {
         tvalue = createCrdtRegister();
         dictAdd(hash->map, sdsdup(field), tvalue);
     }
-    setCommonClone(tvalue, common);
+    crdtCommonCp(common, tvalue);
     if(tvalue->val) sdsfree(tvalue->val);
     tvalue->val = sdsdup(value);
     return CRDT_OK;
@@ -1038,7 +1038,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         tombstone = createCrdtHash();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstone);
     }
-    mergeCommon(tombstone, common);
+    crdtCommonMerge(tombstone, common);
 
     CRDT_Hash* current =  getCurrentValue(moduleKey);
     if(current != NULL && !isCrdtHash(current)) {
