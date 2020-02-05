@@ -141,7 +141,14 @@ void *crdtHashMerge(void *currentVal, void *value) {
     return result;
 
 }
-
+CRDT_Hash* crdtHashSetTombstone(RedisModuleKey* moduleKey, CrdtCommon* common) {
+    CRDT_Hash* tombstone = createCrdtHash();
+    crdtCommonCp(common, tombstone);
+    tombstone->remvAll = CRDT_YES;
+    tombstone->maxdvc = dupVectorClock(common->vectorClock);
+    RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstone);
+    return tombstone;
+}
 int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
     if(value == NULL) {
         return CRDT_ERROR;
@@ -153,21 +160,31 @@ int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
     CRDT_Hash* current = (CRDT_Hash*) value;
     dictEmpty(current->map, NULL);
 
-    CRDT_Hash* tombstone = createCrdtHash();
-    crdtCommonCp(common, tombstone);
-    tombstone->remvAll = CRDT_YES;
-    tombstone->maxdvc = dupVectorClock(current->common.vectorClock);
     RedisModuleKey *moduleKey = (RedisModuleKey *) key;
-    RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstone);
+    crdtHashSetTombstone(moduleKey, common);
 
     sds vcSds = vectorClockToSds(common->vectorClock);
-    sds maxDeletedVclock = vectorClockToSds(tombstone->maxdvc);
-    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_Hash", "sllcc", keyRobj, common->gid, common->timestamp, vcSds, maxDeletedVclock);
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_Hash", "sllcc", keyRobj, common->gid, common->timestamp, vcSds, vcSds);
     sdsfree(vcSds);
-    sdsfree(maxDeletedVclock);
     freeCommon(common);
     return CRDT_OK;
 }
+
+void crdtHashExpire(void* db, int id, RedisModuleString* key) {
+    RedisModuleKey* moduleKey = RedisModule_CreateKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+    CrdtCommon* t = getTombstone(moduleKey);
+    CrdtCommon* common = createIncrCommon();
+    
+    crdtHashSetTombstone(moduleKey, common);
+
+    sds vcSds = vectorClockToSds(common->vectorClock);
+    RedisModule_ReplicationFeedAllSlaves(id, "CRDT.del_hash", "sllcc", key, common->gid, common->timestamp, vcSds, vcSds);
+    sdsfree(vcSds);
+
+    freeCommon(common);
+    RedisModule_FreeKey(moduleKey);
+}
+
 /***
  * ==================================== CRDT Hash Module Init ===========================================*/
 
@@ -297,6 +314,7 @@ void *createCrdtHash(void) {
 
     crdtHash->common.merge = crdtHashMerge;
     crdtHash->common.delFunc = crdtHashDelete;
+    crdtHash->common.expire = crdtHashExpire;
     crdtHash->common.vectorClock = NULL;
     crdtHash->common.timestamp = -1;
     crdtHash->common.gid = (int) RedisModule_CurrentGid();
@@ -319,6 +337,7 @@ void freeCrdtHash(void *obj) {
     }
     crdtHash->common.merge = NULL;
     crdtHash->common.delFunc = NULL;
+    crdtHash->common.expire = NULL;
 
     freeVectorClock(crdtHash->common.vectorClock);
     freeVectorClock(crdtHash->maxdvc);
@@ -549,6 +568,7 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     CRDT_Hash* current = getCurrentValue(moduleKey);
     int result = addOrUpdateHash(ctx, argv[1], moduleKey, NULL, current,common, argv, 2, argc);
+    RedisModule_RemoveExpire(moduleKey);
 end:
     if (common != NULL) {
         //send crdt.hset command peer and slave
@@ -607,6 +627,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         goto end;
     }
     RedisModule_MergeVectorClock(common->gid, common->vectorClock);
+    RedisModule_RemoveExpire(moduleKey);
 end:
     if (common != NULL) {
         if (common->gid == RedisModule_CurrentGid()) {

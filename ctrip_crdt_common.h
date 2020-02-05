@@ -44,6 +44,7 @@
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 
 typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
+typedef void (*crdtExpireFunc)(void* db,int id, RedisModuleString* keyRobj);
 typedef struct CrdtCommon {
     int gid;
     int type;
@@ -52,6 +53,7 @@ typedef struct CrdtCommon {
     //CRDT Merge Function
     crdtMergeFunc merge;
     crdtDelFunc delFunc;
+    crdtExpireFunc expire;
     //todo: getVectorClock()
 } __attribute__((packed, aligned(4))) CrdtCommon;
 

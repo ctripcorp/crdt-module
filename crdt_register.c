@@ -57,6 +57,8 @@ void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value);
 
 int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value);
 
+void crdtRegisterExpire(void* db, int id, RedisModuleString *key);
+
 int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 /**
  * ==============================================Register module init=========================================================*/
@@ -111,6 +113,7 @@ void *createCrdtRegister(void) {
     crdtRegister->common.gid = -1;
     crdtRegister->common.merge = crdtRegisterMerge;
     crdtRegister->common.delFunc = crdtRegisterDelete;
+    crdtRegister->common.expire = crdtRegisterExpire;
     crdtRegister->common.vectorClock = NULL;
     crdtRegister->common.timestamp = -1;
     crdtRegister->common.type = CRDT_REGISTER_TYPE;
@@ -128,6 +131,7 @@ void freeCrdtRegister(void *obj) {
     }
     crdtRegister->common.merge = NULL;
     crdtRegister->common.delFunc = NULL;
+    crdtRegister->common.expire = NULL;
     if(crdtRegister->common.vectorClock) {
         freeVectorClock(crdtRegister->common.vectorClock);
     }
@@ -187,6 +191,13 @@ void *crdtRegisterMerge(void *currentVal, void *value) {
     }
 }
 
+CRDT_Register* crdtRegisterSetTombstone(RedisModuleKey* moduleKey, CrdtCommon* common) {
+    CRDT_Register *tombstone = createCrdtRegister();
+    crdtCommonCp(common, tombstone);
+    tombstone->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
+    RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstone);
+    return tombstone;
+}
 /*
  * return 0: nothing deleted
  * return 1: delete 1 crdt register
@@ -206,17 +217,28 @@ int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
     }
     
     CrdtCommon* common= createIncrCommon();
-    
-    CRDT_Register *tombstone = createCrdtRegister();
-    crdtCommonCp(common, tombstone);
-    tombstone->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
-    RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstone);
+    crdtRegisterSetTombstone(moduleKey, common);
+
 
     sds vcSds = vectorClockToSds(common->vectorClock);
     RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", keyRobj, common->gid, common->timestamp, vcSds);
     sdsfree(vcSds);
     freeCommon(common);
     return CRDT_OK;
+}
+
+void crdtRegisterExpire(void* db, int id, RedisModuleString *key) {
+    RedisModuleKey* moduleKey = RedisModule_CreateKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+    CrdtCommon* common = createIncrCommon();
+
+    crdtRegisterSetTombstone(moduleKey, common);
+
+    sds vcSds = vectorClockToSds(common->vectorClock);
+    RedisModule_ReplicationFeedAllSlaves(id, "CRDT.DEL_REG", "sllc", key, common->gid, common->timestamp, vcSds);
+    sdsfree(vcSds);
+
+    freeCommon(common);
+    RedisModule_FreeKey(moduleKey);
 }
 
 
@@ -355,6 +377,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         status = CRDT_ERROR;
         goto end;
     }
+    RedisModule_RemoveExpire(moduleKey);
 end:
     if(common) {
         sds vclockStr = vectorClockToSds(common->vectorClock);
@@ -405,6 +428,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         goto end;
     }
     RedisModule_MergeVectorClock(common->gid, common->vectorClock);
+    RedisModule_RemoveExpire(moduleKey);
 end:
     if (common != NULL) {
         if (common->gid == RedisModule_CurrentGid()) {
