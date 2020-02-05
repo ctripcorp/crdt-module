@@ -53,6 +53,23 @@ int isConflictCommon(int result) {
     }
     return CRDT_NO;
 }
+
+void crdtCommonCp(CrdtCommon* from, CrdtCommon* to) {
+    VectorClock* clock =  to->vectorClock;
+    to->gid = from->gid;
+    to->timestamp = from->timestamp;
+    to->vectorClock = dupVectorClock(from->vectorClock);
+    freeVectorClock(clock);
+}
+
+void crdtCommonMerge(CrdtCommon* target , CrdtCommon* other) {
+    VectorClock* clock =  target->vectorClock;
+    target->gid = other->gid;
+    target->timestamp = other->timestamp;
+    target->vectorClock = vectorClockMerge(clock, other->vectorClock);
+    freeVectorClock(clock);
+}
+
 int compareCommon(CrdtCommon* old_common, CrdtCommon* new_common) {
     if (isVectorClockMonoIncr(old_common->vectorClock, new_common->vectorClock) == CRDT_OK) {
         return COMPARE_COMMON_VECTORCLOCK_GT;

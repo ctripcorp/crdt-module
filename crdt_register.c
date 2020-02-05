@@ -194,89 +194,101 @@ void *crdtRegisterMerge(void *currentVal, void *value) {
  * */
 int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
     if(value == NULL) {
-        return 0;
+        return CRDT_ERROR;
     }
     RedisModuleKey *moduleKey = (RedisModuleKey *) key;
-
-    long long gid = RedisModule_CurrentGid();
-    long long timestamp = mstime();
-    RedisModule_IncrLocalVectorClock(1);
-    VectorClock *vclock = RedisModule_CurrentVectorClock();
-
+    if(!isRegister(value)) {
+        const char* keyStr = RedisModule_StringPtrLen(moduleKey, NULL);
+        CrdtCommon* v = (CrdtCommon*)value;
+        RedisModule_Log(ctx, logLevel, "[TYPE CONFLICT][CRDT-Register][crdtRegisterDelete] key:{%s} ,prev: {%s} ",
+                            keyStr ,v->type);
+        return CRDT_ERROR;
+    }
+    
+    CrdtCommon* common= createIncrCommon();
+    
     CRDT_Register *tombstone = createCrdtRegister();
-    tombstone->common.vectorClock = vclock;
-    tombstone->common.gid = (int) gid;
-    tombstone->common.timestamp = timestamp;
+    crdtCommonCp(common, tombstone);
     tombstone->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
-
     RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstone);
 
-    sds vcSds = vectorClockToSds(vclock);
-    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", keyRobj, gid, timestamp, vcSds);
+    sds vcSds = vectorClockToSds(common->vectorClock);
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", keyRobj, common->gid, common->timestamp, vcSds);
     sdsfree(vcSds);
-
-    return 1;
+    freeCommon(common);
+    return CRDT_OK;
 }
+
 
 //CRDT.DEL_REG <key> <gid> <timestamp> <vc>
 //      0        1     2         3      4
 int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
-    if (argc < 4) return RedisModule_WrongArity(ctx);
+    if(argc < 4) return RedisModule_WrongArity(ctx);
+    CrdtCommon* common = getCommon(ctx, argv, 2);
+    if(common == NULL) return CRDT_ERROR;
 
-    long long gid;
-    if ((RedisModule_StringToLongLong(argv[2],&gid) != REDISMODULE_OK)) {
-        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    int status = CRDT_OK;
+    int deleted = 0;
+    RedisModuleKey* moduleKey =  getWriteRedisModuleKey(ctx, argv[1], CrdtRegister);
+    if(moduleKey == NULL) {
+        status = CRDT_ERROR;
+        goto end;
     }
 
-    long long timestamp;
-    if ((RedisModule_StringToLongLong(argv[3],&timestamp) != REDISMODULE_OK)) {
-        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    CrdtCommon* t = getTombstone(moduleKey);
+    CRDT_Register* tombstone = NULL;
+    if(t != NULL) {
+        int result = compareCommon(t, common);
+        if(result < COMPARE_COMMON_EQUAL) {
+            goto end;
+        } else {
+            if(isRegister(tombstone)) {
+                tombstone = (CRDT_Register*)t;
+            }
+        }
     }
-
-    VectorClock *vclock = getVectorClockFromString(argv[4]);
-    RedisModule_MergeVectorClock(gid, vclock);
-
-    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
-
-    CRDT_Register *tombstone = RedisModule_ModuleTypeGetTombstone(key);
-    if (tombstone == NULL || tombstone->common.type != CRDT_REGISTER_TYPE) {
+    if(tombstone == NULL) {
         tombstone = createCrdtRegister();
-        tombstone->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
-        tombstone->common.vectorClock = dupVectorClock(vclock);
-        RedisModule_ModuleTombstoneSetValue(key, CrdtRegister, tombstone);
+        RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstone);
     }
-    VectorClock *toFree = tombstone->common.vectorClock;
-    tombstone->common.vectorClock = dupVectorClock(vclock);
-    tombstone->common.timestamp = timestamp;
-    tombstone->common.gid = (int) gid;
+    crdtCommonMerge(tombstone, common);
+    if(tombstone->val) sdsfree(tombstone->val);
+    tombstone->val = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
 
-    unsigned char deleted = 0;
-    if (RedisModule_KeyType(key) != REDISMODULE_KEYTYPE_EMPTY) {
-        CRDT_Register *crdtObj = RedisModule_ModuleTypeGetValue(key);
-        if (crdtObj != NULL && isVectorClockMonoIncr(crdtObj->common.vectorClock, vclock) == CRDT_OK) {
-            RedisModule_DeleteKey(key);
+    CRDT_Register* current = getCurrentValue(moduleKey);
+    if(current != NULL) {
+        if(!isRegister(current)) {
+            const char* keyStr = RedisModule_StringPtrLen(moduleKey, NULL);
+            RedisModule_Log(ctx, logLevel, "[TYPE CONFLICT][CRDT-Register][drop] key:{%s} ,prev: {%s} ",
+                            keyStr ,current->common.type);
+            RedisModule_IncrCrdtConflict();      
+            RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);  
+            status = CRDT_ERROR;
+            goto end;
+        }
+        int result = compareCommon(&current->common, common);
+        if(result > COMPARE_COMMON_EQUAL) {
+            RedisModule_DeleteKey(moduleKey);
             deleted = 1;
         }
     }
-    RedisModule_CloseKey(key);
-
-    sds vcSds = vectorClockToSds(vclock);
-    if (gid == RedisModule_CurrentGid()) {
-        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", argv[1], gid, timestamp, vcSds);
-    } else {
-        RedisModule_ReplicateStraightForward(ctx, "CRDT.DEL_REG", "sllc", argv[1], gid, timestamp, vcSds);
+    RedisModule_MergeVectorClock(common->gid, common->vectorClock);
+end: 
+    if(common) {
+        if (common->gid == RedisModule_CurrentGid()) {
+            RedisModule_CrdtReplicateVerbatim(ctx);
+        } else {
+            RedisModule_ReplicateVerbatim(ctx);
+        }
+        freeCommon(common);
     }
-    sdsfree(vcSds);
-
-    if (vclock) {
-        freeVectorClock(vclock);
+    if(moduleKey) RedisModule_CloseKey(moduleKey);
+    if(status == CRDT_OK) {
+        return RedisModule_ReplyWithLongLong(ctx, deleted); 
+    }else{
+        return CRDT_ERROR;
     }
-
-    if (toFree) {
-        freeVectorClock(toFree);
-    }
-    return RedisModule_ReplyWithLongLong(ctx, deleted);
 }
 
 
@@ -333,7 +345,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
     int status = CRDT_OK;
     CrdtCommon* common = createIncrCommon();
-    RedisModuleKey* moduleKey =  getWriteRedisModuleKey(ctx, argv, CrdtRegister);
+    RedisModuleKey* moduleKey =  getWriteRedisModuleKey(ctx, argv[1], CrdtRegister);
     if(moduleKey == NULL) {
         status = CRDT_ERROR;
         goto end;
@@ -373,7 +385,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
     }
     //if key is null will be create one key
-    RedisModuleKey* moduleKey =  getWriteRedisModuleKey(ctx, argv, CrdtRegister);
+    RedisModuleKey* moduleKey =  getWriteRedisModuleKey(ctx, argv[1], CrdtRegister);
     if (moduleKey == NULL) {
         status = CRDT_ERROR;
         goto end;
@@ -381,8 +393,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     
     CrdtCommon* tombstone = getTombstone(moduleKey);
     if (tombstone != NULL && !isRegister(tombstone)) {
-        if (isVectorClockMonoIncr(common->vectorClock, tombstone->vectorClock)) {
-            status = CRDT_ERROR;
+        if (compareCommon( common, tombstone) > COMPARE_COMMON_EQUAL) {
             goto end; 
         } else {
             tombstone = NULL;
@@ -561,21 +572,19 @@ sds crdtRegisterInfo(CRDT_Register *crdtRegister) {
 CRDT_Register* addRegister(void *data, CrdtCommon* common, sds value) {
     CRDT_Register* tombstone = (CRDT_Register*) data;
     if(tombstone != NULL) {
-        if(isVectorClockMonoIncr(common->vectorClock, tombstone->common.vectorClock)) {
+        if(compareCommon(common, &tombstone->common) > COMPARE_COMMON_EQUAL) {
             return NULL;
         }
     }
     CRDT_Register* r = createCrdtRegister();
-    r->common.gid = common->gid;
-    r->common.timestamp = common->timestamp;
-    r->common.vectorClock = dupVectorClock(common->vectorClock);
+    crdtCommonCp(common, r);
     r->val = sdsdup(value);
     return r;
 }
 int tryUpdateRegister(void* data, CrdtCommon* common, CRDT_Register* reg, sds value) {
     CRDT_Register* tombstone = (CRDT_Register*) data;
     if(tombstone != NULL) {
-        if(isVectorClockMonoIncr(common->vectorClock, tombstone->common.vectorClock)) {
+        if(compareCommon(common, &(tombstone->common)) > COMPARE_COMMON_EQUAL) {
             return COMPARE_COMMON_VECTORCLOCK_LT;
         }
     }

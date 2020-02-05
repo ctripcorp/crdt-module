@@ -14,9 +14,9 @@ CrdtCommon* getCommon(RedisModuleCtx *ctx, RedisModuleString **argv, int start_i
     VectorClock *vclock = getVectorClockFromString(argv[start_index+2]);
     return createCommon(gid, timestamp, vclock);
 }
-RedisModuleKey* getWriteRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString **argv, RedisModuleType* redismodule_type) {
-    RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv[1],
-                                    REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);
+RedisModuleKey* getWriteRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type) {
+    RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv,
+                                    REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);                      
     int type = RedisModule_KeyType(moduleKey);
     if (type != REDISMODULE_KEYTYPE_EMPTY && RedisModule_ModuleTypeGetType(moduleKey) != redismodule_type) {
         RedisModule_CloseKey(moduleKey);

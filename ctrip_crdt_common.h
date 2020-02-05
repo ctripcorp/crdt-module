@@ -44,7 +44,6 @@
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 
 typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
-
 typedef struct CrdtCommon {
     int gid;
     int type;
@@ -67,7 +66,9 @@ void freeCommon(CrdtCommon* common);
 #define COMPARE_COMMON_GID_GT 3
 #define COMPARE_COMMON_GID_LT -3
 #define COMPARE_COMMON_EQUAL 0
-int compareCommon(CrdtCommon* a, CrdtCommon* b);
+int compareCommon(CrdtCommon *a, CrdtCommon *b);
 int isConflictCommon(int result);
+void crdtCommonCp(CrdtCommon *from, CrdtCommon* to);
+void crdtCommonMerge(CrdtCommon *target , CrdtCommon* other);
 int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 #endif //REDIS_CTRIP_CRDT_COMMON_H
