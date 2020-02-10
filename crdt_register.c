@@ -166,25 +166,13 @@ CRDT_Register *createCrdtRegisterUsingVectorClock(RedisModuleString *val, long l
 
 //todo: flag to decide whether re-use
 void *crdtRegisterMerge(void *currentVal, void *value) {
-    CRDT_Register *curRegister = currentVal, *targetRegister = value;
+    CRDT_Register *curRegister = currentVal, *targetRegister = value, *result;
     if (currentVal == NULL) {
         return dupCrdtRegister(value);
     }
-    if (isVectorClockMonoIncr(curRegister->common.vectorClock, targetRegister->common.vectorClock) == CRDT_OK) {
-        return dupCrdtRegister(targetRegister);
-    } else if(isVectorClockMonoIncr(targetRegister->common.vectorClock, curRegister->common.vectorClock) == CRDT_OK) {
-        return dupCrdtRegister(curRegister);
-    }else if(isReplacable(curRegister, targetRegister->common.timestamp, targetRegister->common.gid) == CRDT_OK) {
-        CRDT_Register *result = dupCrdtRegister(targetRegister);
-        freeVectorClock(result->common.vectorClock);
-        result->common.vectorClock = vectorClockMerge(curRegister->common.vectorClock, targetRegister->common.vectorClock);
-        return result;
-    } else {
-        CRDT_Register *result = dupCrdtRegister(curRegister);
-        freeVectorClock(result->common.vectorClock);
-        result->common.vectorClock = vectorClockMerge(curRegister->common.vectorClock, targetRegister->common.vectorClock);
-        return result;
-    }
+    result = dupCrdtRegister(currentVal);
+    tryUpdateRegister(NULL, &targetRegister->common, result, targetRegister->val);
+    return result;
 }
 
 /*
