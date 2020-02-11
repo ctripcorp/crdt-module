@@ -57,7 +57,7 @@ int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
                 continue;
             }
             CrdtCommon *crdtCommon = (CrdtCommon *) crdtObj;
-            numl += crdtCommon->delFunc(ctx, argv[i], moduleKey, crdtObj);
+            numl += crdtCommon->method->delFunc(ctx, argv[i], moduleKey, crdtObj);
         }
         dirty = numl - tmp;
         if (dirty > 0) {

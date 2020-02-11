@@ -62,7 +62,10 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
  * ==============================================Register module init=========================================================*/
 
 static RedisModuleType *CrdtRegister;
-
+static CrdtCommonMethod RegisterCommonMethod = {
+    merge: crdtRegisterMerge,
+    delFunc: crdtRegisterDelete
+};
 int initRegisterModule(RedisModuleCtx *ctx) {
 
     RedisModuleTypeMethods tm = {
@@ -105,12 +108,10 @@ int initRegisterModule(RedisModuleCtx *ctx) {
 
 /***
  * CRDT Lifecycle functionality*/
-
 void *createCrdtRegister(void) {
     CRDT_Register *crdtRegister = RedisModule_Alloc(sizeof(CRDT_Register));
     crdtRegister->common.gid = -1;
-    crdtRegister->common.merge = crdtRegisterMerge;
-    crdtRegister->common.delFunc = crdtRegisterDelete;
+    crdtRegister->common.method = &RegisterCommonMethod;
     crdtRegister->common.vectorClock = NULL;
     crdtRegister->common.timestamp = -1;
     crdtRegister->common.type = CRDT_REGISTER_TYPE;
@@ -126,8 +127,7 @@ void freeCrdtRegister(void *obj) {
     if (crdtRegister->val) {
         sdsfree(crdtRegister->val);
     }
-    crdtRegister->common.merge = NULL;
-    crdtRegister->common.delFunc = NULL;
+    crdtRegister->common.method = NULL;
     if(crdtRegister->common.vectorClock) {
         freeVectorClock(crdtRegister->common.vectorClock);
     }
