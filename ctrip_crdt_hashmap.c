@@ -36,7 +36,6 @@
 #include "crdt.h"
 
 static RedisModuleType *CrdtHash;
-
 /***
  * ==================================== Predefined functions ===========================================*/
 
@@ -171,6 +170,10 @@ int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
 /***
  * ==================================== CRDT Hash Module Init ===========================================*/
 
+static CrdtCommonMethod CrdtHashCommonMethod = {
+    merge : crdtHashMerge,
+    delFunc : crdtHashDelete
+};
 int initCrdtHashModule(RedisModuleCtx *ctx) {
     RedisModuleTypeMethods tm = {
             .version = REDISMODULE_APIVER_1,
@@ -295,8 +298,7 @@ void *createCrdtHash(void) {
     dict *hash = dictCreate(&crdtHashDictType, NULL);
     CRDT_Hash *crdtHash = RedisModule_Alloc(sizeof(CRDT_Hash));
 
-    crdtHash->common.merge = crdtHashMerge;
-    crdtHash->common.delFunc = crdtHashDelete;
+    crdtHash->common.method = &CrdtHashCommonMethod;
     crdtHash->common.vectorClock = NULL;
     crdtHash->common.timestamp = -1;
     crdtHash->common.gid = (int) RedisModule_CurrentGid();
@@ -317,8 +319,7 @@ void freeCrdtHash(void *obj) {
         dictRelease(crdtHash->map);
         crdtHash->map = NULL;
     }
-    crdtHash->common.merge = NULL;
-    crdtHash->common.delFunc = NULL;
+    crdtHash->common.method = NULL;
 
     freeVectorClock(crdtHash->common.vectorClock);
     freeVectorClock(crdtHash->maxdvc);

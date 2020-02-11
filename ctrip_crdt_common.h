@@ -44,14 +44,17 @@
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 
 typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
+typedef struct CrdtCommonMethod {
+    //CRDT Merge Function
+    crdtMergeFunc merge;
+    crdtDelFunc delFunc;
+} CrdtCommonMethod;
 typedef struct CrdtCommon {
     int gid;
     int type;
     VectorClock *vectorClock;
     long long timestamp;
-    //CRDT Merge Function
-    crdtMergeFunc merge;
-    crdtDelFunc delFunc;
+    CrdtCommonMethod* method;
     //todo: getVectorClock()
 } __attribute__((packed, aligned(4))) CrdtCommon;
 
