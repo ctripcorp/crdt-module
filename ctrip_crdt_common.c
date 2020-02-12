@@ -88,6 +88,26 @@ int compareCommon(CrdtCommon* old_common, CrdtCommon* new_common) {
     }
     return COMPARE_COMMON_EQUAL;
 }
+
+int compareCrdtInfo(CrdtCommon* old_common, CrdtInfo* new_info) {
+    if (isVectorClockMonoIncr(old_common->vectorClock, new_info->vectorClock) == CRDT_OK) {
+        return COMPARE_COMMON_VECTORCLOCK_GT;
+    } else if (isVectorClockMonoIncr(new_info->vectorClock, old_common->vectorClock) == CRDT_OK) {
+        return COMPARE_COMMON_VECTORCLOCK_LT;
+    } 
+    if(old_common->timestamp < new_info->timestamp) {
+        return COMPARE_COMMON_TIMESTAMPE_GT;
+    }else if (old_common->timestamp > new_info->timestamp) {
+        return COMPARE_COMMON_TIMESTAMPE_LT;
+    }
+    if(old_common->gid > new_info->gid) {
+        return COMPARE_COMMON_GID_GT;
+    }else if(old_common->gid < new_info->gid) {
+        return COMPARE_COMMON_GID_LT;
+    }
+    return COMPARE_COMMON_EQUAL;
+}
+
 CrdtCommon* createCommon(int gid, long long timestamp, VectorClock* vclock) {
     CrdtCommon* common = RedisModule_Alloc(sizeof(CrdtCommon));
     common->gid = gid;

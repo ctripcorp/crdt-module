@@ -154,13 +154,14 @@ int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
 
     CRDT_Hash* tombstone = createCrdtHash();
     crdtCommonCp(common, tombstone);
-    tombstone->remvAll = CRDT_YES;
-    tombstone->maxdvc = dupVectorClock(current->common.vectorClock);
+    tombstone->maxd.gid = current->common.gid;
+    tombstone->maxd.timestamp = current->common.timestamp;
+    tombstone->maxd.vectorClock = dupVectorClock(current->common.vectorClock);
     RedisModuleKey *moduleKey = (RedisModuleKey *) key;
     RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstone);
 
     sds vcSds = vectorClockToSds(common->vectorClock);
-    sds maxDeletedVclock = vectorClockToSds(tombstone->maxdvc);
+    sds maxDeletedVclock = vectorClockToSds(tombstone->maxd.vectorClock);
     RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_Hash", "sllcc", keyRobj, common->gid, common->timestamp, vcSds, maxDeletedVclock);
     sdsfree(vcSds);
     sdsfree(maxDeletedVclock);
@@ -304,8 +305,9 @@ void *createCrdtHash(void) {
     crdtHash->common.gid = (int) RedisModule_CurrentGid();
     crdtHash->common.type = CRDT_HASH_TYPE;
 
-    crdtHash->maxdvc = NULL;
-    crdtHash->remvAll = CRDT_NO;
+    crdtHash->maxd.gid = -1;
+    crdtHash->maxd.timestamp = -1;
+    crdtHash->maxd.vectorClock = NULL;
     crdtHash->map = hash;
     return crdtHash;
 }
@@ -322,7 +324,7 @@ void freeCrdtHash(void *obj) {
     crdtHash->common.method = NULL;
 
     freeVectorClock(crdtHash->common.vectorClock);
-    freeVectorClock(crdtHash->maxdvc);
+    freeVectorClock(crdtHash->maxd.vectorClock);
 
     RedisModule_Free(crdtHash);
 }
@@ -595,8 +597,8 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             }
         }else{
             tombstone = (CrdtCommon*)t;
-            if (tombstone->remvAll) {
-                if (isVectorClockMonoIncr(common->vectorClock, tombstone->maxdvc)) {
+            if (tombstone->maxd.gid != -1) {
+                if (compareCrdtInfo(common, &tombstone->maxd) > COMPARE_COMMON_EQUAL) {
                     goto end;
                 }
             }
@@ -926,8 +928,10 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstone);
     }
     crdtCommonMerge(tombstone, common);
-    VectorClock* freeMaxdvc = tombstone->maxdvc;
-    tombstone->maxdvc = vectorClockMerge(tombstone->maxdvc, common->vectorClock);
+    VectorClock* freeMaxdvc = tombstone->maxd.vectorClock;
+    tombstone->maxd.gid = common->gid;
+    tombstone->maxd.timestamp = common->timestamp;
+    tombstone->maxd.vectorClock = vectorClockMerge(tombstone->maxd.vectorClock, common->vectorClock);
     freeVectorClock(freeMaxdvc);
     
     CRDT_Hash* current =  getCurrentValue(moduleKey);
@@ -1025,11 +1029,13 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     if(t != NULL) {
         if(isCrdtHash(t)) {
             tombstone = (CRDT_Hash*)t;
-            if(isVectorClockMonoIncr(common, tombstone->maxdvc)) {
-                goto end;
+            if(tombstone->maxd.gid != -1) {
+                if (compareCrdtInfo(common, &tombstone->maxd)) {
+                    goto end;
+                }
             }
         }else{
-            if(compareCommon(t, common) < COMPARE_COMMON_EQUAL) {
+            if (compareCommon(t, common) < COMPARE_COMMON_EQUAL) {
                 goto end;
             }
         }
@@ -1112,11 +1118,11 @@ void *RdbLoadCrdtHash(RedisModuleIO *rdb, int encver) {
     sdsfree(vclockSds);
     RedisModule_Free(vcStr);
 
-    crdtHash->remvAll = RedisModule_LoadSigned(rdb);
-
+    crdtHash->maxd.gid = RedisModule_LoadSigned(rdb);
+    crdtHash->maxd.timestamp = RedisModule_LoadSigned(rdb);
     vcStr = RedisModule_LoadStringBuffer(rdb, &vcLength);
     vclockSds = sdsnewlen(vcStr, vcLength);
-    crdtHash->maxdvc = sdsToVectorClock(vclockSds);
+    crdtHash->maxd.vectorClock = sdsToVectorClock(vclockSds);
     sdsfree(vclockSds);
     RedisModule_Free(vcStr);
 
@@ -1149,8 +1155,9 @@ void RdbSaveCrdtHash(RedisModuleIO *rdb, void *value) {
     sds vclockStr = vectorClockToSds(crdtHash->common.vectorClock);
     RedisModule_SaveStringBuffer(rdb, vclockStr, sdslen(vclockStr));
     sdsfree(vclockStr);
-    RedisModule_SaveSigned(rdb, crdtHash->remvAll);
-    vclockStr = vectorClockToSds(crdtHash->maxdvc);
+    RedisModule_SaveSigned(rdb, crdtHash->maxd.gid);
+    RedisModule_SaveSigned(rdb, crdtHash->maxd.timestamp);
+    vclockStr = vectorClockToSds(crdtHash->maxd.vectorClock);
     RedisModule_SaveStringBuffer(rdb, vclockStr, sdslen(vclockStr));
     sdsfree(vclockStr);
 

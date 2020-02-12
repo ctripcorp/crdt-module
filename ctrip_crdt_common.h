@@ -49,6 +49,12 @@ typedef struct CrdtCommonMethod {
     crdtMergeFunc merge;
     crdtDelFunc delFunc;
 } CrdtCommonMethod;
+
+typedef struct CrdtInfo {
+    int gid;
+    long long timestamp;
+    VectorClock *vectorClock;
+} CrdtInfo;
 typedef struct CrdtCommon {
     int gid;
     int type;
@@ -70,6 +76,7 @@ void freeCommon(CrdtCommon* common);
 #define COMPARE_COMMON_GID_LT -3
 #define COMPARE_COMMON_EQUAL 0
 int compareCommon(CrdtCommon *a, CrdtCommon *b);
+int compareCrdtInfo(CrdtCommon *a, CrdtInfo *b);
 int isConflictCommon(int result);
 void crdtCommonCp(CrdtCommon *from, CrdtCommon* to);
 void crdtCommonMerge(CrdtCommon *target , CrdtCommon* other);
