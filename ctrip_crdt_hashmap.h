@@ -53,8 +53,6 @@
 
 typedef struct CRDT_Hash {
     CrdtCommon common;
-    int remvAll;
-    VectorClock *maxdvc;
     dict *map;
 } CRDT_Hash;
 
