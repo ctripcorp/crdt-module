@@ -141,10 +141,19 @@ void *crdtHashMerge(void *currentVal, void *value) {
 
 }
 
-int deleteAll(CRDT_Hash* tombstone, CrdtCommon* common, CRDT_Hash* current) {
-    int deleted = 0;
+void freeRedisModuleStringVec(RedisModuleCtx* ctx, RedisModuleString** vec, size_t len) {
+    if(vec == NULL) return;
+    // size_t len = redisModuleVecLength(vec);
+    for(int i = 0; i < len; i++) {
+        RedisModule_FreeString(ctx, vec[i]);
+    }
+    RedisModule_Free((void *)vec);
+}
+RedisModuleString** deleteAll(RedisModuleCtx* ctx, CRDT_Hash* tombstone, CrdtCommon* common, CRDT_Hash* current, size_t* len) {
+    size_t deleted = 0;
     dictIterator *di = dictGetSafeIterator(current->map);
     dictEntry *de, *exit;
+    RedisModuleString* *keys = NULL;
     while ((de = dictNext(di)) != NULL) {
         CRDT_Register *item = dictGetVal(de);
         int result = compareCommon(&item->common, common) ;
@@ -161,13 +170,16 @@ int deleteAll(CRDT_Hash* tombstone, CrdtCommon* common, CRDT_Hash* current) {
                 crdtCommonMerge(&t->common, common);
                 dictAdd(tombstone->map, sdsdup(field), t);
             }
-            if (dictDelete(current->map, field) == DICT_OK) {
-                deleted++;     
-            }
+            
+            keys = RedisModule_Realloc(keys, sizeof(RedisModuleString*)*(deleted + 1));
+            keys[deleted] = RedisModule_CreateString(ctx, field, sdslen(field));
+            deleted++;
+            dictDelete(current->map, field);
         }
     }
     dictReleaseIterator(di);
-    return deleted;
+    *len = deleted;
+    return keys;
 }
 
 int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
@@ -191,13 +203,16 @@ int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstone);
     }
     crdtCommonCp(common, tombstone);
-    deleteAll(tombstone, common, current);
+    size_t keyLength = 0;
+    RedisModuleString* *keys = deleteAll(ctx, tombstone, common, current, &keyLength);
 
     sds vcSds = vectorClockToSds(common->vectorClock);
     sds maxDeletedVclock = vectorClockToSds(current->common.vectorClock);
-    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_Hash", "sllcc", keyRobj, common->gid, common->timestamp, vcSds, maxDeletedVclock);
+    //CRDT.REM_HASH <key> gid timestamp <del-op-vclock> <field1> <field2> ....
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.REM_HASH", "sllcv", keyRobj, common->gid, common->timestamp, vcSds, keys, keyLength);
     sdsfree(vcSds);
     sdsfree(maxDeletedVclock);
+    freeRedisModuleStringVec(ctx, keys, keyLength);
     freeCommon(common);
     return CRDT_OK;
 }
@@ -929,7 +944,8 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
         return CRDT_ERROR;
     }
     int status = CRDT_OK;
-    int deleted = 0;
+    sds* keys = NULL;
+    size_t deleted = 0;
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
     if(moduleKey == NULL) {
         status = 1;
@@ -967,7 +983,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
         goto end;
     }
 
-    deleted = deleteAll(tombstone, common, current);
+    keys = deleteAll(ctx, tombstone, common, current, &deleted);
     /* Always check if the dictionary needs a resize after a delete. */
     if (crdtHtNeedsResize(current->map)) dictResize(current->map);
     if (dictSize(current->map) == 0) {
@@ -984,6 +1000,7 @@ end:
         freeCommon(common);
     }
     if(moduleKey) RedisModule_CloseKey(moduleKey);
+    freeRedisModuleStringVec(ctx, keys, deleted);
     if(status == CRDT_OK) {
         return RedisModule_ReplyWithLongLong(ctx, deleted); 
     }else{
