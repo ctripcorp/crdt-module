@@ -213,6 +213,7 @@ int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
     RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstone);
 
     sds vcSds = vectorClockToSds(common->vectorClock);
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", keyRobj);
     RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", keyRobj, common->gid, common->timestamp, vcSds);
     sdsfree(vcSds);
     freeCommon(common);
@@ -274,6 +275,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         }
     }
     RedisModule_MergeVectorClock(common->gid, common->vectorClock);
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
 end: 
     if(common) {
         if (common->gid == RedisModule_CurrentGid()) {
@@ -355,6 +357,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         status = CRDT_ERROR;
         goto end;
     }
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
 end:
     if(common) {
         sds vclockStr = vectorClockToSds(common->vectorClock);
@@ -405,6 +408,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         goto end;
     }
     RedisModule_MergeVectorClock(common->gid, common->vectorClock);
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
 end:
     if (common != NULL) {
         if (common->gid == RedisModule_CurrentGid()) {
