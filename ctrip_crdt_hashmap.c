@@ -630,11 +630,12 @@ end:
         return CRDT_ERROR;
     }
 }
-//hdel key field
+//<hdel> <key> <field1> <field2>...
 int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
     if(argc < 3) return RedisModule_WrongArity(ctx);
     int status = CRDT_OK;
+    int deleted = 0;
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
     if(moduleKey == NULL) {
         RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
@@ -654,14 +655,6 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
 
     CrdtCommon* common = createIncrCommon();
-    sds tvalue = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
-    sds field = RedisModule_GetSds(argv[2]);
-    
-    if(addHash(tombstone, common, field, tvalue) == CRDT_OK) {
-        crdtCommonMerge(tombstone, common);
-    }
-    sdsfree(tvalue);
-
     CRDT_Hash* current = getCurrentValue(moduleKey);
     if(current == NULL) {
         goto end;
@@ -675,8 +668,25 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         status = CRDT_ERROR;
         goto end;
     }
-    dictDelete(current->map, field);
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH,"hdel", argv[1]);
+    
+    sds tvalue = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
+    RedisModuleString** deleted_objs = RedisModule_PoolAlloc(ctx, sizeof(RedisModuleString*) * (argc-2));
+    for(int j = 2; j < argc; j++) {
+        sds field = RedisModule_GetSds(argv[j]);
+        if(dictDelete(current->map, field) == DICT_OK) {
+            if(addHash(tombstone, common, field, tvalue) == CRDT_OK) {
+                crdtCommonMerge(tombstone, common);
+            }
+            deleted_objs[deleted] = argv[j];
+            deleted++;
+        }
+    }
+    sdsfree(tvalue);
+    if (crdtHtNeedsResize(current->map)) dictResize(current->map);
+    
+    if(deleted > 0) {
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH,"hdel", argv[1]);
+    }    
     if (dictSize(current->map) == 0) {
         RedisModule_DeleteKey(moduleKey);
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
@@ -684,8 +694,8 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 end:
     if(common != NULL) {
         sds vcStr = vectorClockToSds(common->vectorClock);
-        size_t argc_repl = (size_t) (argc - 2);
-        void *argv_repl = (void *) (argv + 2);
+        size_t argc_repl = (size_t) deleted;
+        void *argv_repl = (void *) deleted_objs;
         //CRDT.REM_HASH <key> gid timestamp <del-op-vclock> <field1> <field2> ...
         RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.REM_HASH", "sllcv", argv[1], common->gid, common->timestamp, vcStr, argv_repl, argc_repl);
         sdsfree(vcStr);
@@ -1067,11 +1077,13 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         sds field = RedisModule_GetSds(argv[i]);
         if(current != NULL) {
             dictEntry* de = dictFind(current->map, field);
-            CRDT_Register* value = dictGetVal(de);
-            int result = compareCommon(&value->common, common);
-            if(result > COMPARE_COMMON_EQUAL) {
-                dictDelete(current->map, field);
-                deleted++;
+            if(de != NULL) {
+                CRDT_Register* value = dictGetVal(de);
+                int result = compareCommon(&value->common, common);
+                if(result > COMPARE_COMMON_EQUAL) {
+                    dictDelete(current->map, field);
+                    deleted++;
+                }
             }
         }
         sds tvalue = sdsnewlen(DELETED_TAG, DELETED_TAG_SIZE);
