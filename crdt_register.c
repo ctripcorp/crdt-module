@@ -213,7 +213,6 @@ int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
     RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegister, tombstone);
 
     sds vcSds = vectorClockToSds(common->vectorClock);
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", keyRobj);
     RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", keyRobj, common->gid, common->timestamp, vcSds);
     sdsfree(vcSds);
     freeCommon(common);

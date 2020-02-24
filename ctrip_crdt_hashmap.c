@@ -159,8 +159,6 @@ int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
     RedisModuleKey *moduleKey = (RedisModuleKey *) key;
     RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHash, tombstone);
 
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", keyRobj);
-
     sds vcSds = vectorClockToSds(common->vectorClock);
     sds maxDeletedVclock = vectorClockToSds(tombstone->maxdvc);
     RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_Hash", "sllcc", keyRobj, common->gid, common->timestamp, vcSds, maxDeletedVclock);
