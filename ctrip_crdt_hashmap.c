@@ -550,6 +550,11 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     CRDT_Hash* current = getCurrentValue(moduleKey);
     int result = addOrUpdateHash(ctx, argv[1], moduleKey, NULL, current,common, argv, 2, argc);
+    if(result == CHANGE_HASH_ERR) {
+        goto end;
+    }
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hset", argv[1]);
+
 end:
     if (common != NULL) {
         //send crdt.hset command peer and slave
@@ -608,6 +613,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         goto end;
     }
     RedisModule_MergeVectorClock(common->gid, common->vectorClock);
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hset", argv[1]);
 end:
     if (common != NULL) {
         if (common->gid == RedisModule_CurrentGid()) {
@@ -670,7 +676,11 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         goto end;
     }
     dictDelete(current->map, field);
-    
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH,"hdel", argv[1]);
+    if (dictSize(current->map) == 0) {
+        RedisModule_DeleteKey(moduleKey);
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
+    }
 end:
     if(common != NULL) {
         sds vcStr = vectorClockToSds(common->vectorClock);
@@ -968,6 +978,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
         }
     }
     RedisModule_MergeVectorClock(common->gid, common->vectorClock);
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
 end:
     if(common) {
         if (common->gid == RedisModule_CurrentGid()) {
@@ -1051,6 +1062,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         status = CRDT_ERROR;
         goto end;
     }
+    int keyremoved = CRDT_NO;
     for (int i = 5; i < argc; i++) {
         sds field = RedisModule_GetSds(argv[i]);
         if(current != NULL) {
@@ -1072,10 +1084,15 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         }
         if (dictSize(current->map) == 0) {
             RedisModule_DeleteKey(moduleKey);
+            keyremoved = CRDT_OK;
         }
     }
     
     RedisModule_MergeVectorClock(common->gid, common->vectorClock);
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hdel", argv[1]);
+    if(keyremoved == CRDT_OK) {
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
+    }
 end:
     if(common) {
         if (common->gid == RedisModule_CurrentGid()) {
