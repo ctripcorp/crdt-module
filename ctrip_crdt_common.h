@@ -40,27 +40,54 @@
 #define CRDT_MODULE_OBJECT_PREFIX "crdt"
 
 #define CRDT_REGISTER_TYPE 1
-#define CRDT_HASH_TYPE 2
+#define CRDT_REGISTER_TOMBSTONE_TYPE 2
+#define CRDT_HASH_TYPE 3
+#define CRDT_HASH_TOMBSTONE_TYPE 4
+struct CrdtObject;
+struct CrdtTombstone;
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
-
 typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
-typedef struct CrdtCommonMethod {
-    //CRDT Merge Function
-    crdtMergeFunc merge;
-    crdtDelFunc delFunc;
-} CrdtCommonMethod;
-typedef struct CrdtCommon {
+typedef void* (*crdtFilterFunc)(void* common, long long gid, long long logic_time);
+//typedef void (*crdtGcFunc)(void *crdtObj);
+typedef int (*crdtCleanFunc)(struct CrdtObject* value, struct CrdtTombstone* tombstone);
+typedef int (*crdtGcFunc)(struct CrdtTombstone* value, VectorClock* clock);
+// typedef void* (*crdtDupFunc)(void *data);
+typedef struct CrdtMeta {
     int gid;
-    int type;
-    VectorClock *vectorClock;
     long long timestamp;
-    CrdtCommonMethod* method;
-    //todo: getVectorClock()
-} __attribute__((packed, aligned(4))) CrdtCommon;
+    VectorClock *vectorClock;
+}CrdtMeta;
+typedef struct CrdtObjectMethod {
+    crdtMergeFunc merge;
+    crdtDelFunc del;
+    crdtFilterFunc filter;
+    crdtCleanFunc clean;
+} CrdtObjectMethod;
 
-CrdtCommon* createCommon(int gid, long long timestamp, VectorClock* vclock);
-CrdtCommon* createIncrCommon();
-void freeCommon(CrdtCommon* common);
+typedef struct CrdtObject {
+    int type;
+    CrdtObjectMethod* method;
+} __attribute__((packed, aligned(4))) CrdtObject;
+typedef struct CrdtTombstoneMethod {
+    crdtMergeFunc merge;
+    crdtFilterFunc filter;
+    crdtGcFunc gc;
+} CrdtTombstoneMethod;
+
+typedef struct CrdtTombstone {
+    int type;
+    CrdtTombstoneMethod* method;
+} __attribute__((packed, aligned(4))) CrdtTombstone;
+// CrdtCommon* createCommon(int gid, long long timestamp, VectorClock* vclock);
+// CrdtCommon* createIncrCommon();
+CrdtMeta* createMeta(int gid, long long timestamp, VectorClock* vclock);
+CrdtMeta* createIncrMeta();
+CrdtMeta* dupMeta(CrdtMeta* meta);
+
+void freeCrdtMeta(CrdtMeta* meta);
+void freeCrdtObject(CrdtObject* object);
+void freeCrdtTombstone(CrdtTombstone* tombstone);
+// void freeCommon(CrdtCommon* common);
 
 #define COMPARE_COMMON_VECTORCLOCK_GT 1
 #define COMPARE_COMMON_VECTORCLOCK_LT -1
@@ -69,9 +96,9 @@ void freeCommon(CrdtCommon* common);
 #define COMPARE_COMMON_GID_GT 3
 #define COMPARE_COMMON_GID_LT -3
 #define COMPARE_COMMON_EQUAL 0
-int compareCommon(CrdtCommon *a, CrdtCommon *b);
-int isConflictCommon(int result);
-void crdtCommonCp(CrdtCommon *from, CrdtCommon* to);
-void crdtCommonMerge(CrdtCommon *target , CrdtCommon* other);
-int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
+int compareCrdtMeta(CrdtMeta *a, CrdtMeta *b);
+int isConflictMeta(int result);
+void crdtMetaCp(CrdtMeta *from, CrdtMeta* to);
+int appendCrdtMeta(CrdtMeta *target , CrdtMeta* other);
+// int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 #endif //REDIS_CTRIP_CRDT_COMMON_H

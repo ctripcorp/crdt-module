@@ -73,6 +73,7 @@ sdsToVectorClock(sds vcStr);
 sds
 vectorClockToSds(VectorClock *vc);
 
+
 /**------------------------Vector Clock Util--------------------------------------*/
 void
 sortVectorClock(VectorClock *vc);
