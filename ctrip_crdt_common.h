@@ -67,7 +67,7 @@ typedef struct CrdtObjectMethod {
 typedef struct CrdtObject {
     int type;
     CrdtObjectMethod* method;
-} __attribute__((packed, aligned(4))) CrdtObject;
+} CrdtObject;
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterFunc filter;
@@ -78,7 +78,7 @@ typedef struct CrdtTombstoneMethod {
 typedef struct CrdtTombstone {
     int type;
     CrdtTombstoneMethod* method;
-} __attribute__((packed, aligned(4))) CrdtTombstone;
+} CrdtTombstone;
 // CrdtCommon* createCommon(int gid, long long timestamp, VectorClock* vclock);
 // CrdtCommon* createIncrCommon();
 CrdtMeta* createMeta(int gid, long long timestamp, VectorClock* vclock);
