@@ -230,7 +230,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     CRDT_RegisterTombstone* tombstone = NULL;
     if(t != NULL && isRegisterTombstone(t)) {    
         tombstone = (CRDT_RegisterTombstone*)t;
-        if(tombstone->method->isMonoIncr(tombstone, meta) == CRDT_NO) {
+        if(tombstone->method->isExpire(tombstone, meta) == CRDT_OK) {
             goto end;
         }
     }
@@ -291,7 +291,7 @@ int isRegisterTombstone(void *data) {
     return CRDT_NO;
 }
 
-int addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_Register* tombstone, CRDT_Register* current, CrdtMeta* meta, sds value) {
+int addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_Register* tombstone, CRDT_Register* current, CrdtMeta* meta, RedisModuleString* key,sds value) {
     if(current == NULL) {
         current = addRegister(tombstone, meta, value);
         if(current != NULL) {
@@ -299,25 +299,25 @@ int addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_Reg
         }
     }else{
         if(!isRegister(current)) {
-            RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] prev: {%s}",
-                            current->parent.type);
+            RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%s}",
+                            RedisModule_GetSds(key),current->parent.type);
             RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
             RedisModule_IncrCrdtConflict();
             return CRDT_ERROR;
         }
-        sds prev = current->method->info(current);
+        sds prev = current->method->getInfo(current);
         //tryUpdateRegister function will be change "current" object
         int result = tryUpdateRegister(tombstone, meta, current, value);
         if(isConflictCommon(result)) {
             CRDT_Register* incomeValue = addRegister(NULL, meta, value);
-            sds income = current->method->info(incomeValue);
-            sds future = current->method->info(current);
+            sds income = current->method->getInfo(incomeValue);
+            sds future = current->method->getInfo(current);
             if(result > COMPARE_COMMON_EQUAL) {
-                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][replace] prev: {%s}, income: {%s}, future: {%s}",
-                            prev, income, future);
+                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][replace] key:{%s} prev: {%s}, income: {%s}, future: {%s}",
+                            RedisModule_GetSds(key), prev, income, future);
             }else{
                 RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][drop] prev: {%s}, income: {%s}, future: {%s}",
-                                prev, income, future);
+                            RedisModule_GetSds(key), prev, income, future);
             }
             freeCrdtRegister(incomeValue);
             sdsfree(income);
@@ -342,7 +342,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         goto end;
     }
     CRDT_Register* current = getCurrentValue(moduleKey);
-    if(addOrUpdateRegister(ctx, moduleKey, NULL, current, meta, RedisModule_GetSds(argv[2])) != CRDT_OK) {
+    if(addOrUpdateRegister(ctx, moduleKey, NULL, current, meta, argv[1], RedisModule_GetSds(argv[2])) != CRDT_OK) {
         status = CRDT_ERROR;
         goto end;
     }
@@ -388,7 +388,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         tombstone = NULL;
     }
     CRDT_Register* current = getCurrentValue(moduleKey);
-    if(addOrUpdateRegister(ctx, moduleKey, tombstone, current, meta, RedisModule_GetSds(argv[2])) != CRDT_OK) {
+    if(addOrUpdateRegister(ctx, moduleKey, tombstone, current, meta, argv[1], RedisModule_GetSds(argv[2])) != CRDT_OK) {
         status = CRDT_ERROR;
         goto end;
     }
@@ -499,7 +499,7 @@ int mergeCrdtRegisterValue(CrdtRegisterValue* target, CrdtRegisterValue* other) 
 CRDT_Register* addRegister(void *data, CrdtMeta* meta, sds value) {
     CRDT_RegisterTombstone* tombstone = (CRDT_RegisterTombstone*) data;
     if(tombstone != NULL) {
-        if(tombstone->method->isMonoIncr(tombstone, meta) == CRDT_NO) {
+        if(tombstone->method->isExpire(tombstone, meta) == CRDT_OK) {
             return NULL;
         }
     }
@@ -510,7 +510,7 @@ CRDT_Register* addRegister(void *data, CrdtMeta* meta, sds value) {
 int tryUpdateRegister(void* data, CrdtMeta* meta, CRDT_Register* reg, sds value) {
     CRDT_RegisterTombstone* tombstone = (CRDT_RegisterTombstone*) data;
     if(tombstone != NULL) {
-        if(tombstone->method->isMonoIncr(tombstone, meta) == CRDT_NO) {
+        if(tombstone->method->isExpire(tombstone, meta) == CRDT_OK) {
             return COMPARE_COMMON_VECTORCLOCK_LT;
         }
     }

@@ -5,7 +5,7 @@ static CrdtRegisterMethod Register_LLW_Methods = {
     get: getLWWCrdtRegister,
     getValue: getLwwCrdtRegisterValue,
     set: setLWWCrdtRegister,
-    info: crdtLWWRegisterInfo,
+    getInfo: crdtLWWRegisterInfo,
     filter: filterLWWRegister,
     merge: mergeLWWRegister,
 };
@@ -34,14 +34,14 @@ int purageLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register*
     }
     return 0;
 }
-int isMonoIncrLWWTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
+int isExpireLWWTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
-    return compareCrdtMeta(t->meta, meta) > COMPARE_COMMON_EQUAL? CRDT_OK: CRDT_NO;
+    return compareCrdtMeta(meta, t->meta) > COMPARE_COMMON_EQUAL? CRDT_OK: CRDT_NO;
 }
 
 
 static CrdtRegisterTombstoneMethod Register_LLW_Tombstone_Methods = {
-    .isMonoIncr = isMonoIncrLWWTombstone,
+    .isExpire = isExpireLWWTombstone,
     .add = addLWWRegisterTombstone,
     .filter = filterLWWRegisterTombstone,
     .dup = dupLWWCrdtRegisterTombstone,

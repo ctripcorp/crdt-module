@@ -105,14 +105,14 @@ int addOrUpdateItem(RedisModuleCtx* ctx, CRDT_HashTombstone* tombstone, CRDT_Has
         }
     }else{
         CRDT_Register* v = dictGetVal(de);
-        sds prev = v->method->info(v);
+        sds prev = v->method->getInfo(v);
         int result = tryUpdateRegister(tombstoneValue, meta, v, value);
         if(isConflictCommon(result)) {
             //add data conflict log
             const char* keyStr = RedisModule_StringPtrLen(key, NULL);
             CRDT_Register* incomeValue = addRegister(NULL, meta, value);
-            sds income = incomeValue->method->info(incomeValue);
-            sds future = v->method->info(v);
+            sds income = incomeValue->method->getInfo(incomeValue);
+            sds future = v->method->getInfo(v);
             RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-HASH] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
                     keyStr, field, prev, income, future);
             freeCrdtRegister(incomeValue);
@@ -378,7 +378,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     CRDT_HashTombstone* tombstone = NULL;
     if ( t != NULL && isCrdtHashTombstone(t)) {
         tombstone = retrieveCrdtHashTombstone(t);
-        if(tombstone->method->lapse(tombstone, meta) == CRDT_OK) {
+        if(tombstone->method->isExpire(tombstone, meta) == CRDT_OK) {
             goto end;
         }
     }
@@ -549,7 +549,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     CRDT_HashTombstone* tombstone = NULL;
     if(t != NULL && isCrdtHashTombstone(t)) {
         tombstone = retrieveCrdtHashTombstone(t);
-        if(tombstone->method->lapse(tombstone, meta) == CRDT_OK) {
+        if(tombstone->method->isExpire(tombstone, meta) == CRDT_OK) {
             goto end;
         }
     }
@@ -964,7 +964,7 @@ int crdtHashTombstonePurage( void* tombstone, void* current) {
         if(existDe != NULL) {
             CRDT_RegisterTombstone *crdtRegisterTombstone = dictGetVal(de);
             CRDT_Register *crdtRegister = dictGetVal(existDe);
-            if(crdtHashTombstone->method->lapse(crdtHashTombstone, crdtRegister->method->getValue(crdtRegister)->meta)
+            if(crdtHashTombstone->method->isExpire(crdtHashTombstone, crdtRegister->method->getValue(crdtRegister)->meta) == CRDT_OK
                || crdtRegisterTombstone->method->purage(crdtRegisterTombstone, crdtRegister)) {
                 dictDelete(crdtHash->map, field);
             }

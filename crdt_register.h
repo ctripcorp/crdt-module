@@ -57,7 +57,7 @@ typedef int (*delCrdtRegisterFunc)(struct CRDT_Register*, CrdtMeta*);
 typedef sds (*getCrdtRegisterFunc)(struct CRDT_Register*);
 typedef struct CrdtRegisterValue* (*getValueCrdtRegisterFunc)(struct CRDT_Register*);
 typedef int (*setCrdtRegisterFunc)(struct CRDT_Register* target, CrdtMeta* meta, sds value);
-typedef sds (*infoCrdtRegisterFunc)(struct CRDT_Register* target);
+typedef sds (*getInfoCrdtRegisterFunc)(struct CRDT_Register* target);
 typedef struct CRDT_Register* (*filterCrdtRegisterFunc)(struct CRDT_Register* target,long long gid, long long logic_time);
 typedef int (*cleanCrdtRegisterFunc)(struct CRDT_Register* target, struct CRDT_RegisterTombstone* tombstone);
 typedef struct CRDT_Register* (*mergeCrdtRegisterFunc)(struct CRDT_Register* target, struct CRDT_Register* other);
@@ -67,7 +67,7 @@ typedef struct CrdtRegisterMethod {
     getCrdtRegisterFunc get;
     getValueCrdtRegisterFunc getValue;
     setCrdtRegisterFunc set;
-    infoCrdtRegisterFunc info;
+    getInfoCrdtRegisterFunc getInfo;
     filterCrdtRegisterFunc filter;
     mergeCrdtRegisterFunc merge;
 } CrdtRegisterMethod;
@@ -76,7 +76,7 @@ typedef struct CRDT_Register {
     CrdtRegisterMethod* method;
 } CRDT_Register;
 typedef struct CRDT_RegisterTombstone;
-typedef int (*isMonoIncrCrdtRegisterTombstoneFunc)(struct
+typedef int (*isExpireCrdtRegisterTombstoneFunc)(struct
  CRDT_RegisterTombstone* target, CrdtMeta* meta);
 typedef CrdtMeta* (*addCrdtRegisterTombstoneFunc)(struct CRDT_RegisterTombstone* target,struct CrdtMeta* other);
 typedef struct CRDT_RegisterTombstone* (*filterCrdtRegisterTombstoneFunc)(struct CRDT_RegisterTombstone* target, long long gid, long long logic_time);
@@ -84,7 +84,7 @@ typedef struct CRDT_RegisterTombstone* (*dupCrdtRegisterTombstoneFunc)(struct CR
 typedef struct CRDT_RegisterTombstone* (*mergeRegisterTombstoneFunc)(struct CRDT_RegisterTombstone* target, struct CRDT_RegisterTombstone* other);
 typedef int (*purageTombstoneFunc)(void* tombstone, void* obj);
 typedef struct CrdtRegisterTombstoneMethod {
-    isMonoIncrCrdtRegisterTombstoneFunc isMonoIncr;
+    isExpireCrdtRegisterTombstoneFunc isExpire;
     addCrdtRegisterTombstoneFunc add;
     filterCrdtRegisterTombstoneFunc filter;
     dupCrdtRegisterTombstoneFunc dup;

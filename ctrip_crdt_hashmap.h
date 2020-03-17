@@ -91,7 +91,7 @@ typedef struct CRDT_Hash {
     dict *map;
 } CRDT_Hash;
 typedef CrdtMeta* (*updateMaxDelCrdtHashTombstoneFunc)(void* target, CrdtMeta* meta);
-typedef int (*lapseCrdtHashTombstoneFunc)(void* target, CrdtMeta* meta);
+typedef int (*isExpireFunc)(void* target, CrdtMeta* meta);
 typedef void* (*dupFunc)(void* target);
 typedef int (*gcCrdtHashTombstoneFunc)(void* target, VectorClock* clock);
 typedef CrdtMeta* (*getMaxDelCrdtHashTombstoneFunc)(void* target);
@@ -99,7 +99,7 @@ typedef int (*changeHashTombstoneFunc)(void* target, CrdtMeta* meta);
 typedef int (*purageHashTombstoneFunc)(void* tombstone, void* obj);
 typedef struct CrdtHashTombstoneMethod {
     updateMaxDelCrdtHashTombstoneFunc updateMaxDel;
-    lapseCrdtHashTombstoneFunc lapse;
+    isExpireFunc isExpire;
     dupFunc dup;
     gcCrdtHashTombstoneFunc gc;
     getMaxDelCrdtHashTombstoneFunc getMaxDel;

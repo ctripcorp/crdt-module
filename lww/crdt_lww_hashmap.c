@@ -60,9 +60,9 @@ CrdtMeta* updateMaxDelCrdtLWWHashTombstone(void* data, CrdtMeta* meta) {
     appendCrdtMeta(target->maxDelMeta, meta);
     return target->maxDelMeta;
 }
-int lapseCrdtLWWHashTombstone(void* data, CrdtMeta* meta) {
+int isExpireCrdtLWWHashTombstone(void* data, CrdtMeta* meta) {
     CRDT_LWW_HashTombstone* target = retrieveCrdtLWWHashTombstone(data);
-    return compareCrdtMeta(target->maxDelMeta, meta) > COMPARE_COMMON_EQUAL? CRDT_NO: CRDT_OK;
+    return compareCrdtMeta(meta,target->maxDelMeta) > COMPARE_COMMON_EQUAL? CRDT_OK: CRDT_NO;
 }
 CRDT_HashTombstone* dupCrdtLWWHashTombstone(void* data) {
     CRDT_LWW_HashTombstone* target = retrieveCrdtLWWHashTombstone(data);
@@ -101,7 +101,7 @@ int changeCrdtLWWHashTombstone(void* data, CrdtMeta* meta) {
 }
 static CrdtHashTombstoneMethod LWW_Hash_Tombstone_Methods = {
     updateMaxDel: updateMaxDelCrdtLWWHashTombstone,
-    lapse: lapseCrdtLWWHashTombstone,
+    isExpire: isExpireCrdtLWWHashTombstone,
     dup: dupCrdtLWWHashTombstone,
     gc: gcCrdtLWWHashTombstone,
     getMaxDel: getMaxDelCrdtLWWHashTombstone,
