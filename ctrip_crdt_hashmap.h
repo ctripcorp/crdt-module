@@ -58,24 +58,24 @@ static RedisModuleType *CrdtHashTombstone;
 void *crdtHashMerge(void *currentVal, void *value);
 int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value);
 void* crdtHashFilter(void* common, long long gid, long long logic_time);
-int crdtHashClean(CrdtObject* current, CrdtTombstone* tombstone);
 int crdtHashGc(void* target, VectorClock* clock);
 
 static CrdtObjectMethod HashCommonMethod = {
     merge: crdtHashMerge,
     del: crdtHashDelete,
     filter: crdtHashFilter,
-    clean: crdtHashClean,
 };
 
 //common methods
 void *crdtHashTombstoneMerge(void *currentVal, void *value);
 void* crdtHashTombstoneFilter(void* common, long long gid, long long logic_time);
 int crdtHashTombstoneGc(void* target, VectorClock* clock);
+int crdtHashTombstonePurage(void* obj, void* tombstone);
 static CrdtTombstoneMethod HashTombstoneCommonMethod = {
     merge: crdtHashTombstoneMerge,
     filter: crdtHashTombstoneFilter,
     gc: crdtHashTombstoneGc,
+    purage: crdtHashTombstonePurage,
 };
 
 //hash methods
@@ -96,6 +96,7 @@ typedef void* (*dupFunc)(void* target);
 typedef int (*gcCrdtHashTombstoneFunc)(void* target, VectorClock* clock);
 typedef CrdtMeta* (*getMaxDelCrdtHashTombstoneFunc)(void* target);
 typedef int (*changeHashTombstoneFunc)(void* target, CrdtMeta* meta);
+typedef int (*purageHashTombstoneFunc)(void* tombstone, void* obj);
 typedef struct CrdtHashTombstoneMethod {
     updateMaxDelCrdtHashTombstoneFunc updateMaxDel;
     lapseCrdtHashTombstoneFunc lapse;
@@ -103,6 +104,7 @@ typedef struct CrdtHashTombstoneMethod {
     gcCrdtHashTombstoneFunc gc;
     getMaxDelCrdtHashTombstoneFunc getMaxDel;
     changeHashTombstoneFunc change;
+    purageHashTombstoneFunc purage;
 } CrdtHashTombstoneMethod;
 typedef struct CRDT_HashTombstone {
     CrdtTombstone parent;

@@ -26,7 +26,7 @@ void RdbSaveLWWCrdtRegisterTombstone(RedisModuleIO *rdb, void *value);
 CRDT_RegisterTombstone* filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, long long gid, long long logic_time) ;
 CrdtMeta* addLWWRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta);
 CRDT_Register* mergeLWWRegister(CRDT_Register* target, CRDT_Register* other);
-int cleanLWWRegister(CRDT_Register* target, CRDT_RegisterTombstone* tombstone);
+int purageLWWRegisterTombstone( CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
 CRDT_Register* filterLWWRegister(CRDT_Register* target, long long gid, long long logic_time) ;
 sds getLWWCrdtRegister(CRDT_Register* r);
 CRDT_Register* dupLWWCrdtRegister(const CRDT_Register *val);

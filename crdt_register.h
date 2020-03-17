@@ -69,7 +69,6 @@ typedef struct CrdtRegisterMethod {
     setCrdtRegisterFunc set;
     infoCrdtRegisterFunc info;
     filterCrdtRegisterFunc filter;
-    cleanCrdtRegisterFunc clean;
     mergeCrdtRegisterFunc merge;
 } CrdtRegisterMethod;
 typedef struct CRDT_Register {
@@ -83,12 +82,14 @@ typedef CrdtMeta* (*addCrdtRegisterTombstoneFunc)(struct CRDT_RegisterTombstone*
 typedef struct CRDT_RegisterTombstone* (*filterCrdtRegisterTombstoneFunc)(struct CRDT_RegisterTombstone* target, long long gid, long long logic_time);
 typedef struct CRDT_RegisterTombstone* (*dupCrdtRegisterTombstoneFunc)(struct CRDT_RegisterTombstone* target);
 typedef struct CRDT_RegisterTombstone* (*mergeRegisterTombstoneFunc)(struct CRDT_RegisterTombstone* target, struct CRDT_RegisterTombstone* other);
+typedef int (*purageTombstoneFunc)(void* tombstone, void* obj);
 typedef struct CrdtRegisterTombstoneMethod {
     isMonoIncrCrdtRegisterTombstoneFunc isMonoIncr;
     addCrdtRegisterTombstoneFunc add;
     filterCrdtRegisterTombstoneFunc filter;
     dupCrdtRegisterTombstoneFunc dup;
     mergeRegisterTombstoneFunc merge;
+    purageTombstoneFunc purage;
 } CrdtRegisterTombstoneMethod;
 typedef struct CRDT_RegisterTombstone {
     CrdtTombstone parent;
@@ -117,14 +118,13 @@ int initRegisterModule(RedisModuleCtx *ctx);
 void *crdtRegisterMerge(void *currentVal, void *value);
 int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value);
 CrdtObject* crdtRegisterFilter(CrdtObject* common, long long gid, long long logic_time);
-int crdtRegisterClean(CrdtObject* current, CrdtTombstone* tombstone);
+int crdtRegisterTombstonePurage( CrdtTombstone* tombstone, CrdtObject* current);
 int crdtRegisterGc(void* target, VectorClock* clock);
 CRDT_Register* dupCrdtRegister(const struct CRDT_Register *val);
 static CrdtObjectMethod RegisterCommonMethod = {
     merge: crdtRegisterMerge,
     del: crdtRegisterDelete,
     filter: crdtRegisterFilter,
-    clean: crdtRegisterClean,
 };
 //register tombstone command methods
 void* crdtRegisterTombstoneMerge(void* target, void* other);
@@ -134,6 +134,7 @@ static CrdtTombstoneMethod RegisterTombstoneMethod = {
     merge: crdtRegisterTombstoneMerge,
     filter: crdtRegisterTombstoneFilter,
     gc: crdtRegisterTombstoneGc,
+    purage: crdtRegisterTombstonePurage,
 };
 
 

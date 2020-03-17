@@ -7,7 +7,6 @@ static CrdtRegisterMethod Register_LLW_Methods = {
     set: setLWWCrdtRegister,
     info: crdtLWWRegisterInfo,
     filter: filterLWWRegister,
-    clean: cleanLWWRegister,
     merge: mergeLWWRegister,
 };
 void *createLLWCrdtRegister(void) {
@@ -27,7 +26,7 @@ CRDT_Register* mergeLWWRegister(CRDT_Register* target, CRDT_Register* other) {
     mergeCrdtRegisterValue(&result->value, &o->value);
     return result;
 }
-int cleanLWWRegister(CRDT_Register* target, CRDT_RegisterTombstone* tombstone) {
+int purageLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
     CRDT_LWW_Register* current = retrieveCrdtLWWRegister(target);
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
     if(compareCrdtMeta(current->value.meta, t->meta) > 0) {
@@ -47,6 +46,7 @@ static CrdtRegisterTombstoneMethod Register_LLW_Tombstone_Methods = {
     .filter = filterLWWRegisterTombstone,
     .dup = dupLWWCrdtRegisterTombstone,
     .merge = mergeLWWRegisterTombstone,
+    purage: purageLWWRegisterTombstone,
 };
 
 void freeLLWCrdtRegister(void *obj) {

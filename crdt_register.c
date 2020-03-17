@@ -82,7 +82,7 @@ CrdtObject* crdtRegisterFilter(CrdtObject* common, long long gid, long long logi
     CRDT_Register* reg = (CRDT_Register*) common;
     return reg->method->filter(common, gid, logic_time);
 }
-int crdtRegisterClean(CrdtObject* current, CrdtTombstone* tombstone) {
+int crdtRegisterTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current) {
     if(!isRegister(current)) {
         return 0;
     }
@@ -90,7 +90,8 @@ int crdtRegisterClean(CrdtObject* current, CrdtTombstone* tombstone) {
         return 0;
     }
     CRDT_Register* reg = (CRDT_Register*) current;
-    return reg->method->clean(reg, (CRDT_RegisterTombstone*)tombstone);
+    CRDT_RegisterTombstone* t = (CRDT_RegisterTombstone*)tombstone;
+    return t->method->purage(t, reg);
 }
 
 void* crdtRegisterTombstoneMerge(void* target, void* other) {
@@ -251,7 +252,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
             status = CRDT_ERROR;
             goto end;
         }
-        if(current->parent.method->clean(current, tombstone)) {
+        if(tombstone->parent.method->purage(tombstone, current)) {
             RedisModule_DeleteKey(moduleKey);
             deleted = 1;
         }

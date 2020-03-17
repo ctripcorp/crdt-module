@@ -953,7 +953,7 @@ void* crdtHashFilter(void* common, long long gid, long long logic_time) {
     }
     return result;
 }
-int crdtHashClean(CrdtObject* current, CrdtTombstone* tombstone) {
+int crdtHashTombstonePurage( void* tombstone, void* current) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(current);
     CRDT_HashTombstone* crdtHashTombstone = retrieveCrdtHashTombstone(tombstone);
     dictIterator *di = dictGetSafeIterator(crdtHashTombstone->map);
@@ -965,7 +965,7 @@ int crdtHashClean(CrdtObject* current, CrdtTombstone* tombstone) {
             CRDT_RegisterTombstone *crdtRegisterTombstone = dictGetVal(de);
             CRDT_Register *crdtRegister = dictGetVal(existDe);
             if(crdtHashTombstone->method->lapse(crdtHashTombstone, crdtRegister->method->getValue(crdtRegister)->meta)
-               || crdtRegister->method->clean(crdtRegister, crdtRegisterTombstone)) {
+               || crdtRegisterTombstone->method->purage(crdtRegisterTombstone, crdtRegister)) {
                 dictDelete(crdtHash->map, field);
             }
             

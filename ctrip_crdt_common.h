@@ -51,6 +51,7 @@ typedef void* (*crdtFilterFunc)(void* common, long long gid, long long logic_tim
 //typedef void (*crdtGcFunc)(void *crdtObj);
 typedef int (*crdtCleanFunc)(struct CrdtObject* value, struct CrdtTombstone* tombstone);
 typedef int (*crdtGcFunc)(struct CrdtTombstone* value, VectorClock* clock);
+typedef int (*crdtPurageFunc)(struct CrdtTombstone* tombstone, struct CrdtObject* obj);
 // typedef void* (*crdtDupFunc)(void *data);
 typedef struct CrdtMeta {
     int gid;
@@ -61,7 +62,6 @@ typedef struct CrdtObjectMethod {
     crdtMergeFunc merge;
     crdtDelFunc del;
     crdtFilterFunc filter;
-    crdtCleanFunc clean;
 } CrdtObjectMethod;
 
 typedef struct CrdtObject {
@@ -72,6 +72,7 @@ typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterFunc filter;
     crdtGcFunc gc;
+    crdtPurageFunc purage;
 } CrdtTombstoneMethod;
 
 typedef struct CrdtTombstone {
