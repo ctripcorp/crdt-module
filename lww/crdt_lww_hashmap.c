@@ -30,9 +30,14 @@ CRDT_Hash* dupCrdtLWWHash(void* data) {
     }
     return result;
 }
+VectorClock* getLastVctLWWHash(void* data) {
+    CRDT_LWW_Hash* crdtHash = retrieveCrdtLWWHash(data);
+    return crdtHash->lastVc;
+}
 static CrdtHashMethod LWW_Hash_Methods = {
     change: changeCrdtLWWHash,
-    dup: dupCrdtLWWHash
+    dup: dupCrdtLWWHash,
+    getLastVC: getLastVctLWWHash
 };
 
 void* createCrdtLWWHash() {

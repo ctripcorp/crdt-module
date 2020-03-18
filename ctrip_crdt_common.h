@@ -84,7 +84,7 @@ typedef struct CrdtTombstone {
 CrdtMeta* createMeta(int gid, long long timestamp, VectorClock* vclock);
 CrdtMeta* createIncrMeta();
 CrdtMeta* dupMeta(CrdtMeta* meta);
-
+void appendVCForMeta(CrdtMeta* target, VectorClock* vc);
 void freeCrdtMeta(CrdtMeta* meta);
 void freeCrdtObject(CrdtObject* object);
 void freeCrdtTombstone(CrdtTombstone* tombstone);

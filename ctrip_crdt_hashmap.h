@@ -40,6 +40,7 @@
 #include "include/redismodule.h"
 #include "include/rmutil/dict.h"
 #include "crdt_util.h"
+#define NDEBUG
 #include <assert.h>
 
 #define CRDT_HASH_DATATYPE_NAME "crdt_hash"
@@ -81,9 +82,11 @@ static CrdtTombstoneMethod HashTombstoneCommonMethod = {
 //hash methods
 typedef int (*changeCrdtHashFunc)(struct CRDT_Hash* target, CrdtMeta* meta);
 typedef struct CRDT_Hash* (*dupCrdtHashFunc)(struct CRDT_Hash* target);
+typedef CrdtMeta* (*getLastVCFunc)(struct CRDT_Hash* target);
 typedef struct CrdtHashMethod {
     changeCrdtHashFunc change;
     dupCrdtHashFunc dup;
+    getLastVCFunc getLastVC;
 } CrdtHashMethod;
 typedef struct CRDT_Hash {
     CrdtObject parent;

@@ -191,19 +191,19 @@ int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value) {
                             keyStr ,v->type);
         return CRDT_ERROR;
     }
-    
+    CRDT_Register *current = (CRDT_Register *) value;
     CrdtMeta* meta= createIncrMeta();
-    
+    appendVCForMeta(meta, current->method->getValue(current)->meta->vectorClock);
     CRDT_RegisterTombstone *tombstone = getTombstone(moduleKey);
     if(tombstone == NULL || !isRegisterTombstone(tombstone)) {
         tombstone = createCrdtRegisterTombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegisterTombstone, tombstone);
     }
-    CrdtMeta* result = tombstone->method->add(tombstone, meta);
+    tombstone->method->add(tombstone, meta);
     
 
-    sds vcSds = vectorClockToSds(result->vectorClock);
-    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", keyRobj, result->gid, result->timestamp, vcSds);
+    sds vcSds = vectorClockToSds(meta->vectorClock);
+    RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.DEL_REG", "sllc", keyRobj, meta->gid, meta->timestamp, vcSds);
     sdsfree(vcSds);
     freeCrdtMeta(meta);
     return CRDT_OK;
@@ -342,6 +342,9 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         goto end;
     }
     CRDT_Register* current = getCurrentValue(moduleKey);
+    if(current != NULL) {
+        appendVCForMeta(meta, current->method->getValue(current)->meta->vectorClock);
+    } 
     if(addOrUpdateRegister(ctx, moduleKey, NULL, current, meta, argv[1], RedisModule_GetSds(argv[2])) != CRDT_OK) {
         status = CRDT_ERROR;
         goto end;

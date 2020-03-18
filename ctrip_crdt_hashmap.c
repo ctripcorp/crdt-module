@@ -199,6 +199,9 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         return 0;
     }
     CRDT_Hash* current = getCurrentValue(moduleKey);
+    if(current != NULL) {
+        appendVCForMeta(meta, current->method->getLastVC(current));
+    }
     int result = addOrUpdateHash(ctx, argv[1], moduleKey, NULL, current,meta, argv, 2, argc);
     if(result == CHANGE_HASH_ERR) {
         goto end;
@@ -305,11 +308,11 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     CrdtMeta* meta = createIncrMeta();
 
-
     CRDT_Hash* current = getCurrentValue(moduleKey);
     if(current == NULL) {
         goto end;
     }
+    appendVCForMeta(meta, current->method->getLastVC(current));
     if(!isCrdtHash(current)) {
         const char* keyStr = RedisModule_StringPtrLen(moduleKey, NULL);
         RedisModule_Log(ctx, logLevel, "[HDELCOMMAND][CONFLICT][CRDT-HASH][type conflict] key:{%s} prev: {%s} ",
@@ -912,7 +915,7 @@ int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value) {
     }
     CrdtMeta* meta = createIncrMeta();
     CRDT_Hash* current = (CRDT_Hash*) value;
-    
+    appendVCForMeta(meta, current->method->getLastVC(current));
     RedisModuleKey *moduleKey = (RedisModuleKey *) key;
     CRDT_HashTombstone* tombstone = getTombstone(key);
     if(tombstone == NULL || !isCrdtHashTombstone(tombstone)) {

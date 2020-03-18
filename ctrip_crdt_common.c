@@ -105,6 +105,11 @@ CrdtMeta* createMeta(int gid, long long timestamp, VectorClock* vclock) {
     meta->vectorClock = vclock;
     return meta;  
 };
+void appendVCForMeta(CrdtMeta* target, VectorClock* vc) {
+    VectorClock* clock = target->vectorClock;
+    target->vectorClock = vectorClockMerge(clock, vc);
+    if(clock != NULL) freeVectorClock(clock);
+}
 CrdtMeta* dupMeta(CrdtMeta* meta) {
     return createMeta(meta->gid, meta->timestamp, dupVectorClock(meta->vectorClock));
 }

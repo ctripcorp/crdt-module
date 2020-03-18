@@ -3,6 +3,7 @@
 #include "../crdt_register.h"
 #include "../include/rmutil/sds.h"
 #include "../crdt_util.h"
+#define NDEBUG
 #include <assert.h>
 typedef struct CRDT_LWW_Register {
     CRDT_Register parent;
