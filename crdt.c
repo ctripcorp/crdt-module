@@ -56,9 +56,9 @@ int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             if (crdtObj == NULL) {
                 continue;
             }
-            CrdtCommon *crdtCommon = (CrdtCommon *) crdtObj;
-            int result = crdtCommon->method->delFunc(ctx, argv[i], moduleKey, crdtObj);
-            if(crdtCommon->method->delFunc(ctx, argv[i], moduleKey, crdtObj)) {
+            CrdtObject *crdtCommon = (CrdtObject *) crdtObj;
+            int result = crdtCommon->method->del(ctx, argv[i], moduleKey, crdtObj);
+            if(result) {
                 RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[i]);
                 numl ++;
             }

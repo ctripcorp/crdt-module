@@ -35,17 +35,17 @@
 
 #include <stdlib.h>
 
-int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock) {
-    void *tombstone = RedisModule_ModuleTypeGetTombstone(key);
-    if (tombstone == NULL) {
-        return CRDT_NO;
-    }
-    CrdtCommon *common = tombstone;
-    if (isVectorClockMonoIncr(vclock, common->vectorClock) == CRDT_OK) {
-        return CRDT_YES;
-    }
-    return CRDT_NO;
-}
+// int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock) {
+//     void *tombstone = RedisModule_ModuleTypeGetTombstone(key);
+//     if (tombstone == NULL) {
+//         return CRDT_NO;
+//     }
+//     CrdtCommon *common = tombstone;
+//     if (isVectorClockMonoIncr(vclock, common->vectorClock) == CRDT_OK) {
+//         return CRDT_YES;
+//     }
+//     return CRDT_NO;
+// }
 
 int isConflictCommon(int result) {
     if(result > COMPARE_COMMON_VECTORCLOCK_GT || result < COMPARE_COMMON_VECTORCLOCK_LT) {
@@ -54,7 +54,7 @@ int isConflictCommon(int result) {
     return CRDT_NO;
 }
 
-void crdtCommonCp(CrdtCommon* from, CrdtCommon* to) {
+void crdtMetaCp(CrdtMeta* from, CrdtMeta* to) {
     VectorClock* clock =  to->vectorClock;
     to->gid = from->gid;
     to->timestamp = from->timestamp;
@@ -62,15 +62,25 @@ void crdtCommonCp(CrdtCommon* from, CrdtCommon* to) {
     freeVectorClock(clock);
 }
 
-void crdtCommonMerge(CrdtCommon* target , CrdtCommon* other) {
+int appendCrdtMeta(CrdtMeta* target , CrdtMeta* other) {
+    int result = compareCrdtMeta(target, other);
     VectorClock* clock =  target->vectorClock;
-    target->gid = other->gid;
-    target->timestamp = other->timestamp;
+    if(result >COMPARE_COMMON_EQUAL) {
+        target->gid = other->gid;
+        target->timestamp = other->timestamp;
+    }
     target->vectorClock = vectorClockMerge(clock, other->vectorClock);
-    freeVectorClock(clock);
+    if(clock != NULL) freeVectorClock(clock);
+    return result;
 }
 
-int compareCommon(CrdtCommon* old_common, CrdtCommon* new_common) {
+int compareCrdtMeta(CrdtMeta* old_common, CrdtMeta* new_common) {
+    if(old_common->vectorClock  == NULL) {
+        return COMPARE_COMMON_VECTORCLOCK_GT;
+    }
+    if(new_common->vectorClock == NULL) {
+        return COMPARE_COMMON_VECTORCLOCK_LT;
+    }
     if (isVectorClockMonoIncr(old_common->vectorClock, new_common->vectorClock) == CRDT_OK) {
         return COMPARE_COMMON_VECTORCLOCK_GT;
     } else if (isVectorClockMonoIncr(new_common->vectorClock, old_common->vectorClock) == CRDT_OK) {
@@ -88,27 +98,47 @@ int compareCommon(CrdtCommon* old_common, CrdtCommon* new_common) {
     }
     return COMPARE_COMMON_EQUAL;
 }
-CrdtCommon* createCommon(int gid, long long timestamp, VectorClock* vclock) {
-    CrdtCommon* common = RedisModule_Alloc(sizeof(CrdtCommon));
-    common->gid = gid;
-    common->timestamp = timestamp;
-    common->vectorClock = vclock;
-    return common;    
+CrdtMeta* createMeta(int gid, long long timestamp, VectorClock* vclock) {
+    CrdtMeta* meta = RedisModule_Alloc(sizeof(CrdtMeta));
+    meta->gid = gid;
+    meta->timestamp = timestamp;
+    meta->vectorClock = vclock;
+    return meta;  
+};
+void appendVCForMeta(CrdtMeta* target, VectorClock* vc) {
+    VectorClock* clock = target->vectorClock;
+    target->vectorClock = vectorClockMerge(clock, vc);
+    if(clock != NULL) freeVectorClock(clock);
 }
-CrdtCommon* createIncrCommon() {
+CrdtMeta* dupMeta(CrdtMeta* meta) {
+    return createMeta(meta->gid, meta->timestamp, dupVectorClock(meta->vectorClock));
+}
+CrdtMeta* createIncrMeta() {
     long long gid = RedisModule_CurrentGid();
     RedisModule_IncrLocalVectorClock(1);
-    // Abstract the logic of local set to match the common process
-    // Here, we consider the op vclock we're trying to broadcasting is our vcu wrapped vector clock
-    // for example, our gid is 1,  our vector clock is (1:100,2:1,3:100)
-    // A set operation will firstly drive the vclock into (1:101,2:1,3:100).
     VectorClock *currentVectorClock = RedisModule_CurrentVectorClock();
+    VectorClockUnit* unit = getVectorClockUnit(currentVectorClock, gid);
+    VectorClock *result = newVectorClock(1);
+    result->clocks[0].gid = gid;
+    result->clocks[0].logic_time = unit->logic_time;
     long long timestamp = RedisModule_Milliseconds();
-    return createCommon(gid, timestamp, currentVectorClock);
+    freeVectorClock(currentVectorClock);
+    return createMeta(gid, timestamp, result);
+};
+void freeCrdtMeta(CrdtMeta* meta) {
+    if(meta->vectorClock != NULL) {
+        freeVectorClock(meta->vectorClock);
+    }
+    RedisModule_Free(meta);
 }
-void freeCommon(CrdtCommon* common) {
-    freeVectorClock(common->vectorClock);
-    RedisModule_Free(common);
+// void freeCommon(CrdtCommon* common) {
+//     RedisModule_Free(common);
+// }
+void freeCrdtObject(CrdtObject* object) {
+    RedisModule_Free(object);
+}
+void freeCrdtTombstone(CrdtTombstone* tombstone) {
+    RedisModule_Free(tombstone);
 }
 #if defined(CRDT_COMMON_TEST_MAIN)
 #include <stdio.h>

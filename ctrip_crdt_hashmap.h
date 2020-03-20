@@ -40,9 +40,11 @@
 #include "include/redismodule.h"
 #include "include/rmutil/dict.h"
 #include "crdt_util.h"
+#define NDEBUG
+#include <assert.h>
 
 #define CRDT_HASH_DATATYPE_NAME "crdt_hash"
-
+#define CRDT_HASH_TOMBSOTNE_DATATYPE_NAME "crdt_htom"
 #define HASHTABLE_MIN_FILL        10
 
 #define UINT64_MAX        18446744073709551615ULL
@@ -51,21 +53,123 @@
 #define OBJ_HASH_KEY 1
 #define OBJ_HASH_VALUE 2
 
+static RedisModuleType *CrdtHash;
+static RedisModuleType *CrdtHashTombstone;
+//common methods
+void *crdtHashMerge(void *currentVal, void *value);
+int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value);
+void* crdtHashFilter(void* common, long long gid, long long logic_time);
+int crdtHashGc(void* target, VectorClock* clock);
+
+static CrdtObjectMethod HashCommonMethod = {
+    merge: crdtHashMerge,
+    del: crdtHashDelete,
+    filter: crdtHashFilter,
+};
+
+//common methods
+void *crdtHashTombstoneMerge(void *currentVal, void *value);
+void* crdtHashTombstoneFilter(void* common, long long gid, long long logic_time);
+int crdtHashTombstoneGc(void* target, VectorClock* clock);
+int crdtHashTombstonePurage(void* obj, void* tombstone);
+static CrdtTombstoneMethod HashTombstoneCommonMethod = {
+    merge: crdtHashTombstoneMerge,
+    filter: crdtHashTombstoneFilter,
+    gc: crdtHashTombstoneGc,
+    purage: crdtHashTombstonePurage,
+};
+
+//hash methods
+typedef int (*changeCrdtHashFunc)(struct CRDT_Hash* target, CrdtMeta* meta);
+typedef struct CRDT_Hash* (*dupCrdtHashFunc)(struct CRDT_Hash* target);
+typedef CrdtMeta* (*getLastVCFunc)(struct CRDT_Hash* target);
+typedef struct CrdtHashMethod {
+    changeCrdtHashFunc change;
+    dupCrdtHashFunc dup;
+    getLastVCFunc getLastVC;
+} CrdtHashMethod;
 typedef struct CRDT_Hash {
-    CrdtCommon common;
-    int remvAll;
-    VectorClock *maxdvc;
+    CrdtObject parent;
+    CrdtHashMethod* method;
     dict *map;
 } CRDT_Hash;
+typedef CrdtMeta* (*updateMaxDelCrdtHashTombstoneFunc)(void* target, CrdtMeta* meta);
+typedef int (*isExpireFunc)(void* target, CrdtMeta* meta);
+typedef void* (*dupFunc)(void* target);
+typedef int (*gcCrdtHashTombstoneFunc)(void* target, VectorClock* clock);
+typedef CrdtMeta* (*getMaxDelCrdtHashTombstoneFunc)(void* target);
+typedef int (*changeHashTombstoneFunc)(void* target, CrdtMeta* meta);
+typedef int (*purageHashTombstoneFunc)(void* tombstone, void* obj);
+typedef struct CrdtHashTombstoneMethod {
+    updateMaxDelCrdtHashTombstoneFunc updateMaxDel;
+    isExpireFunc isExpire;
+    dupFunc dup;
+    gcCrdtHashTombstoneFunc gc;
+    getMaxDelCrdtHashTombstoneFunc getMaxDel;
+    changeHashTombstoneFunc change;
+    purageHashTombstoneFunc purage;
+} CrdtHashTombstoneMethod;
+typedef struct CRDT_HashTombstone {
+    CrdtTombstone parent;
+    CrdtHashTombstoneMethod* method;
+    dict *map;
+} CRDT_HashTombstone;
 
 
 void *createCrdtHash(void);
+void *createCrdtHashTombstone(void);
 
-void freeCrdtHash(void *crdtHash);
 
 int initCrdtHashModule(RedisModuleCtx *ctx);
 
 int crdtHtNeedsResize(dict *dict);
 
+//hash 
+void *RdbLoadCrdtHash(RedisModuleIO *rdb, int encver);
+void RdbSaveCrdtHash(RedisModuleIO *rdb, void *value);
+void AofRewriteCrdtHash(RedisModuleIO *aof, RedisModuleString *key, void *value);
+void freeCrdtHash(void *crdtHash);
+size_t crdtHashMemUsageFunc(const void *value);
+void crdtHashDigestFunc(RedisModuleDigest *md, void *value);
+//hash tombstone
+void *RdbLoadCrdtHashTombstone(RedisModuleIO *rdb, int encver);
+void RdbSaveCrdtHashTombstone(RedisModuleIO *rdb, void *value);
+void AofRewriteCrdtHashTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
+void freeCrdtHashTombstone(void *crdtHash);
+size_t crdtHashTombstoneMemUsageFunc(const void *value);
+void crdtHashTombstoneDigestFunc(RedisModuleDigest *md, void *value);
 
+//other utils
+int RdbLoadCrdtBasicHash(RedisModuleIO *rdb, int encver, void *data);
+void RdbSaveCrdtBasicHash(RedisModuleIO *rdb, void *value);
+int RdbLoadCrdtBasicHashTombstone(RedisModuleIO *rdb, int encver, void *data);
+void RdbSaveCrdtBasicHashTombstone(RedisModuleIO *rdb, void *value);
+size_t crdtBasicHashMemUsageFunc(void* data);
+size_t crdtBasicHashTombstoneMemUsageFunc(void* data);
+/**
+ * about dict
+ */
+uint64_t dictSdsHash(const void *key);
+int dictSdsKeyCompare(void *privdata, const void *key1,
+                      const void *key2);
+void dictSdsDestructor(void *privdata, void *val);
+void dictCrdtRegisterDestructor(void *privdata, void *val);
+
+void dictCrdtRegisterTombstoneDestructor(void *privdata, void *val);
+static dictType crdtHashDictType = {
+        dictSdsHash,                /* hash function */
+        NULL,                       /* key dup */
+        NULL,                       /* val dup */
+        dictSdsKeyCompare,          /* key compare */
+        dictSdsDestructor,          /* key destructor */
+        dictCrdtRegisterDestructor   /* val destructor */
+};
+static dictType crdtHashTombstoneDictType = {
+        dictSdsHash,                /* hash function */
+        NULL,                       /* key dup */
+        NULL,                       /* val dup */
+        dictSdsKeyCompare,          /* key compare */
+        dictSdsDestructor,          /* key destructor */
+        dictCrdtRegisterTombstoneDestructor   /* val destructor */
+};
 #endif //XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H

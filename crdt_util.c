@@ -1,6 +1,6 @@
 #include "crdt_util.h"
 
-CrdtCommon* getCommon(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index) {
+CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index) {
     long long gid;
     if ((RedisModule_StringToLongLong(argv[start_index],&gid) != REDISMODULE_OK)) {
         RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
@@ -12,7 +12,27 @@ CrdtCommon* getCommon(RedisModuleCtx *ctx, RedisModuleString **argv, int start_i
         return NULL;
     }
     VectorClock *vclock = getVectorClockFromString(argv[start_index+2]);
-    return createCommon(gid, timestamp, vclock);
+    return createMeta(gid, timestamp, vclock);
+}
+CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other) {
+    if(compareCrdtMeta(target, other) > 0) {
+        return createMeta(other->gid, other->timestamp, vectorClockMerge(target->vectorClock, other->vectorClock));
+    }else{
+        return createMeta(target->gid, target->timestamp, vectorClockMerge(target->vectorClock, other->vectorClock));
+    }
+}
+CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other) {
+    if(target == NULL) {
+        return dupMeta(other);
+    }
+    if(compareCrdtMeta(target, other) > 0) {
+        target->gid = other->gid;
+        target->timestamp = other->timestamp;
+    }
+    VectorClock* vc = target->vectorClock;
+    target->vectorClock = vectorClockMerge(vc, other->vectorClock);
+    if(vc != NULL) freeVectorClock(vc);
+    return target;
 }
 RedisModuleKey* getWriteRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type) {
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv,
@@ -36,4 +56,20 @@ void* getCurrentValue(RedisModuleKey *moduleKey) {
 void* getTombstone(RedisModuleKey *moduleKey) {
     void* tombstone = RedisModule_ModuleTypeGetTombstone(moduleKey);
     return tombstone;
+}
+
+VectorClock* rdbLoadVectorClock(RedisModuleIO *rdb) {
+    size_t vcLength, strLength;
+    char* vcStr = RedisModule_LoadStringBuffer(rdb, &vcLength);
+    sds vclockSds = sdsnewlen(vcStr, vcLength);
+    VectorClock* result = sdsToVectorClock(vclockSds);
+    sdsfree(vclockSds);
+    RedisModule_Free(vcStr);
+    return result;
+}
+int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock* vectorClock) {
+    sds vclockStr = vectorClockToSds(vectorClock);
+    RedisModule_SaveStringBuffer(rdb, vclockStr, sdslen(vclockStr));
+    sdsfree(vclockStr);
+    return CRDT_OK;
 }

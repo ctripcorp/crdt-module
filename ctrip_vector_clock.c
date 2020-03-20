@@ -142,6 +142,7 @@ vectorClockToSds(VectorClock *vc) {
     return vcStr;
 }
 
+
 /* Sort comparators for qsort() */
 static int sort_vector_clock_unit(const void *a, const void *b) {
     const VectorClockUnit *vcu_a = a, *vcu_b = b;
