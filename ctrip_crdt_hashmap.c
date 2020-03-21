@@ -121,7 +121,7 @@ int addOrUpdateItem(RedisModuleCtx* ctx, CRDT_HashTombstone* tombstone, CRDT_Has
             RedisModule_IncrCrdtConflict();
         }
         sdsfree(prev);
-        if(result > COMPARE_COMMON_EQUAL) {
+        if(result > COMPARE_META_EQUAL) {
             result_code = UPDATE_HASH;
         }
     }

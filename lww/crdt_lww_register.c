@@ -36,7 +36,7 @@ int purageLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register*
 }
 int isExpireLWWTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
-    return compareCrdtMeta(meta, t->meta) > COMPARE_COMMON_EQUAL? CRDT_OK: CRDT_NO;
+    return compareCrdtMeta(meta, t->meta) > COMPARE_META_EQUAL? CRDT_OK: CRDT_NO;
 }
 
 
@@ -84,7 +84,7 @@ CRDT_LWW_RegisterTombstone* retrieveCrdtLWWRegisterTombstone(void *data) {
 int delLWWCrdtRegister(CRDT_Register* current, CrdtMeta* meta) {
     CRDT_LWW_Register* target = retrieveCrdtLWWRegister(current);
     int result = compareCrdtMeta(target->value.meta, meta);
-    if(result > COMPARE_COMMON_EQUAL) {
+    if(result > COMPARE_META_EQUAL) {
         
         return 1;
     }
@@ -148,7 +148,7 @@ CrdtRegisterValue* getLwwCrdtRegisterValue(CRDT_Register* r) {
 int setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
     int result = compareCrdtMeta(data->value.meta, meta);
-    if(result > COMPARE_COMMON_EQUAL) {
+    if(result > COMPARE_META_EQUAL) {
         if(data->value.value !=NULL ) {sdsfree(data->value.value);}
         data->value.value = sdsdup(value);
     }

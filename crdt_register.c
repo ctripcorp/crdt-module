@@ -312,7 +312,7 @@ int addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_Reg
             CRDT_Register* incomeValue = addRegister(NULL, meta, value);
             sds income = current->method->getInfo(incomeValue);
             sds future = current->method->getInfo(current);
-            if(result > COMPARE_COMMON_EQUAL) {
+            if(result > COMPARE_META_EQUAL) {
                 RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][replace] key:{%s} prev: {%s}, income: {%s}, future: {%s}",
                             RedisModule_GetSds(key), prev, income, future);
             }else{
@@ -493,7 +493,7 @@ int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
  * */
 int mergeCrdtRegisterValue(CrdtRegisterValue* target, CrdtRegisterValue* other) {
     int compareResult = appendCrdtMeta(target->meta, other->meta);
-    if(compareResult > COMPARE_COMMON_EQUAL) {
+    if(compareResult > COMPARE_META_EQUAL) {
         if(target->value) sdsfree(target->value);
         target->value = sdsdup(other->value);
     } 
@@ -514,7 +514,7 @@ int tryUpdateRegister(void* data, CrdtMeta* meta, CRDT_Register* reg, sds value)
     CRDT_RegisterTombstone* tombstone = (CRDT_RegisterTombstone*) data;
     if(tombstone != NULL) {
         if(tombstone->method->isExpire(tombstone, meta) == CRDT_OK) {
-            return COMPARE_COMMON_VECTORCLOCK_LT;
+            return COMPARE_META_VECTORCLOCK_LT;
         }
     }
     return reg->method->set(reg, meta, value);

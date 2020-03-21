@@ -90,13 +90,13 @@ void freeCrdtObject(CrdtObject* object);
 void freeCrdtTombstone(CrdtTombstone* tombstone);
 // void freeCommon(CrdtCommon* common);
 
-#define COMPARE_COMMON_VECTORCLOCK_GT 1
-#define COMPARE_COMMON_VECTORCLOCK_LT -1
-#define COMPARE_COMMON_TIMESTAMPE_GT 2
-#define COMPARE_COMMON_TIMESTAMPE_LT -2
-#define COMPARE_COMMON_GID_GT 3
-#define COMPARE_COMMON_GID_LT -3
-#define COMPARE_COMMON_EQUAL 0
+#define COMPARE_META_VECTORCLOCK_GT 1
+#define COMPARE_META_VECTORCLOCK_LT -1
+#define COMPARE_META_TIMESTAMPE_GT 2
+#define COMPARE_META_TIMESTAMPE_LT -2
+#define COMPARE_META_GID_GT 3
+#define COMPARE_META_GID_LT -3
+#define COMPARE_META_EQUAL 0
 int compareCrdtMeta(CrdtMeta *a, CrdtMeta *b);
 int isConflictMeta(int result);
 void crdtMetaCp(CrdtMeta *from, CrdtMeta* to);
