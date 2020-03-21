@@ -48,7 +48,7 @@
 // }
 
 int isConflictCommon(int result) {
-    if(result > COMPARE_COMMON_VECTORCLOCK_GT || result < COMPARE_COMMON_VECTORCLOCK_LT) {
+    if(result > COMPARE_META_VECTORCLOCK_GT || result < COMPARE_META_VECTORCLOCK_LT) {
         return CRDT_OK;
     }
     return CRDT_NO;
@@ -65,7 +65,7 @@ void crdtMetaCp(CrdtMeta* from, CrdtMeta* to) {
 int appendCrdtMeta(CrdtMeta* target , CrdtMeta* other) {
     int result = compareCrdtMeta(target, other);
     VectorClock* clock =  target->vectorClock;
-    if(result >COMPARE_COMMON_EQUAL) {
+    if(result >COMPARE_META_EQUAL) {
         target->gid = other->gid;
         target->timestamp = other->timestamp;
     }
@@ -76,27 +76,27 @@ int appendCrdtMeta(CrdtMeta* target , CrdtMeta* other) {
 
 int compareCrdtMeta(CrdtMeta* old_common, CrdtMeta* new_common) {
     if(old_common->vectorClock  == NULL) {
-        return COMPARE_COMMON_VECTORCLOCK_GT;
+        return COMPARE_META_VECTORCLOCK_GT;
     }
     if(new_common->vectorClock == NULL) {
-        return COMPARE_COMMON_VECTORCLOCK_LT;
+        return COMPARE_META_VECTORCLOCK_LT;
     }
     if (isVectorClockMonoIncr(old_common->vectorClock, new_common->vectorClock) == CRDT_OK) {
-        return COMPARE_COMMON_VECTORCLOCK_GT;
+        return COMPARE_META_VECTORCLOCK_GT;
     } else if (isVectorClockMonoIncr(new_common->vectorClock, old_common->vectorClock) == CRDT_OK) {
-        return COMPARE_COMMON_VECTORCLOCK_LT;
+        return COMPARE_META_VECTORCLOCK_LT;
     } 
     if(old_common->timestamp < new_common->timestamp) {
-        return COMPARE_COMMON_TIMESTAMPE_GT;
+        return COMPARE_META_TIMESTAMPE_GT;
     }else if (old_common->timestamp > new_common->timestamp) {
-        return COMPARE_COMMON_TIMESTAMPE_LT;
+        return COMPARE_META_TIMESTAMPE_LT;
     }
     if(old_common->gid > new_common->gid) {
-        return COMPARE_COMMON_GID_GT;
+        return COMPARE_META_GID_GT;
     }else if(old_common->gid < new_common->gid) {
-        return COMPARE_COMMON_GID_LT;
+        return COMPARE_META_GID_LT;
     }
-    return COMPARE_COMMON_EQUAL;
+    return COMPARE_META_EQUAL;
 }
 CrdtMeta* createMeta(int gid, long long timestamp, VectorClock* vclock) {
     CrdtMeta* meta = RedisModule_Alloc(sizeof(CrdtMeta));

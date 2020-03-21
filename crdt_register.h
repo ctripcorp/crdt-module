@@ -37,7 +37,6 @@
 #include "ctrip_crdt_common.h"
 #include "include/redismodule.h"
 #include "crdt_util.h"
-#include "include/rmutil/adlist.h"
 
 #define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
 #define CRDT_REGISTER_TOMBSTONE_DATATYPE_NAME "crdt_regt"
@@ -46,11 +45,6 @@
 
 #define DELETED_TAG_SIZE 7
 
-// typedef struct CRDT_Register {
-//     CrdtCommon common;
-//     CrdtMeta meta;
-//     sds val;
-// } CRDT_Register;
 typedef struct CRDT_Register;
 typedef struct CRDT_Register* (*dupCrdtRegisterFunc)(struct CRDT_Register*);
 typedef int (*delCrdtRegisterFunc)(struct CRDT_Register*, CrdtMeta*);
@@ -102,10 +96,7 @@ typedef struct CrdtRegisterValue {
     sds value;
 } CrdtRegisterValue;
 int mergeCrdtRegisterValue(CrdtRegisterValue* target, CrdtRegisterValue* other);
-typedef struct CRDT_ORSET_Register {
-    CRDT_Register parent;
-    list* data;
-} CRDT_ORSET_Register;
+
 void *createCrdtRegister(void);
 
 void freeCrdtRegister(void *crdtRegister);
