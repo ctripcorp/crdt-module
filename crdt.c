@@ -35,6 +35,7 @@
 #include "crdt.h"
 #include "crdt_register.h"
 #include "ctrip_crdt_hashmap.h"
+#include "crdt_pubsub.h"
 
 #define CRDT_API_VERSION 1
 
@@ -115,6 +116,11 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     }
 
     if(initCrdtHashModule(ctx) != REDISMODULE_OK) {
+        RedisModule_Log(ctx, "warning", "hash module -- register failed");
+        return REDISMODULE_ERR;
+    }
+
+    if(initPubsubModule(ctx) != REDISMODULE_OK) {
         RedisModule_Log(ctx, "warning", "hash module -- register failed");
         return REDISMODULE_ERR;
     }
