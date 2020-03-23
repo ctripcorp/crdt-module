@@ -32,6 +32,8 @@ crdt.o: crdt.c version.h
 	$(CC) $(CFLAGS) -c -o $@ crdt.c
 crdt_util.o: crdt.o crdt_util.h
 	$(CC) $(CFLAGS) -c -o $@ crdt_util.c
+crdt_pubsub.o: crdt_pubsub.c utils.c crdt_util.o
+	$(CC) $(CFLAGS) -c -o $@ crdt_pubsub.c
 crdt_register.o: crdt_register.c utils.c crdt_util.o
 	$(CC) $(CFLAGS) -c -o $@ crdt_register.c
 crdt_lww_register.o: lww/crdt_lww_register.c crdt_register.o  crdt_util.o
@@ -43,8 +45,8 @@ crdt_lww_hashmap.o: lww/crdt_lww_hashmap.c ctrip_crdt_hashmap.o  crdt_util.o
 
 # crdt.so: rmutil crdt.o crdt_register.o ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o
 	# $(LD) -o $@ crdt.o crdt_register.o ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
-crdt.so: rmutil crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o
-	$(LD) -o $@ crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
+crdt.so: rmutil crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o
+	$(LD) -o $@ crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
 
 clean:
 	rm -rf *.xo *.so *.o *.pyc
