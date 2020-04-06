@@ -37,6 +37,7 @@
 #include "ctrip_crdt_common.h"
 #include "include/redismodule.h"
 #include "crdt_util.h"
+#include "crdt_expire.h"
 
 #define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
 #define CRDT_REGISTER_TOMBSTONE_DATATYPE_NAME "crdt_regt"
@@ -55,6 +56,7 @@ typedef sds (*getInfoCrdtRegisterFunc)(struct CRDT_Register* target);
 typedef struct CRDT_Register* (*filterCrdtRegisterFunc)(struct CRDT_Register* target,long long gid, long long logic_time);
 typedef int (*cleanCrdtRegisterFunc)(struct CRDT_Register* target, struct CRDT_RegisterTombstone* tombstone);
 typedef struct CRDT_Register* (*mergeCrdtRegisterFunc)(struct CRDT_Register* target, struct CRDT_Register* other);
+typedef void (*updateLastVCCrdtRegisterFunc)(struct CRDT_Register* target, VectorClock* vc);
 typedef struct CrdtRegisterMethod {
     dupCrdtRegisterFunc dup;
     delCrdtRegisterFunc del;
@@ -64,9 +66,10 @@ typedef struct CrdtRegisterMethod {
     getInfoCrdtRegisterFunc getInfo;
     filterCrdtRegisterFunc filter;
     mergeCrdtRegisterFunc merge;
+    updateLastVCCrdtRegisterFunc updateLastVC;
 } CrdtRegisterMethod;
 typedef struct CRDT_Register {
-    CrdtObject parent;
+    CrdtData parent;
     CrdtRegisterMethod* method;
 } CRDT_Register;
 typedef struct CRDT_RegisterTombstone;
@@ -86,7 +89,7 @@ typedef struct CrdtRegisterTombstoneMethod {
     purageTombstoneFunc purage;
 } CrdtRegisterTombstoneMethod;
 typedef struct CRDT_RegisterTombstone {
-    CrdtTombstone parent;
+    CrdtDataTombstone parent;
     CrdtRegisterTombstoneMethod* method;
 }CRDT_RegisterTombstone;
 
@@ -107,25 +110,31 @@ int initRegisterModule(RedisModuleCtx *ctx);
 
 //register command methods
 void *crdtRegisterMerge(void *currentVal, void *value);
-int crdtRegisterDelete(void *ctx, void *keyRobj, void *key, void *value);
+int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value);
 CrdtObject* crdtRegisterFilter(CrdtObject* common, long long gid, long long logic_time);
 int crdtRegisterTombstonePurage( CrdtTombstone* tombstone, CrdtObject* current);
 int crdtRegisterGc(void* target, VectorClock* clock);
 CRDT_Register* dupCrdtRegister(const struct CRDT_Register *val);
+VectorClock* crdtRegisterGetLastVC(void* data);
+void crdtRegisterUpdateLastVC(void *data, VectorClock* vc);
 static CrdtObjectMethod RegisterCommonMethod = {
-    merge: crdtRegisterMerge,
-    del: crdtRegisterDelete,
-    filter: crdtRegisterFilter,
+    .merge = crdtRegisterMerge,
+    .filter = crdtRegisterFilter,
+};
+static CrdtDataMethod RegisterDataMethod = {
+    .propagateDel = crdtRegisterDelete,
+    .getLastVC = crdtRegisterGetLastVC,
+    .updateLastVC = crdtRegisterUpdateLastVC,
 };
 //register tombstone command methods
 void* crdtRegisterTombstoneMerge(void* target, void* other);
 void* crdtRegisterTombstoneFilter(void* target, long long gid, long long logic_time) ;
 int crdtRegisterTombstoneGc(void* target, VectorClock* clock);
 static CrdtTombstoneMethod RegisterTombstoneMethod = {
-    merge: crdtRegisterTombstoneMerge,
-    filter: crdtRegisterTombstoneFilter,
-    gc: crdtRegisterTombstoneGc,
-    purage: crdtRegisterTombstonePurage,
+    .merge = crdtRegisterTombstoneMerge,
+    .filter =  crdtRegisterTombstoneFilter,
+    .gc = crdtRegisterTombstoneGc,
+    .purage = crdtRegisterTombstonePurage,
 };
 
 

@@ -57,14 +57,19 @@ static RedisModuleType *CrdtHash;
 static RedisModuleType *CrdtHashTombstone;
 //common methods
 void *crdtHashMerge(void *currentVal, void *value);
-int crdtHashDelete(void *ctx, void *keyRobj, void *key, void *value);
+int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value);
 void* crdtHashFilter(void* common, long long gid, long long logic_time);
 int crdtHashGc(void* target, VectorClock* clock);
-
+VectorClock* crdtHashGetLastVC(void* data);
+void crdtHashUpdateLastVC(void* r, VectorClock* vc);
 static CrdtObjectMethod HashCommonMethod = {
-    merge: crdtHashMerge,
-    del: crdtHashDelete,
-    filter: crdtHashFilter,
+    .merge = crdtHashMerge,
+    .filter = crdtHashFilter,
+};
+static CrdtDataMethod HashDataMethod = {
+    .propagateDel = crdtHashDelete,
+    .getLastVC = crdtHashGetLastVC,
+    .updateLastVC = crdtHashUpdateLastVC,
 };
 
 //common methods
@@ -73,23 +78,25 @@ void* crdtHashTombstoneFilter(void* common, long long gid, long long logic_time)
 int crdtHashTombstoneGc(void* target, VectorClock* clock);
 int crdtHashTombstonePurage(void* obj, void* tombstone);
 static CrdtTombstoneMethod HashTombstoneCommonMethod = {
-    merge: crdtHashTombstoneMerge,
-    filter: crdtHashTombstoneFilter,
-    gc: crdtHashTombstoneGc,
-    purage: crdtHashTombstonePurage,
+    .merge = crdtHashTombstoneMerge,
+    .filter = crdtHashTombstoneFilter,
+    .gc = crdtHashTombstoneGc,
+    .purage = crdtHashTombstonePurage,
 };
 
 //hash methods
 typedef int (*changeCrdtHashFunc)(struct CRDT_Hash* target, CrdtMeta* meta);
 typedef struct CRDT_Hash* (*dupCrdtHashFunc)(struct CRDT_Hash* target);
 typedef CrdtMeta* (*getLastVCFunc)(struct CRDT_Hash* target);
+typedef void (*updateLastVCFunc)(struct CRDT_Hash* target, VectorClock* vc);
 typedef struct CrdtHashMethod {
     changeCrdtHashFunc change;
     dupCrdtHashFunc dup;
     getLastVCFunc getLastVC;
+    updateLastVCFunc updateLastVC;
 } CrdtHashMethod;
 typedef struct CRDT_Hash {
-    CrdtObject parent;
+    CrdtData parent;
     CrdtHashMethod* method;
     dict *map;
 } CRDT_Hash;
@@ -110,7 +117,7 @@ typedef struct CrdtHashTombstoneMethod {
     purageHashTombstoneFunc purage;
 } CrdtHashTombstoneMethod;
 typedef struct CRDT_HashTombstone {
-    CrdtTombstone parent;
+    CrdtDataTombstone parent;
     CrdtHashTombstoneMethod* method;
     dict *map;
 } CRDT_HashTombstone;

@@ -36,7 +36,7 @@
 #include "crdt_register.h"
 #include "ctrip_crdt_hashmap.h"
 #include "crdt_pubsub.h"
-
+#include "crdt_expire.h"
 #define CRDT_API_VERSION 1
 
 
@@ -57,8 +57,8 @@ int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             if (crdtObj == NULL) {
                 continue;
             }
-            CrdtObject *crdtCommon = (CrdtObject *) crdtObj;
-            int result = crdtCommon->method->del(ctx, argv[i], moduleKey, crdtObj);
+            CrdtData *crdtCommon = (CrdtData *) crdtObj;
+            int result = crdtCommon->method->propagateDel(RedisModule_GetSelectedDb(ctx), argv[i], moduleKey, crdtObj);
             if(result) {
                 RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[i]);
                 numl ++;
@@ -86,7 +86,7 @@ int crdtDebugCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         sdsfree(logLevel);
         logLevel = sdsnew(RedisModule_StringPtrLen(argv[2], NULL));
     } else {
-        RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
     }
     return RedisModule_ReplyWithSimpleString(ctx, "OK");
 }
@@ -122,6 +122,11 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
     if(initPubsubModule(ctx) != REDISMODULE_OK) {
         RedisModule_Log(ctx, "warning", "hash module -- register failed");
+        return REDISMODULE_ERR;
+    }
+
+    if(initCrdtExpireModule(ctx) != REDISMODULE_OK) {
+        RedisModule_Log(ctx, "warning", "expire module -- register failed");
         return REDISMODULE_ERR;
     }
 

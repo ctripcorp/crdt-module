@@ -140,6 +140,29 @@ void freeCrdtObject(CrdtObject* object) {
 void freeCrdtTombstone(CrdtTombstone* tombstone) {
     RedisModule_Free(tombstone);
 }
+CrdtExpireObj* dupExpireObj(CrdtExpireObj* copy) {
+    if(copy == NULL) {
+        return NULL;
+    }
+    return createCrdtExpireObj(dupMeta(copy->meta), copy->expireTime);
+}
+
+CrdtExpireObj* createCrdtExpireObj(CrdtMeta* meta, long long expireTime) {
+    CrdtExpireObj* obj = RedisModule_Alloc(sizeof(CrdtExpireObj));
+    obj->meta = meta;
+    obj->expireTime = expireTime;
+    return obj;
+}
+
+void freeCrdtExpireObj(CrdtExpireObj* obj) {
+    if(obj->meta != NULL) {
+        freeCrdtMeta(obj->meta);
+        obj->meta = NULL;
+    }
+     RedisModule_Free(obj);
+ }
+
+
 #if defined(CRDT_COMMON_TEST_MAIN)
 #include <stdio.h>
 #include "testhelp.h"

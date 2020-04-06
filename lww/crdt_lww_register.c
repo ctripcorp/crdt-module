@@ -1,21 +1,24 @@
 #include "crdt_lww_register.h"
 static CrdtRegisterMethod Register_LLW_Methods = {
-    dup: dupLWWCrdtRegister,
-    del: delLWWCrdtRegister,
-    get: getLWWCrdtRegister,
-    getValue: getLwwCrdtRegisterValue,
-    set: setLWWCrdtRegister,
-    getInfo: crdtLWWRegisterInfo,
-    filter: filterLWWRegister,
-    merge: mergeLWWRegister,
+    .dup = dupLWWCrdtRegister,
+    .del = delLWWCrdtRegister,
+    .get = getLWWCrdtRegister,
+    .getValue = getLwwCrdtRegisterValue,
+    .set = setLWWCrdtRegister,
+    .getInfo = crdtLWWRegisterInfo,
+    .filter = filterLWWRegister,
+    .merge = mergeLWWRegister,
+    .updateLastVC = updateLastVCLWWRegister,
 };
 void *createLLWCrdtRegister(void) {
     CRDT_LWW_Register *crdtRegister = RedisModule_Alloc(sizeof(CRDT_LWW_Register));
+    crdtRegister->parent.parent.parent.type = CRDT_DATA;
+    crdtRegister->parent.parent.parent.method = &RegisterCommonMethod;
+        crdtRegister->parent.parent.dataType = CRDT_REGISTER_TYPE;
+    crdtRegister->parent.parent.method = &RegisterDataMethod;
+    crdtRegister->parent.method = &Register_LLW_Methods;
     crdtRegister->value.meta = createMeta(-1, -1, NULL);
     crdtRegister->value.value = NULL;
-    crdtRegister->parent.parent.method = &RegisterCommonMethod;
-    crdtRegister->parent.method = &Register_LLW_Methods;
-    crdtRegister->parent.parent.type = CRDT_REGISTER_TYPE;
     return crdtRegister;
 }
 
@@ -25,6 +28,12 @@ CRDT_Register* mergeLWWRegister(CRDT_Register* target, CRDT_Register* other) {
     CRDT_LWW_Register* result = dupCrdtRegister(t);
     mergeCrdtRegisterValue(&result->value, &o->value);
     return result;
+}
+void updateLastVCLWWRegister(CRDT_Register* r, VectorClock* vc) {
+    CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
+    VectorClock *old = data->value.meta->vectorClock;
+    data->value.meta->vectorClock = vectorClockMerge(old, vc);
+    freeVectorClock(old);
 }
 int purageLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
     CRDT_LWW_Register* current = retrieveCrdtLWWRegister(target);
@@ -46,7 +55,7 @@ static CrdtRegisterTombstoneMethod Register_LLW_Tombstone_Methods = {
     .filter = filterLWWRegisterTombstone,
     .dup = dupLWWCrdtRegisterTombstone,
     .merge = mergeLWWRegisterTombstone,
-    purage: purageLWWRegisterTombstone,
+    .purage = purageLWWRegisterTombstone,
 };
 
 void freeLLWCrdtRegister(void *obj) {
@@ -73,12 +82,12 @@ CRDT_Register* dupLWWCrdtRegister(const CRDT_Register *val) {
 }
 CRDT_LWW_Register* retrieveCrdtLWWRegister(void *data) {
     CRDT_LWW_Register* result = (CRDT_LWW_Register*)data;
-    assert(result->parent.parent.type == CRDT_REGISTER_TYPE);
+    assert(result->parent.parent.dataType == CRDT_REGISTER_TYPE);
     return result;
 }
 CRDT_LWW_RegisterTombstone* retrieveCrdtLWWRegisterTombstone(void *data) {
     CRDT_LWW_RegisterTombstone* result = (CRDT_LWW_RegisterTombstone*)data;
-    assert(result->parent.parent.type == CRDT_REGISTER_TOMBSTONE_TYPE);
+    assert(result->parent.parent.dataType == CRDT_REGISTER_TYPE);
     return result;
 }
 int delLWWCrdtRegister(CRDT_Register* current, CrdtMeta* meta) {
@@ -93,8 +102,9 @@ int delLWWCrdtRegister(CRDT_Register* current, CrdtMeta* meta) {
 }
 CRDT_RegisterTombstone* createCrdtLWWRegisterTombstone() {
     CRDT_LWW_RegisterTombstone *tombstone = RedisModule_Alloc(sizeof(CRDT_LWW_RegisterTombstone));
-    tombstone->parent.parent.method = &RegisterTombstoneMethod;
-    tombstone->parent.parent.type = CRDT_REGISTER_TOMBSTONE_TYPE;
+    tombstone->parent.parent.parent.type = CRDT_DATA;
+    tombstone->parent.parent.parent.method = &RegisterTombstoneMethod;
+    tombstone->parent.parent.dataType = CRDT_REGISTER_TYPE;
     tombstone->parent.method = &Register_LLW_Tombstone_Methods;
     tombstone->meta = createMeta(-1, -1, NULL);
     return tombstone;
@@ -105,8 +115,8 @@ void *RdbLoadLWWCrdtRegister(RedisModuleIO *rdb, int encver) {
         return NULL;
     }
     CRDT_LWW_Register *crdtRegister = createCrdtRegister();
+    crdtRegister->parent.parent.dataType = CRDT_REGISTER_TYPE;
     crdtRegister->value.meta->gid = RedisModule_LoadSigned(rdb);
-    crdtRegister->parent.parent.type = CRDT_REGISTER_TYPE;
     crdtRegister->value.meta->timestamp = RedisModule_LoadSigned(rdb);
     crdtRegister->value.meta->vectorClock = rdbLoadVectorClock(rdb);
 
@@ -123,17 +133,13 @@ void RdbSaveLWWCrdtRegisterTombstone(RedisModuleIO *rdb, void *value) {
     CRDT_LWW_RegisterTombstone *tombstone = retrieveCrdtLWWRegisterTombstone(value);
     RedisModule_SaveSigned(rdb, tombstone->meta->gid);
     RedisModule_SaveSigned(rdb, tombstone->meta->timestamp);
-    sds vclockStr = vectorClockToSds(tombstone->meta->vectorClock);
-    RedisModule_SaveStringBuffer(rdb, vclockStr, sdslen(vclockStr));
-    sdsfree(vclockStr);
+    rdbSaveVectorClock(rdb, tombstone->meta->vectorClock);
 }
 void RdbSaveLWWCrdtRegister(RedisModuleIO *rdb, void *value) {
-    CRDT_LWW_Register *crdtRegister = value;
+    CRDT_LWW_Register *crdtRegister = retrieveCrdtLWWRegister(value);
     RedisModule_SaveSigned(rdb, crdtRegister->value.meta->gid);
     RedisModule_SaveSigned(rdb, crdtRegister->value.meta->timestamp);
-    sds vclockStr = vectorClockToSds(crdtRegister->value.meta->vectorClock);
-    RedisModule_SaveStringBuffer(rdb, vclockStr, sdslen(vclockStr));
-    sdsfree(vclockStr);
+    rdbSaveVectorClock(rdb, crdtRegister->value.meta->vectorClock);
     RedisModule_SaveStringBuffer(rdb, crdtRegister->value.value, sdslen(crdtRegister->value.value));
 }
 

@@ -48,6 +48,8 @@ void freeLLWCrdtRegister(void *obj);
 int crdtLWWRegisterTombstoneGc(void* target, VectorClock* clock);
 int crdtLWWRegisterGc(void* target, VectorClock* clock);
 
+void updateLastVCLWWRegister(CRDT_Register* r, VectorClock* vc);
+
 //create
 void *createCrdtRegister(void) {
     return createLLWCrdtRegister();
