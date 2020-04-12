@@ -99,6 +99,92 @@ VectorClock *getVectorClockFromString(RedisModuleString *vectorClockStr) {
     sdsfree(vclockSds);
     return vclock;
 }
+#define RDB_VALUE_EOF 0
+#define C_OK 0
+#define C_ERR -1
+
+int saveValue(void *rio, RedisModuleType* type, void* data) {
+    uint64_t id = RedisModule_GetModuleTypeId(type);
+    if(RedisModule_SaveLen(rio, id) == C_ERR) return C_ERR;
+    return RedisModule_SaveModuleValue(rio,type,data);
+}
+void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key) {
+    RedisModuleKey* moduleKey = RedisModule_GetKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+    CrdtData* data = RedisModule_ModuleTypeGetValue(moduleKey);
+    if(data != NULL) {
+        switch (data->dataType)
+        {
+        case CRDT_REGISTER_TYPE:
+            saveValue(rio, getCrdtRegister(), data);
+            break;
+        case CRDT_HASH_TYPE:
+            saveValue(rio, getCrdtHash(), data);
+            break;
+        }   
+    }
+    CrdtTombstone* tombstone = RedisModule_ModuleTypeGetTombstone(moduleKey);
+    if(tombstone != NULL) {
+        switch (tombstone->type)
+        {
+        case CRDT_REGISTER_TYPE:
+            saveValue(rio, getCrdtRegisterTombstone(), tombstone);
+            break;
+        case CRDT_HASH_TYPE:
+            saveValue(rio, getCrdtHashTombstone(), tombstone);
+            break;
+        }
+    }
+    
+    CrdtExpire *expire = RedisModule_GetCrdtExpire(moduleKey);
+    if(expire != NULL) {
+        saveValue(rio, getCrdtExpireType(), expire);
+    }
+    CrdtExpireTombstone* expire_tombstone = RedisModule_GetCrdtExpireTombstone(moduleKey);
+    if(expire_tombstone != NULL) {
+        saveValue(rio, getCrdtExpireTombstoneType(), expire_tombstone);
+    }
+    RedisModule_SaveLen(rio, RDB_VALUE_EOF);
+error:
+    if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
+}
+
+int RdbLoadCrdtValue(void* db, RedisModuleString* key, void* rio) {
+    void *data = NULL;
+    RedisModuleKey* moduleKey = RedisModule_GetKey(db, key, REDISMODULE_WRITE| REDISMODULE_TOMBSTONE);
+    int result = C_OK;
+    while(1) {
+        uint64_t typeId = RedisModule_LoadLen(rio);
+        if (RDB_VALUE_EOF == typeId) break;
+        RedisModuleType* type = RedisModule_GetModuleTypeById(typeId);
+        void* data = NULL;
+        if(type != NULL) {
+            data = RedisModule_LoadModuleValue(rio, type);
+        }
+        if(data == NULL) {
+            result = C_ERR;
+            goto error;
+        }
+        if(type == getCrdtRegister()) {
+            RedisModule_ModuleTypeSetValue(moduleKey, type, data);
+        } else if(type == getCrdtHash()) {
+            RedisModule_ModuleTypeSetValue(moduleKey, type, data);
+        } else if(type == getCrdtRegisterTombstone()) {
+            RedisModule_ModuleTombstoneSetValue(moduleKey, type, data);
+        } else if(type == getCrdtHashTombstone()) {
+            RedisModule_ModuleTombstoneSetValue(moduleKey, type, data);
+        } else if(type == getCrdtExpireType()) {
+            RedisModule_SetCrdtExpire(moduleKey, type, data);
+        } else if(type == getCrdtExpireTombstoneType()) {
+            RedisModule_SetCrdtExpireTombstone(moduleKey, type, data);
+        }else{
+            result = C_ERR;
+            goto error;
+        }
+    }
+error:
+    if(moduleKey != NULL) {RedisModule_CloseKey(moduleKey);}
+    return result;
+}
 
 /* This function must be present on each Redis module. It is used in order to
  * register the commands into the Redis server. */

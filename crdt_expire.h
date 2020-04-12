@@ -6,6 +6,10 @@
 #define CRDT_EXPIRE_DATATYPE_NAME "crdt_expi"
 #define CRDT_EXPIRE_TOMBSTONE_DATATYPE_NAME "crdt_expt"
 
+static RedisModuleType *CrdtExpireType;
+static RedisModuleType *CrdtExpireTombstoneType;
+RedisModuleType* getCrdtExpireType();
+RedisModuleType* getCrdtExpireTombstoneType();
 void* createCrdtExpire();
 int initCrdtExpireModule(RedisModuleCtx *ctx);
 void *RdbLoadCrdtExpire(RedisModuleIO *rdb, int encver);

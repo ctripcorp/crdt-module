@@ -179,4 +179,6 @@ static dictType crdtHashTombstoneDictType = {
         dictSdsDestructor,          /* key destructor */
         dictCrdtRegisterTombstoneDestructor   /* val destructor */
 };
+RedisModuleType* getCrdtHash();
+RedisModuleType* getCrdtHashTombstone();
 #endif //XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H
