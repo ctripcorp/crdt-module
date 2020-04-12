@@ -60,7 +60,11 @@ CRDT_RegisterTombstone* createCrdtRegisterTombstone() {
 
 //CrdtRegister
 void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver) {
-    return RdbLoadLWWCrdtRegister(rdb, encver);
+    int type = RedisModule_LoadSigned(rdb);
+    if( type == LWW_TYPE) {
+        return RdbLoadLWWCrdtRegister(rdb, encver);
+    }
+    return NULL;
 }
 void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value) {
     RdbSaveLWWCrdtRegister(rdb, value);
@@ -80,7 +84,11 @@ void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value) {
 
 //CrdtRegisterTombstone
 void *RdbLoadCrdtRegisterTombstone(RedisModuleIO *rdb, int encver) {
-    return RdbLoadLWWCrdtRegisterTombstone(rdb, encver);
+    int type = RedisModule_LoadSigned(rdb);
+    if( type == LWW_TYPE) {
+        return RdbLoadLWWCrdtRegisterTombstone(rdb, encver);
+    }
+    return NULL;
 }
 
 void RdbSaveCrdtRegisterTombstone(RedisModuleIO *rdb, void *value) {

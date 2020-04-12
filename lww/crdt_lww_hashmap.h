@@ -59,7 +59,11 @@ void freeCrdtHashTombstone(void *data) {
 }
 //basic hash module functions
 void *RdbLoadCrdtHash(RedisModuleIO *rdb, int encver) {
-    return RdbLoadCrdtLWWHash(rdb, encver);
+    int type = RedisModule_LoadSigned(rdb);
+    if( type == LWW_TYPE) {
+        return RdbLoadCrdtLWWHash(rdb, encver);
+    }
+    return NULL;
 }
 void RdbSaveCrdtHash(RedisModuleIO *rdb, void *value) {
     RdbSaveCrdtLWWHash(rdb, value);
@@ -76,7 +80,11 @@ void crdtHashDigestFunc(RedisModuleDigest *md, void *value) {
 }
 //basic hash tombstone module functions
 void *RdbLoadCrdtHashTombstone(RedisModuleIO *rdb, int encver) {
-    return RdbLoadCrdtLWWHashTombstone(rdb, encver);
+    int type = RedisModule_LoadSigned(rdb);
+    if( type == LWW_TYPE) {
+        return RdbLoadCrdtLWWHashTombstone(rdb, encver);
+    }
+    return NULL;
 }
 void RdbSaveCrdtHashTombstone(RedisModuleIO *rdb, void *value) {
     RdbSaveCrdtLWWHashTombstone(rdb, value);

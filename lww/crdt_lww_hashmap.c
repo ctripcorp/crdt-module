@@ -159,6 +159,7 @@ void *RdbLoadCrdtLWWHash(RedisModuleIO *rdb, int encver) {
     return crdtHash;
 }
 void RdbSaveCrdtLWWHash(RedisModuleIO *rdb, void *value) {
+    RedisModule_SaveSigned(rdb, LWW_TYPE);
     CRDT_LWW_Hash *crdtHash = retrieveCrdtLWWHash(value);
     rdbSaveVectorClock(rdb, crdtHash->lastVc);
     RdbSaveCrdtBasicHash(rdb, &crdtHash->parent);
@@ -207,6 +208,7 @@ void *RdbLoadCrdtLWWHashTombstone(RedisModuleIO *rdb, int encver) {
     return crdtHashTombstone;
 }
 void RdbSaveCrdtLWWHashTombstone(RedisModuleIO *rdb, void *value) {
+    RedisModule_SaveSigned(rdb, LWW_TYPE);
     CRDT_LWW_HashTombstone *crdtHashTombstone = retrieveCrdtLWWHashTombstone(value);
     if(crdtHashTombstone->maxDelMeta->vectorClock == NULL) {
         RedisModule_SaveSigned(rdb, NO_HASH_MAXDEL);
