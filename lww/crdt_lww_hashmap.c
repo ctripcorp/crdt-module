@@ -34,20 +34,29 @@ VectorClock* getLastVctLWWHash(void* data) {
     CRDT_LWW_Hash* crdtHash = retrieveCrdtLWWHash(data);
     return crdtHash->lastVc;
 }
+void updateLastVCLWWHash(void* data, VectorClock* vc) {
+    CRDT_LWW_Hash* crdtHash = retrieveCrdtLWWHash(data);
+    VectorClock* old = crdtHash->lastVc;
+    crdtHash->lastVc = vectorClockMerge(old, vc);
+    freeVectorClock(old);
+}
 static CrdtHashMethod LWW_Hash_Methods = {
-    change: changeCrdtLWWHash,
-    dup: dupCrdtLWWHash,
-    getLastVC: getLastVctLWWHash
+    .change = changeCrdtLWWHash,
+    .dup = dupCrdtLWWHash,
+    .getLastVC = getLastVctLWWHash,
+    .updateLastVC = updateLastVCLWWHash,
 };
 
 void* createCrdtLWWHash() {
     CRDT_LWW_Hash *crdtHash = RedisModule_Alloc(sizeof(CRDT_LWW_Hash));
-    crdtHash->lastVc = NULL;
-    crdtHash->parent.parent.type = CRDT_HASH_TYPE;
-    crdtHash->parent.parent.method = &HashCommonMethod;
+    crdtHash->parent.parent.parent.type = CRDT_DATA;
+    crdtHash->parent.parent.parent.method = &HashCommonMethod;
+    crdtHash->parent.parent.dataType = CRDT_HASH_TYPE;
+    crdtHash->parent.parent.method = &HashDataMethod;
     crdtHash->parent.method = &LWW_Hash_Methods;
     dict *hash = dictCreate(&crdtHashDictType, NULL);
     crdtHash->parent.map = hash;
+    crdtHash->lastVc = NULL;
     return crdtHash;
 }
 
@@ -105,19 +114,20 @@ int changeCrdtLWWHashTombstone(void* data, CrdtMeta* meta) {
     return CRDT_OK;
 }
 static CrdtHashTombstoneMethod LWW_Hash_Tombstone_Methods = {
-    updateMaxDel: updateMaxDelCrdtLWWHashTombstone,
-    isExpire: isExpireCrdtLWWHashTombstone,
-    dup: dupCrdtLWWHashTombstone,
-    gc: gcCrdtLWWHashTombstone,
-    getMaxDel: getMaxDelCrdtLWWHashTombstone,
-    change: changeCrdtLWWHashTombstone
+    .updateMaxDel = updateMaxDelCrdtLWWHashTombstone,
+    .isExpire = isExpireCrdtLWWHashTombstone,
+    .dup = dupCrdtLWWHashTombstone,
+    .gc = gcCrdtLWWHashTombstone,
+    .getMaxDel = getMaxDelCrdtLWWHashTombstone,
+    .change = changeCrdtLWWHashTombstone
 };
 void* createCrdtLWWHashTombstone() {
     CRDT_LWW_HashTombstone *crdtHashTombstone = RedisModule_Alloc(sizeof(CRDT_LWW_HashTombstone));
     crdtHashTombstone->maxDelMeta = createMeta(-1, -1, NULL);
-    crdtHashTombstone->parent.parent.type = CRDT_HASH_TOMBSTONE_TYPE;
-    crdtHashTombstone->parent.parent.method = &HashTombstoneCommonMethod;
-    crdtHashTombstone->parent.method = &LWW_Hash_Tombstone_Methods;
+    crdtHashTombstone->parent.parent.parent.type = CRDT_DATA;
+    crdtHashTombstone->parent.parent.parent.method = &HashTombstoneCommonMethod;
+    crdtHashTombstone->parent.parent.dataType = CRDT_HASH_TYPE;
+     crdtHashTombstone->parent.method = &LWW_Hash_Tombstone_Methods;
     crdtHashTombstone->lastVc = NULL;
     dict *hash = dictCreate(&crdtHashTombstoneDictType, NULL);
     crdtHashTombstone->parent.map = hash;
@@ -126,7 +136,7 @@ void* createCrdtLWWHashTombstone() {
 CRDT_LWW_HashTombstone* retrieveCrdtLWWHashTombstone(void* data) {
     if(data == NULL) return NULL;
     CRDT_LWW_HashTombstone* result = (CRDT_LWW_HashTombstone*)data;
-    assert(result->parent.parent.type == CRDT_HASH_TOMBSTONE_TYPE);
+    assert(result->parent.parent.type == CRDT_HASH_TYPE);
     assert(result->parent.parent.method == &HashTombstoneCommonMethod);
     assert(result->parent.method == &LWW_Hash_Tombstone_Methods);
     return result;
@@ -166,7 +176,7 @@ void freeCrdtLWWHash(void *obj) {
     RedisModule_Free(crdtHash);
 }
 size_t crdtLWWHashMemUsageFunc(const void *value) {
-    CRDT_LWW_Hash *crdtHash = retrieveCrdtLWWHash(value);
+    CRDT_LWW_Hash *crdtHash = retrieveCrdtLWWHash((void*)value);
     size_t valSize = sizeof(CRDT_LWW_Hash) + crdtBasicHashMemUsageFunc(&crdtHash->parent);
     int vclcokNum = crdtHash->lastVc->length;
     size_t vclockSize = vclcokNum * sizeof(VectorClockUnit) + sizeof(VectorClock);
@@ -227,7 +237,7 @@ void freeCrdtLWWHashTombstone(void *obj) {
     RedisModule_Free(crdtHash);
 }
 size_t crdtLWWHashTombstoneMemUsageFunc(const void *value) {
-    CRDT_LWW_HashTombstone *crdtHash = retrieveCrdtLWWHashTombstone(value);
+    CRDT_LWW_HashTombstone *crdtHash = retrieveCrdtLWWHashTombstone((void*)value);
     size_t valSize = sizeof(CRDT_LWW_HashTombstone) + crdtBasicHashTombstoneMemUsageFunc(&crdtHash->parent);
     int vclcokNum = crdtHash->maxDelMeta->vectorClock->length;
     size_t vclockSize = vclcokNum * sizeof(VectorClockUnit) + sizeof(VectorClock);
