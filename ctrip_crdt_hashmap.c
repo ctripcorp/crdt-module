@@ -718,7 +718,12 @@ int hgetallCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 /*
  * Init Hash Module 
  */
-
+RedisModuleType* getCrdtHash() {
+    return CrdtHash;
+}
+RedisModuleType* getCrdtHashTombstone() {
+    return CrdtHashTombstone;
+}
 int initCrdtHashModule(RedisModuleCtx *ctx) {
     //hash object type
     RedisModuleTypeMethods tm = {

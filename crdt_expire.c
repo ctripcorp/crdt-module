@@ -1,7 +1,6 @@
 #include "crdt_expire.h"
 
-static RedisModuleType *CrdtExpireType;
-static RedisModuleType *CrdtExpireTombstoneType;
+
 CrdtExpireObj* addOrUpdateExpire(RedisModuleKey* moduleKey, CrdtData* data, CrdtMeta* meta,long long expireTime) {
     CrdtExpire* expire =  RedisModule_GetCrdtExpire(moduleKey);
     if(expire == NULL) {
@@ -261,7 +260,7 @@ int initCrdtExpireModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx, "TTL", 
-        ttlCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
+        ttlCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx, "PERSIST", 
@@ -269,7 +268,7 @@ int initCrdtExpireModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx, "CRDT.EXPIRE", 
-        crdtExpireCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
+        crdtExpireCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "CRDT.TTL", 
         crdtTtlCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
@@ -305,3 +304,9 @@ void addExpireTombstone(RedisModuleKey* moduleKey, int dataType, CrdtMeta* meta)
     }
 }
 
+RedisModuleType* getCrdtExpireType() {
+    return CrdtExpireType;
+}
+RedisModuleType* getCrdtExpireTombstoneType() {
+    return CrdtExpireTombstoneType;
+}

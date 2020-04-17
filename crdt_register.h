@@ -158,3 +158,7 @@ CRDT_RegisterTombstone* createCrdtRegisterTombstone();
 
 
 #endif //XREDIS_CRDT_CRDT_REGISTER_H
+static RedisModuleType *CrdtRegister;
+static RedisModuleType *CrdtRegisterTombstone;
+RedisModuleType* getCrdtRegister();
+RedisModuleType* getCrdtRegisterTombstone();

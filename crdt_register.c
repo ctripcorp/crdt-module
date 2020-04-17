@@ -61,8 +61,12 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 
 /**
  * ==============================================Register module init=========================================================*/
-
-static RedisModuleType *CrdtRegister;
+RedisModuleType* getCrdtRegister() {
+    return CrdtRegister;
+}
+RedisModuleType* getCrdtRegisterTombstone() {
+    return CrdtRegisterTombstone;
+}
 
 void *crdtRegisterMerge(void *currentVal, void *value) {
     if(currentVal == NULL && value == NULL) {
@@ -102,7 +106,7 @@ void* crdtRegisterTombstoneMerge(void* target, void* other) {
     return t->method->merge(t, (CRDT_RegisterTombstone*) other);
 }
 
-static RedisModuleType *CrdtRegisterTombstone;
+
 
 void* crdtRegisterTombstoneFilter(void* target, long long gid, long long logic_time) {
     if(!isRegisterTombstone(target)) {
