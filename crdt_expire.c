@@ -41,16 +41,8 @@ int tryAddOrUpdateExpire(RedisModuleKey* moduleKey, int type, CrdtExpireObj* obj
     
     return CRDT_OK;
 }
-
-//expire <key> <time>
-int expireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
-    RedisModule_AutoMemory(ctx);
-    if (argc < 3) return RedisModule_WrongArity(ctx);
-    long long time;
-    if ((RedisModule_StringToLongLong(argv[2],&time) != REDISMODULE_OK)) {
-        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
-    }
-    RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);  
+int expireAt(RedisModuleCtx* ctx, RedisModuleString *key, long long expireTime) {
+    RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
     CrdtMeta* meta = NULL;
     CrdtData *data;
     CrdtExpireObj* expireobj = NULL;
@@ -64,18 +56,36 @@ int expireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
         goto end;
     }
     meta = createIncrMeta();
-    long long expireTime = meta->timestamp + time * 1000;
     expireobj = addOrUpdateExpire(moduleKey, data, meta, expireTime);
 end:
     if(meta != NULL) {
         sds vcStr = vectorClockToSds(meta->vectorClock);
-        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllcll", argv[1], meta->gid, meta->timestamp, vcStr, expireobj->expireTime, (long long)(data->dataType));
+        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllcll", key, meta->gid, meta->timestamp, vcStr, expireobj->expireTime, (long long)(data->dataType));
         sdsfree(vcStr);
         freeCrdtMeta(meta);
     }
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     if(expireobj != NULL) freeCrdtExpireObj(expireobj);
     return RedisModule_ReplyWithLongLong(ctx, 0);
+}
+int expireAtCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
+    RedisModule_AutoMemory(ctx);
+    if (argc < 3) return RedisModule_WrongArity(ctx);
+    long long time;
+    if ((RedisModule_StringToLongLong(argv[2],&time) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    }
+    return expireAt(ctx, argv[1], time);
+}
+//expire <key> <time>
+int expireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
+    RedisModule_AutoMemory(ctx);
+    if (argc < 3) return RedisModule_WrongArity(ctx);
+    long long time;
+    if ((RedisModule_StringToLongLong(argv[2],&time) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    }
+    return expireAt(ctx, argv[1], RedisModule_Milliseconds() + time * 1000);
 }
 //CRDT.EXPIRE key gid time vc expireTime type
 int crdtExpireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
@@ -259,6 +269,10 @@ int initCrdtExpireModule(RedisModuleCtx *ctx) {
         expireCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
+    if (RedisModule_CreateCommand(ctx, "EXPIREAT", 
+        expireAtCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
+        return REDISMODULE_ERR;
+    }
     if (RedisModule_CreateCommand(ctx, "TTL", 
         ttlCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
@@ -271,7 +285,7 @@ int initCrdtExpireModule(RedisModuleCtx *ctx) {
         crdtExpireCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "CRDT.TTL", 
-        crdtTtlCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
+        crdtTtlCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "CRDT.PERSIST", 
         crdtPersistCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
