@@ -130,12 +130,14 @@ void *RdbLoadLWWCrdtRegister(RedisModuleIO *rdb, int encver) {
 }
 
 void RdbSaveLWWCrdtRegisterTombstone(RedisModuleIO *rdb, void *value) {
+    RedisModule_SaveSigned(rdb, LWW_TYPE);
     CRDT_LWW_RegisterTombstone *tombstone = retrieveCrdtLWWRegisterTombstone(value);
     RedisModule_SaveSigned(rdb, tombstone->meta->gid);
     RedisModule_SaveSigned(rdb, tombstone->meta->timestamp);
     rdbSaveVectorClock(rdb, tombstone->meta->vectorClock);
 }
 void RdbSaveLWWCrdtRegister(RedisModuleIO *rdb, void *value) {
+    RedisModule_SaveSigned(rdb, LWW_TYPE);
     CRDT_LWW_Register *crdtRegister = retrieveCrdtLWWRegister(value);
     RedisModule_SaveSigned(rdb, crdtRegister->value.meta->gid);
     RedisModule_SaveSigned(rdb, crdtRegister->value.meta->timestamp);

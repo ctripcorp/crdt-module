@@ -44,6 +44,9 @@
 
 #define CRDT_REGISTER_TYPE 1
 #define CRDT_HASH_TYPE 2
+
+#define LWW_TYPE 1
+#define ORSET_TYPE 2
 struct CrdtObject;
 struct CrdtTombstone;
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);

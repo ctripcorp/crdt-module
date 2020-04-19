@@ -83,6 +83,7 @@ void *RdbLoadCrdtLWWExpire(RedisModuleIO *rdb, int encver) {
 
 void *RdbSaveCrdtLWWExpire(RedisModuleIO *rdb, void *value) {
     CrdtLWWExpire* expire = retrieveCrdtLWWExpire(value);
+    RedisModule_SaveSigned(rdb, LWW_TYPE);
     RedisModule_SaveSigned(rdb, expire->parent.dataType);
     RedisModule_SaveSigned(rdb, expire->data->meta->gid);
     RedisModule_SaveSigned(rdb, expire->data->meta->timestamp);
@@ -172,6 +173,7 @@ void *RdbLoadCrdtLWWExpireTombstone(RedisModuleIO *rdb, int encver) {
     if (encver != 0) {
         return NULL;
     }
+    
     int dataType = RedisModule_LoadSigned(rdb);
     CrdtLWWExpireTombstone *tombstone = createCrdtLWWExpireTombstone(dataType);
     int gid = RedisModule_LoadSigned(rdb);
@@ -183,6 +185,7 @@ void *RdbLoadCrdtLWWExpireTombstone(RedisModuleIO *rdb, int encver) {
 
 void RdbSaveCrdtLWWExpireTombstone(RedisModuleIO *rdb, void *value) {
     CrdtLWWExpireTombstone* tombstone = retrieveCrdtLWWExpireTombstone(value);
+    RedisModule_SaveSigned(rdb, LWW_TYPE);
     RedisModule_SaveSigned(rdb, tombstone->parent.dataType);
     RedisModule_SaveSigned(rdb, tombstone->meta->gid);
     RedisModule_SaveSigned(rdb, tombstone->meta->timestamp);

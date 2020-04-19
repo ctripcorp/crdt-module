@@ -13,7 +13,11 @@ void* createCrdtExpire() {
 
 void *RdbLoadCrdtLWWExpire(RedisModuleIO *rdb, int encver);
 void *  RdbLoadCrdtExpire(RedisModuleIO *rdb, int encver) {
-    return RdbLoadCrdtLWWExpire(rdb, encver);
+    int type = RedisModule_LoadSigned(rdb);
+    if( type == LWW_TYPE) {
+        return RdbLoadCrdtLWWExpire(rdb, encver);
+    }
+    return NULL;
 }
 void AofRewriteCrdtLWWExpire(RedisModuleIO *aof, RedisModuleString *key, void *value);
 void AofRewriteCrdtExpire(RedisModuleIO *aof, RedisModuleString *key, void *value) {
@@ -47,11 +51,15 @@ CrdtExpireTombstone* createCrdtExpireTombstone(int dataType) {
 }
 void *RdbLoadCrdtLWWExpireTombstone(RedisModuleIO *rdb, int encver);
 void *RdbLoadCrdtExpireTombstone(RedisModuleIO *rdb, int encver) {
-    return RdbLoadCrdtLWWExpireTombstone(rdb, encver);
+    int type = RedisModule_LoadSigned(rdb);
+    if( type == LWW_TYPE) {
+        return RdbLoadCrdtLWWExpireTombstone(rdb, encver);
+    }
+    return NULL;
 }
 void RdbSaveCrdtLWWExpireTombstone(RedisModuleIO *rdb, void *value);
 void RdbSaveCrdtExpireTombstone(RedisModuleIO *rdb, void *value) {
-     RdbSaveCrdtLWWExpireTombstone(rdb, value);
+    RdbSaveCrdtLWWExpireTombstone(rdb, value);
 }
 void AofRewriteCrdtLWWExpireTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
 void AofRewriteCrdtExpireTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {
