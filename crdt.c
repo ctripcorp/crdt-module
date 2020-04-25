@@ -202,17 +202,17 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     }
 
     if(initCrdtHashModule(ctx) != REDISMODULE_OK) {
-        RedisModule_Log(ctx, "warning", "hash module -- register failed");
+        RedisModule_Log(ctx, "warning", "hash module -- hash failed");
         return REDISMODULE_ERR;
     }
 
     if(initPubsubModule(ctx) != REDISMODULE_OK) {
-        RedisModule_Log(ctx, "warning", "hash module -- register failed");
+        RedisModule_Log(ctx, "warning", "hash module -- pubsub failed");
         return REDISMODULE_ERR;
     }
 
     if(initCrdtExpireModule(ctx) != REDISMODULE_OK) {
-        RedisModule_Log(ctx, "warning", "expire module -- register failed");
+        RedisModule_Log(ctx, "warning", "expire module -- expire failed");
         return REDISMODULE_ERR;
     }
 
