@@ -20,13 +20,23 @@ void freeCrdtExpire(void* value);
 void crdtExpireDigestFunc(RedisModuleDigest *md, void *value);
 
 CrdtObject* CrdtExpireMerge(CrdtObject* target, CrdtObject* other);
-CrdtObject* CrdtExpireFilter(CrdtObject* common, long long gid, long long logic_time);
+CrdtObject* CrdtExpireFilter(CrdtObject* common, int gid, long long logic_time);
 static CrdtObjectMethod CrdtExpireCommonMethod = {
     .merge = CrdtExpireMerge,
     .filter = CrdtExpireFilter,
 };
 void expirePersist(CrdtExpire* expire,  RedisModuleKey* moduleKey, int dbId, RedisModuleString* key);
-
+int crdtExpireAddObj(CrdtExpire* obj, CrdtExpireObj* data);
+CrdtExpireObj* crdtExpireGetObj(CrdtExpire* obj);
+CrdtExpire* crdtExpireDup(CrdtExpire* obj);
+void crdtExpireFree(CrdtExpire* obj);
+static CrdtExpireMethod ExpireMethod = {
+    add: crdtExpireAddObj,
+    get: crdtExpireGetObj,
+    dup: crdtExpireDup,
+    free: crdtExpireFree,
+    persist: expirePersist,
+};
 
 CrdtExpireTombstone* createCrdtExpireTombstone(int dataType);
 void *RdbLoadCrdtExpireTombstone(RedisModuleIO *rdb, int encver);
@@ -42,7 +52,7 @@ void addExpireTombstone(RedisModuleKey* moduleKey,int dataType, CrdtMeta* meta);
 CrdtExpireObj* addOrUpdateExpire(RedisModuleKey* moduleKey, CrdtData* data, CrdtMeta* meta,long long expireTime);
 int tryAddOrUpdateExpire(RedisModuleKey* moduleKey, int type, CrdtExpireObj* obj);
 CrdtTombstone* crdtExpireTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other);
-CrdtTombstone* crdtExpireTombstoneFilter(CrdtTombstone* target, long long gid, long long logic_time);
+CrdtTombstone* crdtExpireTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time);
 int crdtExpireTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current);
 int crdtExpireTombstoneGc(void* target, VectorClock* clock); 
 static CrdtTombstoneMethod ExpireTombstoneCommonMethod = {
@@ -50,6 +60,12 @@ static CrdtTombstoneMethod ExpireTombstoneCommonMethod = {
     .filter =  crdtExpireTombstoneFilter,
     .gc = crdtExpireTombstoneGc,
     .purage = crdtExpireTombstonePurage,
+};
+int CrdtExpireIsExpire(void* data, CrdtMeta* meta);
+int CrdtExpireTombstoneAdd(void* data, CrdtMeta* meta);
+static CrdtExpireTombstoneMethod ExpireTombstoneMethod = {
+    .add = CrdtExpireTombstoneAdd,
+    .isExpire = CrdtExpireIsExpire
 };
 //debug
 int crdtGetExpireTombstoneCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc);

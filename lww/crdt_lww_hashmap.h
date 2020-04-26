@@ -25,7 +25,7 @@ void freeCrdtLWWHashTombstone(void* obj);
 CRDT_LWW_Hash* retrieveCrdtLWWHash(void* obj);
 CRDT_LWW_HashTombstone* retrieveCrdtLWWHashTombstone(void* data);
 //common methods
-CrdtObject* crdtLWWHashFilter(CrdtObject* common, long long gid, long long logic_time);
+CrdtObject* crdtLWWHashFilter(CrdtObject* common, int gid, long long logic_time);
 int crdtLWWHashClean(CrdtObject* current, CrdtTombstone* tombstone);
 int crdtLWWHashGc(void* target, VectorClock* clock);
 //private hash module functions 
@@ -73,7 +73,7 @@ void AofRewriteCrdtHash(RedisModuleIO *aof, RedisModuleString *key, void *value)
 }
 
 size_t crdtHashMemUsageFunc(const void *value) {
-    crdtLWWHashMemUsageFunc(value);
+    return crdtLWWHashMemUsageFunc(value);
 }
 void crdtHashDigestFunc(RedisModuleDigest *md, void *value) {
     crdtLWWHashDigestFunc(md, value);
@@ -94,9 +94,52 @@ void AofRewriteCrdtHashTombstone(RedisModuleIO *aof, RedisModuleString *key, voi
 }
 
 size_t crdtHashTombstoneMemUsageFunc(const void *value) {
-    crdtLWWHashTombstoneMemUsageFunc(value);
+    return crdtLWWHashTombstoneMemUsageFunc(value);
 }
 void crdtHashTombstoneDigestFunc(RedisModuleDigest *md, void *value) {
     crdtLWWHashTombstoneDigestFunc(md, value);
 }
+int changeCrdtLWWHash(CRDT_Hash* hash, CrdtMeta* meta) ;
+int changeCrdtHash(CRDT_Hash* hash, CrdtMeta* meta) {
+    return changeCrdtLWWHash(hash,meta);
+}
+CRDT_Hash* dupCrdtLWWHash(void* data);
+CRDT_Hash* dupCrdtHash(void* data) {
+    return dupCrdtLWWHash(data);
+}
+VectorClock* getLastVcLWWHash(void* data);
+VectorClock* getLastVcHash(void* data) {
+    return getLastVcLWWHash(data);
+}
+void updateLastVCLWWHash(void* data, VectorClock* vc);
+void updateLastVCHash(void* data, VectorClock* vc) {
+    return updateLastVCLWWHash(data, vc);
+}
+
+//tombstone
+CrdtMeta* updateMaxDelCrdtLWWHashTombstone(void* data, CrdtMeta* meta);
+CrdtMeta* updateMaxDelCrdtHashTombstone(void* data, CrdtMeta* meta) {
+    return updateMaxDelCrdtLWWHashTombstone(data, meta);
+}
+int isExpireCrdtLWWHashTombstone(void* data, CrdtMeta* meta);
+int isExpireCrdtHashTombstone(void* data, CrdtMeta* meta) {
+    return isExpireCrdtLWWHashTombstone(data, meta);
+}
+CRDT_HashTombstone* dupCrdtLWWHashTombstone(void* data);
+CRDT_HashTombstone* dupCrdtHashTombstone(void* data) {
+    return dupCrdtLWWHashTombstone(data);
+}
+int gcCrdtLWWHashTombstone(void* data, VectorClock* clock);
+int gcCrdtHashTombstone(void* data, VectorClock* clock) {
+    return gcCrdtLWWHashTombstone(data, clock);
+}
+CrdtMeta* getMaxDelCrdtLWWHashTombstone(void* data);
+CrdtMeta* getMaxDelCrdtHashTombstone(void* data) {
+    return getMaxDelCrdtLWWHashTombstone(data);
+}
+int changeCrdtLWWHashTombstone(void* data, CrdtMeta* meta);
+int changeCrdtHashTombstone(void* data, CrdtMeta* meta) {
+    return changeCrdtLWWHashTombstone(data, meta);
+}
+
 #endif //XREDIS_CRDT_CRDT_LWW_HASHMAP_H

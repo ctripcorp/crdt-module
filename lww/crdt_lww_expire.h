@@ -23,7 +23,7 @@ void AofRewriteCrdtLWWExpire(RedisModuleIO *aof, RedisModuleString *key, void *v
 void AofRewriteCrdtExpire(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     AofRewriteCrdtLWWExpire(aof, key, value);
 }
-void* RdbSaveCrdtLWWExpire(RedisModuleIO *rdb, void *value);
+void RdbSaveCrdtLWWExpire(RedisModuleIO *rdb, void *value);
 void RdbSaveCrdtExpire(RedisModuleIO *rdb, void *value) {
     RdbSaveCrdtLWWExpire(rdb, value);
 }
@@ -36,9 +36,9 @@ void crdtLWWExpireDigestFunc(RedisModuleDigest *md, void *value);
 void crdtExpireDigestFunc(RedisModuleDigest *md, void *value) {
     crdtLWWExpireDigestFunc(md, value);
 }
-void LWWExpireFree(CrdtExpire* value);
+void crdtExpireFree(CrdtExpire* value);
 void freeCrdtExpire(void* value) {
-    LWWExpireFree(value);
+    crdtExpireFree(value);
 }
 //crdtExpire
 typedef struct CrdtLWWExpireTombstone {
@@ -78,8 +78,9 @@ void crdtExpireTombstoneDigestFunc(RedisModuleDigest *md, void *value) {
     crdtLWWExpireTombstoneDigestFunc(md, value);
 }
 
-CrdtObject* CrdtLWWExpireFilter(CrdtObject* common, long long gid, long long logic_time);
-CrdtObject* CrdtExpireFilter(CrdtObject* common, long long gid, long long logic_time) {
+CrdtObject* CrdtLWWExpireFilter(CrdtObject* common, int gid, long long logic_time);
+CrdtObject* CrdtExpireFilter(CrdtObject* common, int gid, long long logic_time) {
+    RedisModule_Debug(logLevel, "yyy");
     return CrdtLWWExpireFilter(common, gid, logic_time);
 }
 CrdtObject* CrdtLWWExpireMerge(CrdtObject* target, CrdtObject* other);
@@ -91,8 +92,8 @@ CrdtTombstone* crdtLWWExpireTombstoneMerge(CrdtTombstone* target, CrdtTombstone*
 CrdtTombstone* crdtExpireTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other) {
     return crdtLWWExpireTombstoneMerge(target, other);
 }
-CrdtTombstone* crdtLWWExpireTombstoneFilter(CrdtTombstone* target, long long gid, long long logic_time);
-CrdtTombstone* crdtExpireTombstoneFilter(CrdtTombstone* target, long long gid, long long logic_time) {
+CrdtTombstone* crdtLWWExpireTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time);
+CrdtTombstone* crdtExpireTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time) {
     return crdtLWWExpireTombstoneFilter(target, gid, logic_time);
 }
 int crdtLWWExpireTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current); 

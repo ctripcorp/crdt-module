@@ -37,11 +37,38 @@
 #include "ctrip_crdt_hashmap.h"
 #include "crdt_pubsub.h"
 #include "crdt_expire.h"
+#include "ctrip_crdt_common.h"
 #define CRDT_API_VERSION 1
 
-
+int testCreate() {
+    Crdt_Test_Object* a = RedisModule_Alloc(sizeof(Crdt_Test_Object));
+    RedisModule_Free(a);
+    Crdt_Final_Object* b = RedisModule_Alloc(sizeof(Crdt_Final_Object));
+    RedisModule_Free(b);
+    CRDT_Test_RegisterTombstone* c = RedisModule_Alloc(sizeof(CRDT_Test_RegisterTombstone));
+    RedisModule_Free(c);
+    CRDT_Final_RegisterTombstone* d = RedisModule_Alloc(sizeof(CRDT_Final_RegisterTombstone));
+    RedisModule_Free(d);
+    CRDT_Test_Expire* e = RedisModule_Alloc(sizeof(CRDT_Test_Expire));
+    RedisModule_Free(e);
+    CRDT_Final_Expire* f = RedisModule_Alloc(sizeof(CRDT_Final_Expire));
+    RedisModule_Free(f);
+    CRDT_Test_ExpireTombstone* g = RedisModule_Alloc(sizeof(CRDT_Test_ExpireTombstone));
+    RedisModule_Free(g);
+    CRDT_Final_ExpireTombstone* h = RedisModule_Alloc(sizeof(CRDT_Final_ExpireTombstone));
+    RedisModule_Free(h);
+    CRDT_Test_Hash* i = RedisModule_Alloc(sizeof(CRDT_Test_Hash));
+    RedisModule_Free(i);
+    CRDT_Final_Hash* j = RedisModule_Alloc(sizeof(CRDT_Final_Hash));
+    RedisModule_Free(j);
+    CRDT_Test_HashTombstone* k = RedisModule_Alloc(sizeof(CRDT_Test_HashTombstone));
+    RedisModule_Free(k);
+    CRDT_Final_HashTombstone* l = RedisModule_Alloc(sizeof(CRDT_Final_HashTombstone));
+    RedisModule_Free(l);
+    return 1;
+}
 int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
+    testCreate();
     RedisModule_AutoMemory(ctx);
 
     if (argc < 2) return RedisModule_WrongArity(ctx);
@@ -57,8 +84,11 @@ int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             if (crdtObj == NULL) {
                 continue;
             }
-            CrdtData *crdtCommon = (CrdtData *) crdtObj;
-            int result = crdtCommon->method->propagateDel(RedisModule_GetSelectedDb(ctx), argv[i], moduleKey, crdtObj);
+            CrdtDataMethod* method = getCrdtDataMethod(crdtObj);
+            if(method == NULL) {
+                continue;
+            }
+            int result = method->propagateDel(RedisModule_GetSelectedDb(ctx), argv[i], moduleKey, crdtObj);
             if(result) {
                 RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[i]);
                 numl ++;
@@ -110,9 +140,9 @@ int saveValue(void *rio, RedisModuleType* type, void* data) {
 }
 void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key) {
     RedisModuleKey* moduleKey = RedisModule_GetKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
-    CrdtData* data = RedisModule_ModuleTypeGetValue(moduleKey);
+    CrdtObject* data = RedisModule_ModuleTypeGetValue(moduleKey);
     if(data != NULL) {
-        switch (data->dataType)
+        switch (getDataType(data->type))
         {
         case CRDT_REGISTER_TYPE:
             saveValue(rio, getCrdtRegister(), data);
@@ -124,7 +154,7 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key) {
     }
     CrdtTombstone* tombstone = RedisModule_ModuleTypeGetTombstone(moduleKey);
     if(tombstone != NULL) {
-        switch (tombstone->type)
+        switch (getDataType(tombstone->type))
         {
         case CRDT_REGISTER_TYPE:
             saveValue(rio, getCrdtRegisterTombstone(), tombstone);
@@ -185,13 +215,90 @@ error:
     if(moduleKey != NULL) {RedisModule_CloseKey(moduleKey);}
     return result;
 }
+int isTombstone(int type) {
+    return type & CRDT_TOMBSTONE;
+}
+int isData(int type) {
+    return type & CRDT_DATA;
+}
+int isExpire(int type) {
+    return type & CRDT_EXPIRE;
+}
+int getDataType(int type) {
+    if(type & CRDT_REGISTER_TYPE) {
+        return CRDT_REGISTER_TYPE;
+    } else if(type & CRDT_HASH_TYPE) {
+        return CRDT_HASH_TYPE;
+    }else{
+        RedisModule_Debug(logLevel, "getDataType over %lld", type);
+        exit(0);
+        return 0;
+    }
+}
+CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
+    if(!isData(data->type)) {
+        return NULL;
+    }
+    switch (getDataType(data->type)) {
+        case CRDT_REGISTER_TYPE:
+            return &RegisterDataMethod;
+        case CRDT_HASH_TYPE:
+            return &HashDataMethod;
+        default:
+            return NULL;
+    }
+}
+CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
+    if(isTombstone(obj->type)) {
+        exit(1);
+        return NULL;
+    }
+    if(isData(obj->type)) {
+        switch (getDataType(obj->type)) {
+            case CRDT_REGISTER_TYPE:
+                return &RegisterCommonMethod;
+            case CRDT_HASH_TYPE:
+                return &HashCommonMethod;
+            default:
+                return NULL;
+        }
+    } else if(isExpire(obj->type)) {
+        RedisModule_Debug(logLevel, "is expire");
+        return &CrdtExpireCommonMethod;
+    }
+    return NULL;
+}
+
+CrdtExpireMethod* getCrdtExpireMethod(CrdtObject* obj) {
+    if(!isExpire(obj->type)) {
+        return NULL;
+    }
+    return &ExpireMethod;
+}
+CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
+    if(!isTombstone(tombstone->type)) {
+        exit(1);
+        return NULL;
+    }
+    if(isData(tombstone->type)) {
+        switch (getDataType(tombstone->type)) {
+            case CRDT_REGISTER_TYPE:
+                return &RegisterTombstoneMethod;
+            case CRDT_HASH_TYPE:
+                return &HashTombstoneCommonMethod;
+            default:
+                return NULL;
+        }
+    } else if(isExpire(tombstone->type)) {
+        return &ExpireTombstoneCommonMethod;
+    }
+}
 
 /* This function must be present on each Redis module. It is used in order to
  * register the commands into the Redis server. */
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     REDISMODULE_NOT_USED(argv);
     REDISMODULE_NOT_USED(argc);
-
     logLevel = sdsnew(CRDT_DEFAULT_LOG_LEVEL);
     if (RedisModule_Init(ctx, MODULE_NAME, CRDT_API_VERSION, REDISMODULE_APIVER_1)
         == REDISMODULE_ERR) return REDISMODULE_ERR;
