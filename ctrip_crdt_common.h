@@ -34,16 +34,21 @@
 #define REDIS_CTRIP_CRDT_COMMON_H
 
 #include "include/rmutil/sds.h"
+#include "include/rmutil/dict.h"
 #include "ctrip_vector_clock.h"
 #include "redismodule.h"
 
 #define CRDT_MODULE_OBJECT_PREFIX "crdt"
 
-#define CRDT_DATA 1
-#define CRDT_EXPIRE 2
 
-#define CRDT_REGISTER_TYPE 1
-#define CRDT_HASH_TYPE 2
+
+#define CRDT_TOMBSTONE (1<<30)
+#define CRDT_EXPIRE (1<<29)
+#define CRDT_DATA (1<<28)
+#define CRDT_LWW (1<<27)
+#define CRDT_REGISTER_TYPE (1<<0)
+#define CRDT_HASH_TYPE (1<<1)
+
 
 #define LWW_TYPE 1
 #define ORSET_TYPE 2
@@ -51,7 +56,7 @@ struct CrdtObject;
 struct CrdtTombstone;
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
-typedef void* (*crdtFilterFunc)(void* common, long long gid, long long logic_time);
+typedef void* (*crdtFilterFunc)(void* common, int gid, long long logic_time);
 //typedef void (*crdtGcFunc)(void *crdtObj);
 typedef int (*crdtCleanFunc)(struct CrdtObject* value, struct CrdtTombstone* tombstone);
 typedef int (*crdtGcFunc)(struct CrdtTombstone* value, VectorClock* clock);
@@ -70,7 +75,7 @@ typedef struct CrdtObjectMethod {
 
 typedef struct CrdtObject {
     int type;
-    CrdtObjectMethod* method;
+    // CrdtObjectMethod* method;
 } CrdtObject;
 typedef VectorClock* (*crdtGetLastVCFunc)(void* value);
 typedef void* (*crdtUpdateLastVCFunc)(void* value,VectorClock* data);
@@ -81,8 +86,8 @@ typedef struct CrdtDataMethod {
 } CrdtDataMethod;
 typedef struct CrdtData {
     CrdtObject parent;
-    int dataType;
-    CrdtDataMethod* method;
+    // int dataType;
+    // CrdtDataMethod* method;
 } CrdtData;
 typedef struct CrdtExpireObj {
     CrdtMeta* meta;
@@ -105,8 +110,8 @@ typedef struct CrdtExpireMethod {
 } CrdtExpireMethod;
 typedef struct CrdtExpire {
     CrdtObject parent;
-    int dataType;
-    CrdtExpireMethod* method;
+    // int dataType;
+    // CrdtExpireMethod* method;
 } CrdtExpire;
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
@@ -117,11 +122,11 @@ typedef struct CrdtTombstoneMethod {
 
 typedef struct CrdtTombstone {
     int type;
-    CrdtTombstoneMethod* method;
+    // CrdtTombstoneMethod* method;
 } CrdtTombstone;
 typedef struct CrdtDataTombstone {
     CrdtTombstone parent;
-    int dataType;
+    // int dataType;
 } CrdtDataTombstone;
 typedef int (*crdtIsExpireFunc)(void* target, CrdtMeta* meta);
 typedef int (*crdtExpireTombstoneAddFunc)(void* target, CrdtMeta* meta);
@@ -131,8 +136,8 @@ typedef struct CrdtExpireTombstoneMethod {
 } CrdtExpireTombstoneMethod;
 typedef struct CrdtExpireTombstone {
     CrdtTombstone parent;
-    int dataType;
-    CrdtExpireTombstoneMethod* method;
+    // int dataType;
+    // CrdtExpireTombstoneMethod* method;
 } CrdtExpireTombstone;
 // CrdtCommon* createCommon(int gid, long long timestamp, VectorClock* vclock);
 // CrdtCommon* createIncrCommon();
@@ -143,6 +148,8 @@ void appendVCForMeta(CrdtMeta* target, VectorClock* vc);
 void freeCrdtMeta(CrdtMeta* meta);
 void freeCrdtObject(CrdtObject* object);
 void freeCrdtTombstone(CrdtTombstone* tombstone);
+int getDataType(int type);
+CrdtDataMethod* getCrdtDataMethod(CrdtObject* data);
 // void freeCommon(CrdtCommon* common);
 
 #define COMPARE_META_VECTORCLOCK_GT 1
@@ -157,4 +164,108 @@ int isConflictMeta(int result);
 void crdtMetaCp(CrdtMeta *from, CrdtMeta* to);
 int appendCrdtMeta(CrdtMeta *target , CrdtMeta* other);
 // int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
+
+ typedef struct Crdt_Test_Object {
+    int type;//4
+    int gid;//4
+    int vclen;//4
+    VectorClockUnit* vc;//8
+    long long timestamp;//8
+    sds value;//8
+} __attribute__ ((packed, aligned(4))) Crdt_Test_Object;
+
+typedef struct Crdt_Final_Object {//
+    unsigned type:2;
+    unsigned gid:1;
+    unsigned vclen:1;
+    VectorClockUnit* vc;//8
+    long long timestamp;//8
+    long long expireTime;//8
+} __attribute__ ((packed, aligned(4))) Crdt_Final_Object;
+
+typedef struct  CRDT_Test_RegisterTombstone {//28
+    int type;//4
+    int gid;//4
+    int vclen;//4
+    VectorClockUnit* vc;//8
+    long long timestamp;//8
+} __attribute__ ((packed, aligned(4))) CRDT_Test_RegisterTombstone;
+typedef struct  CRDT_Final_RegisterTombstone {//20
+    unsigned type:2;
+    unsigned gid:1;
+    unsigned vclen:1;
+    VectorClockUnit* vc;//8
+    long long timestamp;//8
+} __attribute__ ((packed, aligned(4))) CRDT_Final_RegisterTombstone;
+typedef struct  CRDT_Test_Expire {//36
+    int type;//4
+    int gid;//4
+    int vclen;//4
+    VectorClockUnit* vc;//8
+    long long timestamp;//8
+    long long expireTime;//8
+} __attribute__ ((packed, aligned(4))) CRDT_Test_Expire;
+
+typedef struct  CRDT_Final_Expire { //28
+    unsigned type:2;
+    unsigned gid:1;
+    unsigned vclen:1;
+    VectorClockUnit* vc;//8
+    long long timestamp;//8
+    long long expireTime;//8
+} __attribute__ ((packed, aligned(4))) CRDT_Final_Expire;
+
+
+typedef struct  CRDT_Test_ExpireTombstone { //28
+    int type;//4
+    int gid;//4
+    int vclen;//4
+    VectorClockUnit* vc;//8
+    long long timestamp;//8
+} __attribute__ ((packed, aligned(4))) CRDT_Test_ExpireTombstone;
+
+typedef struct  CRDT_Final_ExpireTombstone {//20
+    unsigned type:2;
+    unsigned gid:1;
+    unsigned vclen:1;
+    VectorClockUnit* vc;//8
+    long long timestamp;//8
+} __attribute__ ((packed, aligned(4))) CRDT_Final_ExpireTombstone;
+
+typedef struct  CRDT_Test_Hash {//24
+    int type;//4
+    int vclen;//4
+    VectorClockUnit* vc;//8
+    dict* map;//8
+} __attribute__ ((packed, aligned(4))) CRDT_Test_Hash;
+
+typedef struct  CRDT_Final_Hash { //20
+    unsigned type:2;
+    unsigned vclen:1;
+    VectorClockUnit* vc;//8
+    dict* map;//8
+} __attribute__ ((packed, aligned(4))) CRDT_Final_Hash;
+
+
+typedef struct  CRDT_Test_HashTombstone {//48
+    int type;//4
+    int gid;//4
+    int vclen;//4
+    VectorClockUnit* vc;//8
+    long long timestamp;//8
+    dict* map;//8
+    int lastvclen;//4
+    VectorClockUnit* lastvc;//8
+} __attribute__ ((packed, aligned(4))) CRDT_Test_HashTombstone;
+typedef struct  CRDT_Final_HashTombstone { //34
+    unsigned type:2;
+    unsigned gid:1;
+    unsigned vclen:1;
+    VectorClockUnit* vc;//8
+    long long timestamp;//8
+    dict* map;//8
+    unsigned lastvclen:1;
+    VectorClockUnit* lastvc;//8
+} __attribute__ ((packed, aligned(1))) CRDT_Final_HashTombstone;
+
 #endif //REDIS_CTRIP_CRDT_COMMON_H

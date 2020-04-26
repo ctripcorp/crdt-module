@@ -58,7 +58,7 @@ freeVectorClock(VectorClock *vc) {
 }
 
 void
-addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time) {
+addVectorClockUnit(VectorClock *vc, int gid, long long logic_time) {
     int newLength = vc->length + 1;
     VectorClockUnit *vcus = malloc(sizeof(VectorClockUnit) * newLength);
     memcpy(vcus, vc->clocks, sizeof(VectorClockUnit) * vc->length);
@@ -160,7 +160,7 @@ void sortVectorClock(VectorClock *vc) {
 }
 
 VectorClockUnit*
-getVectorClockUnit(VectorClock *vc, long long gid) {
+getVectorClockUnit(VectorClock *vc, int gid) {
     if (vc == NULL || !vc->length) {
         return NULL;
     }

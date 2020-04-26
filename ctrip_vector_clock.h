@@ -44,14 +44,14 @@
 #define max(x, y) x > y ? x : y
 
 typedef struct VectorClockUnit {
-    long long gid;
+    int gid;
     long long logic_time;
-}VectorClockUnit;
+} __attribute__ ((packed, aligned(4))) VectorClockUnit;
 
 typedef struct VectorClock {
     VectorClockUnit *clocks;
     int length;
-}VectorClock;
+} __attribute__ ((packed, aligned(4))) VectorClock;
 
 /**------------------------Vector Clock Lifecycle--------------------------------------*/
 VectorClock*
@@ -61,7 +61,7 @@ void
 freeVectorClock(VectorClock *vc);
 
 void
-addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time);
+addVectorClockUnit(VectorClock *vc, int gid, long long logic_time);
 
 VectorClock*
 dupVectorClock(VectorClock *vc);
@@ -82,7 +82,7 @@ VectorClock*
 vectorClockMerge(VectorClock *vc1, VectorClock *vc2);
 
 VectorClockUnit*
-getVectorClockUnit(VectorClock *vc, long long gid);
+getVectorClockUnit(VectorClock *vc, int gid);
 
 int
 isVectorClockMonoIncr(VectorClock *current, VectorClock *future);

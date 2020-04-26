@@ -30,7 +30,7 @@ CRDT_Hash* dupCrdtLWWHash(void* data) {
     }
     return result;
 }
-VectorClock* getLastVctLWWHash(void* data) {
+VectorClock* getLastVcLWWHash(void* data) {
     CRDT_LWW_Hash* crdtHash = retrieveCrdtLWWHash(data);
     return crdtHash->lastVc;
 }
@@ -40,20 +40,13 @@ void updateLastVCLWWHash(void* data, VectorClock* vc) {
     crdtHash->lastVc = vectorClockMerge(old, vc);
     freeVectorClock(old);
 }
-static CrdtHashMethod LWW_Hash_Methods = {
-    .change = changeCrdtLWWHash,
-    .dup = dupCrdtLWWHash,
-    .getLastVC = getLastVctLWWHash,
-    .updateLastVC = updateLastVCLWWHash,
-};
+
 
 void* createCrdtLWWHash() {
     CRDT_LWW_Hash *crdtHash = RedisModule_Alloc(sizeof(CRDT_LWW_Hash));
-    crdtHash->parent.parent.parent.type = CRDT_DATA;
-    crdtHash->parent.parent.parent.method = &HashCommonMethod;
-    crdtHash->parent.parent.dataType = CRDT_HASH_TYPE;
-    crdtHash->parent.parent.method = &HashDataMethod;
-    crdtHash->parent.method = &LWW_Hash_Methods;
+    crdtHash->parent.parent.parent.type = 0;
+    crdtHash->parent.parent.parent.type |= CRDT_DATA;
+    crdtHash->parent.parent.parent.type |= CRDT_HASH_TYPE;
     dict *hash = dictCreate(&crdtHashDictType, NULL);
     crdtHash->parent.map = hash;
     crdtHash->lastVc = NULL;
@@ -63,9 +56,7 @@ void* createCrdtLWWHash() {
 CRDT_LWW_Hash* retrieveCrdtLWWHash(void* obj) {
     if(obj == NULL) return NULL;
     CRDT_LWW_Hash* result = (CRDT_LWW_Hash*)obj;
-    assert(result->parent.parent.type == CRDT_HASH_TYPE);
-    assert(result->parent.parent.method == &HashCommonMethod);
-    assert(result->parent.method == &LWW_Hash_Methods);
+    assert(result->parent.parent.type & CRDT_HASH_TYPE);
     return result;
 } 
 //hash lww tombstone
@@ -89,7 +80,7 @@ CRDT_HashTombstone* dupCrdtLWWHashTombstone(void* data) {
         while ((de = dictNext(di)) != NULL) {
             sds field = dictGetKey(de);
             CRDT_RegisterTombstone *crdtRegisterTombstone = dictGetVal(de);
-            dictAdd(result->parent.map, sdsdup(field), crdtRegisterTombstone->method->dup(crdtRegisterTombstone));
+            dictAdd(result->parent.map, sdsdup(field), dupCrdtRegisterTombstone(crdtRegisterTombstone));
         }
         dictReleaseIterator(di);
     }
@@ -124,10 +115,11 @@ static CrdtHashTombstoneMethod LWW_Hash_Tombstone_Methods = {
 void* createCrdtLWWHashTombstone() {
     CRDT_LWW_HashTombstone *crdtHashTombstone = RedisModule_Alloc(sizeof(CRDT_LWW_HashTombstone));
     crdtHashTombstone->maxDelMeta = createMeta(-1, -1, NULL);
-    crdtHashTombstone->parent.parent.parent.type = CRDT_DATA;
-    crdtHashTombstone->parent.parent.parent.method = &HashTombstoneCommonMethod;
-    crdtHashTombstone->parent.parent.dataType = CRDT_HASH_TYPE;
-     crdtHashTombstone->parent.method = &LWW_Hash_Tombstone_Methods;
+    crdtHashTombstone->parent.parent.parent.type = 0;
+    crdtHashTombstone->parent.parent.parent.type |= CRDT_HASH_TYPE;
+    crdtHashTombstone->parent.parent.parent.type |= CRDT_DATA;
+    crdtHashTombstone->parent.parent.parent.type |= CRDT_TOMBSTONE;
+    RedisModule_Debug(logLevel, "hash tombstone type %lld", crdtHashTombstone->parent.parent.parent.type);
     crdtHashTombstone->lastVc = NULL;
     dict *hash = dictCreate(&crdtHashTombstoneDictType, NULL);
     crdtHashTombstone->parent.map = hash;
@@ -136,11 +128,11 @@ void* createCrdtLWWHashTombstone() {
 CRDT_LWW_HashTombstone* retrieveCrdtLWWHashTombstone(void* data) {
     if(data == NULL) return NULL;
     CRDT_LWW_HashTombstone* result = (CRDT_LWW_HashTombstone*)data;
-    assert(result->parent.parent.type == CRDT_HASH_TYPE);
-    assert(result->parent.parent.method == &HashTombstoneCommonMethod);
+    assert(result->parent.parent.type & CRDT_HASH_TYPE);
     assert(result->parent.method == &LWW_Hash_Tombstone_Methods);
     return result;
 }
+
 
 
 

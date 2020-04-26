@@ -5,14 +5,21 @@ CrdtExpireObj* addOrUpdateExpire(RedisModuleKey* moduleKey, CrdtData* data, Crdt
     CrdtExpire* expire =  RedisModule_GetCrdtExpire(moduleKey);
     if(expire == NULL) {
         expire = createCrdtExpire();
-        expire->dataType = data->dataType;
+        expire->parent.type |= getDataType(data->parent.type);
+        RedisModule_Debug(logLevel, " expire type %lld , %lld", expire->parent.type, getDataType(data->parent.type));
         RedisModule_SetCrdtExpire(moduleKey, CrdtExpireType, expire);
     } else {
-        appendVCForMeta(meta, expire->method->get(expire)->meta->vectorClock);
+        appendVCForMeta(meta, crdtExpireGetObj(expire)->meta->vectorClock);
     }
     CrdtExpireObj *obj = createCrdtExpireObj(dupMeta(meta), expireTime);
-    expire->method->add(expire,obj);
-    data->method->updateLastVC(data, meta->vectorClock);
+    crdtExpireAddObj(expire,obj);
+    CrdtDataMethod* method = getCrdtDataMethod(data);
+    if(method != NULL) {
+        method->updateLastVC(data, meta->vectorClock);
+    }else{
+        RedisModule_Debug(logLevel, "[CRDT] in addOrUpdateExpire function, getCrdtDataMethod error");
+    }
+    
     return obj;
 }
 
@@ -21,23 +28,25 @@ int tryAddOrUpdateExpire(RedisModuleKey* moduleKey, int type, CrdtExpireObj* obj
     CrdtExpire *expire = RedisModule_GetCrdtExpire(moduleKey);
     CrdtExpireTombstone *tombstone = RedisModule_GetCrdtExpireTombstone(moduleKey);
     if(tombstone != NULL) {
-        if(tombstone->method->isExpire(tombstone, obj->meta)) {
+        if(CrdtExpireIsExpire(tombstone, obj->meta)) {
             return CRDT_ERROR;
         }   
     }
     if(expire == NULL) {
         expire = createCrdtExpire();
-        expire->dataType = type;
+        expire->parent.type |= type;
         RedisModule_SetCrdtExpire(moduleKey, CrdtExpireType, expire);
     }
-    if(expire->dataType != type) {
+    if(getDataType(expire->parent.type) != type) {
         return CRDT_ERROR;
     }
     if(data) {
-        data->method->updateLastVC(data, obj->meta->vectorClock);
+        CrdtDataMethod* method = getCrdtDataMethod(data);
+        if(method == NULL) {}
+        method->updateLastVC(data, obj->meta->vectorClock);
     }
     
-    expire->method->add(expire, obj);
+    crdtExpireAddObj(expire, obj);
     
     return CRDT_OK;
 }
@@ -60,7 +69,7 @@ int expireAt(RedisModuleCtx* ctx, RedisModuleString *key, long long expireTime) 
 end:
     if(meta != NULL) {
         sds vcStr = vectorClockToSds(meta->vectorClock);
-        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllcll", key, meta->gid, meta->timestamp, vcStr, expireobj->expireTime, (long long)(data->dataType));
+        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllcll", key, meta->gid, meta->timestamp, vcStr, expireobj->expireTime, (long long)(getDataType(data->parent.type)));
         sdsfree(vcStr);
         freeCrdtMeta(meta);
     }
@@ -125,9 +134,10 @@ end:
 }
 void expirePersist(CrdtExpire* expire,  RedisModuleKey* moduleKey, int dbId, RedisModuleString* key) {
     CrdtMeta* meta = createIncrMeta();
+    long long datatype = (long long)getDataType(expire->parent.type);
     delExpire(moduleKey, expire, meta);
     sds vcStr = vectorClockToSds(meta->vectorClock);
-    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.persist", "sllcl", key, meta->gid, meta->timestamp, vcStr, (long long)expire->dataType);
+    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.persist", "sllcl", key, meta->gid, meta->timestamp, vcStr, datatype);
     sdsfree(vcStr);
     freeCrdtMeta(meta);
 }
@@ -146,16 +156,22 @@ int persistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     int result = 0;
     CrdtExpire *expire = RedisModule_GetCrdtExpire(moduleKey);
     if(expire != NULL) {
-        expire->method->persist(expire, moduleKey, RedisModule_GetSelectedDb(ctx), argv[1]);
+        expirePersist(expire, moduleKey, RedisModule_GetSelectedDb(ctx), argv[1]);
         result = 1;
     } 
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
+    
     return RedisModule_ReplyWithLongLong(ctx, result);
 }
 //CRDT.PERSIST key gid timestamp vc type
 int crdtPersistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
     if (argc < 6) return RedisModule_WrongArity(ctx);
+    long long dataType;
+    if ((RedisModule_StringToLongLong(argv[5],&dataType) != REDISMODULE_OK)) {
+        RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+        return NULL;
+    }
     CrdtMeta* meta = getMeta(ctx, argv, 2);
     CrdtData* data = NULL;
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
@@ -164,14 +180,14 @@ int crdtPersistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
             data = RedisModule_ModuleTypeGetValue(moduleKey);
         }
     }
-    long long dataType;
-    if ((RedisModule_StringToLongLong(argv[5],&dataType) != REDISMODULE_OK)) {
-        RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
-        return NULL;
-    }
+    
     addExpireTombstone(moduleKey, dataType, meta);
     if(data != NULL) {
-        data->method->updateLastVC(data, meta->vectorClock);
+        CrdtDataMethod* method = getCrdtDataMethod(data);
+        if(method == NULL) {
+            goto end;
+        }
+        method->updateLastVC(data, meta->vectorClock);
     }
     RedisModule_MergeVectorClock(meta->gid, meta->vectorClock);
 end: 
@@ -202,7 +218,7 @@ int ttlCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     CrdtExpire *expire = RedisModule_GetCrdtExpire(moduleKey);
     if (expire != NULL) {
         if(data != NULL) {
-            CrdtExpireObj* obj = expire->method->get(expire);
+            CrdtExpireObj* obj = crdtExpireGetObj(expire);
             if(obj->expireTime == -1) {
                 result = -1;
             }else{
@@ -229,9 +245,10 @@ int crdtTtlCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
     CrdtExpire *expire = RedisModule_GetCrdtExpire(moduleKey);
     if (expire == NULL) {
+        RedisModule_CloseKey(moduleKey);
         return RedisModule_ReplyWithNull(ctx);
     }
-    CrdtExpireObj* obj = expire->method->get(expire);
+    CrdtExpireObj* obj = crdtExpireGetObj(expire);
     RedisModule_ReplyWithArray(ctx, 4);
     RedisModule_ReplyWithLongLong(ctx, obj->meta->gid);
     RedisModule_ReplyWithLongLong(ctx, obj->meta->timestamp);
@@ -240,6 +257,7 @@ int crdtTtlCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     sdsfree(vclockSds);
     RedisModule_ReplyWithLongLong(ctx, obj->expireTime);
 }
+
 
 int initCrdtExpireModule(RedisModuleCtx *ctx) {
     RedisModuleTypeMethods expireTm = {
@@ -290,17 +308,21 @@ int initCrdtExpireModule(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx, "CRDT.PERSIST", 
         crdtPersistCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "CRDT.EXPIRETOMBSTONE",
+        crdtGetExpireTombstoneCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) 
+        return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
 
 void delExpire(RedisModuleKey *moduleKey, CrdtExpire* expire, CrdtMeta* meta) {
     CrdtExpireTombstone *tombstone = RedisModule_GetCrdtExpireTombstone(moduleKey);
     if(tombstone == NULL) {
-        tombstone = createCrdtExpireTombstone(expire->dataType);
+        tombstone = createCrdtExpireTombstone(getDataType(expire->parent.type));
         RedisModule_SetCrdtExpireTombstone(moduleKey, CrdtExpireTombstoneType, tombstone);
     } 
-    appendVCForMeta(meta, expire->method->get(expire)->meta->vectorClock);
-    tombstone->method->add(tombstone, meta);
+    appendVCForMeta(meta, crdtExpireGetObj(expire)->meta->vectorClock);
+    
+    CrdtExpireTombstoneAdd(tombstone, meta);
     RedisModule_SetCrdtExpire(moduleKey, CrdtExpireType, NULL);
 }
 void addExpireTombstone(RedisModuleKey* moduleKey, int dataType, CrdtMeta* meta) {
@@ -310,9 +332,9 @@ void addExpireTombstone(RedisModuleKey* moduleKey, int dataType, CrdtMeta* meta)
         tombstone = createCrdtExpireTombstone(dataType);
         RedisModule_SetCrdtExpireTombstone(moduleKey, CrdtExpireTombstoneType, tombstone);
     } 
-    tombstone->method->add(tombstone, meta);
+    CrdtExpireTombstoneAdd(tombstone, meta);
     if(expire != NULL) {
-        if(compareCrdtMeta(expire->method->get(expire)->meta, meta) > COMPARE_META_EQUAL) {
+        if(compareCrdtMeta(crdtExpireGetObj(expire)->meta, meta) > COMPARE_META_EQUAL) {
             RedisModule_SetCrdtExpire(moduleKey, CrdtExpireType, NULL);
         }   
     }

@@ -6,7 +6,7 @@ CrdtLWWExpire* retrieveCrdtLWWExpire(void* obj) {
     return expire;
 }
 
-int LWWExpireAddObj(CrdtExpire* obj, CrdtExpireObj* data) {
+int crdtExpireAddObj(CrdtExpire* obj, CrdtExpireObj* data) {
     CrdtLWWExpire* expire = retrieveCrdtLWWExpire(obj);
     if(expire->data == NULL) {
         expire->data = dupExpireObj(data);
@@ -23,20 +23,20 @@ int LWWExpireAddObj(CrdtExpire* obj, CrdtExpireObj* data) {
 }
 
 
-CrdtExpireObj* LWWExpireGetObj(CrdtExpire* obj) {
+CrdtExpireObj* crdtExpireGetObj(CrdtExpire* obj) {
     CrdtLWWExpire* expire = retrieveCrdtLWWExpire(obj);
      return expire->data;
 }
 
-CrdtExpire* LWWExpireDup(CrdtExpire* obj) {
+CrdtExpire* crdtExpireDup(CrdtExpire* obj) {
     CrdtLWWExpire* expire = retrieveCrdtLWWExpire(obj);
     CrdtLWWExpire* copy = createCrdtLWWExpire();
-    copy->parent.dataType = expire->parent.dataType;
+    copy->parent.parent.type = expire->parent.parent.type;
     copy->data = dupExpireObj(expire->data);
     return copy;
 }
 
-void LWWExpireFree(CrdtExpire* obj) {
+void crdtExpireFree(CrdtExpire* obj) {
     CrdtLWWExpire* expire = retrieveCrdtLWWExpire(obj);
     if(expire->data != NULL) {
         freeCrdtExpireObj(expire->data);
@@ -44,20 +44,12 @@ void LWWExpireFree(CrdtExpire* obj) {
     }
     RedisModule_Free(expire);
 }
-static CrdtExpireMethod ExpireMethod = {
-    add: LWWExpireAddObj,
-    get: LWWExpireGetObj,
-    dup: LWWExpireDup,
-    free: LWWExpireFree,
-    persist: expirePersist,
-};
+
 
 CrdtLWWExpire* createCrdtLWWExpire(void) {
     CrdtLWWExpire* expire = RedisModule_Alloc(sizeof(CrdtLWWExpire));
-    expire->parent.method = &ExpireMethod;
-    expire->parent.dataType = -1;
-    expire->parent.parent.method = &CrdtExpireCommonMethod;
-    expire->parent.parent.type = CRDT_EXPIRE;
+    expire->parent.parent.type = 0;
+    expire->parent.parent.type |= CRDT_EXPIRE;
     expire->data = NULL;
     return expire;
 }
@@ -68,7 +60,9 @@ void *RdbLoadCrdtLWWExpire(RedisModuleIO *rdb, int encver) {
         return NULL;
     }
     CrdtLWWExpire *expire = createCrdtLWWExpire();
-    expire->parent.dataType = RedisModule_LoadSigned(rdb);
+    int type = RedisModule_LoadSigned(rdb);
+    expire->parent.parent.type |= type;
+    RedisModule_Debug(logLevel, "load expire type %lld %lld", expire->parent.parent.type, type);
     int gid = RedisModule_LoadSigned(rdb);
     long long timestamp = RedisModule_LoadSigned(rdb);
     VectorClock* vectorClock = rdbLoadVectorClock(rdb);
@@ -81,10 +75,11 @@ void *RdbLoadCrdtLWWExpire(RedisModuleIO *rdb, int encver) {
     return expire;
 }
 
-void *RdbSaveCrdtLWWExpire(RedisModuleIO *rdb, void *value) {
+void RdbSaveCrdtLWWExpire(RedisModuleIO *rdb, void *value) {
     CrdtLWWExpire* expire = retrieveCrdtLWWExpire(value);
     RedisModule_SaveSigned(rdb, LWW_TYPE);
-    RedisModule_SaveSigned(rdb, expire->parent.dataType);
+    RedisModule_Debug(logLevel, "save expire data type :%lld, %lld", expire->parent.parent.type, getDataType(expire->parent.parent.type));
+    RedisModule_SaveSigned(rdb, getDataType(expire->parent.parent.type));
     RedisModule_SaveSigned(rdb, expire->data->meta->gid);
     RedisModule_SaveSigned(rdb, expire->data->meta->timestamp);
     rdbSaveVectorClock(rdb, expire->data->meta->vectorClock);
@@ -93,9 +88,9 @@ void *RdbSaveCrdtLWWExpire(RedisModuleIO *rdb, void *value) {
 
 void AofRewriteCrdtLWWExpire(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     CrdtLWWExpire* expire = retrieveCrdtLWWExpire(value);
-    CrdtExpireObj* obj = expire->parent.method->get(expire);
+    CrdtExpireObj* obj = crdtExpireGetObj(expire);
     sds vclockSds = vectorClockToSds(obj->meta->vectorClock);
-    RedisModule_EmitAOF(aof, "CRDT.EXPIRE", "sllcl", key, obj->meta->gid, obj->meta->timestamp, vclockSds, obj->expireTime);
+    RedisModule_EmitAOF(aof, "CRDT.EXPIRE", "sllcll", key, obj->meta->gid, obj->meta->timestamp, vclockSds, obj->expireTime, getDataType(expire->parent.parent.type) );
     sdsfree(vclockSds);
 }
 size_t crdtLWWExpireMemUsageFunc(const void *value){
@@ -107,23 +102,25 @@ void crdtLWWExpireDigestFunc(RedisModuleDigest *md, void *value) {
     //todo 
 }
 
-CrdtObject* CrdtLWWExpireFilter(CrdtObject* common, long long gid, long long logic_time) {
+CrdtObject* CrdtLWWExpireFilter(CrdtObject* common, int gid, long long logic_time) {
     CrdtLWWExpire* expire = retrieveCrdtLWWExpire(common);
+    RedisModule_Debug(logLevel, "filter expire null %lld, %lld", expire->data->meta->gid, gid);
     if(expire->data->meta->gid != gid) {
         return NULL;
     }
+    
     VectorClockUnit* unit = getVectorClockUnit(expire->data->meta->vectorClock, gid);
     if(unit->logic_time > logic_time) {
-        return LWWExpireDup(expire);
+        return crdtExpireDup(expire);
     }  
     return NULL;
 }
 CrdtObject* CrdtLWWExpireMerge(CrdtObject* target, CrdtObject* other) {
     if(target == NULL) {
-        return LWWExpireDup(other);
+        return crdtExpireDup(other);
     }
     CrdtLWWExpire* o = retrieveCrdtLWWExpire(other);
-    CrdtLWWExpire* result = LWWExpireDup(target);
+    CrdtLWWExpire* result = crdtExpireDup(target);
     if(compareCrdtMeta(result->data->meta, o->data->meta) > COMPARE_META_EQUAL) {
         result->data->expireTime = o->data->expireTime;
     }
@@ -156,16 +153,14 @@ int CrdtExpireIsExpire(void* data, CrdtMeta* meta) {
     return compareCrdtMeta(meta, expire->meta) > COMPARE_META_EQUAL;
 }
 
-static CrdtExpireTombstoneMethod ExpireTombstoneMethod = {
-    .add = CrdtExpireTombstoneAdd,
-    .isExpire = CrdtExpireIsExpire
-};
+
 CrdtLWWExpireTombstone* createCrdtLWWExpireTombstone(int dataType) {
     CrdtLWWExpireTombstone* tombstone = RedisModule_Alloc(sizeof(CrdtLWWExpireTombstone));
-    tombstone->parent.parent.type = CRDT_EXPIRE;
-    tombstone->parent.parent.method = &ExpireTombstoneCommonMethod;
-    tombstone->parent.method = &ExpireTombstoneMethod;
-    tombstone->parent.dataType = dataType;
+    tombstone->parent.parent.type = 0;
+    tombstone->parent.parent.type |= CRDT_EXPIRE;
+    tombstone->parent.parent.type |= CRDT_TOMBSTONE;
+    tombstone->parent.parent.type |= dataType;
+    RedisModule_Debug(logLevel, "expire tombstone type %lld %lld", tombstone->parent.parent.type, dataType);
     tombstone->meta = NULL;
     return tombstone;
 }
@@ -173,9 +168,9 @@ void *RdbLoadCrdtLWWExpireTombstone(RedisModuleIO *rdb, int encver) {
     if (encver != 0) {
         return NULL;
     }
-    
     int dataType = RedisModule_LoadSigned(rdb);
     CrdtLWWExpireTombstone *tombstone = createCrdtLWWExpireTombstone(dataType);
+    RedisModule_Debug(logLevel, "load expire tombstone %lld ,%lld", dataType,tombstone->parent.parent.type);
     int gid = RedisModule_LoadSigned(rdb);
     long long timestamp = RedisModule_LoadSigned(rdb);
     VectorClock* vectorClock = rdbLoadVectorClock(rdb);
@@ -186,7 +181,8 @@ void *RdbLoadCrdtLWWExpireTombstone(RedisModuleIO *rdb, int encver) {
 void RdbSaveCrdtLWWExpireTombstone(RedisModuleIO *rdb, void *value) {
     CrdtLWWExpireTombstone* tombstone = retrieveCrdtLWWExpireTombstone(value);
     RedisModule_SaveSigned(rdb, LWW_TYPE);
-    RedisModule_SaveSigned(rdb, tombstone->parent.dataType);
+    RedisModule_Debug(logLevel, "save expire tombstone %lld, %lld", getDataType(tombstone->parent.parent.type), tombstone->parent.parent.type);
+    RedisModule_SaveSigned(rdb, getDataType(tombstone->parent.parent.type));
     RedisModule_SaveSigned(rdb, tombstone->meta->gid);
     RedisModule_SaveSigned(rdb, tombstone->meta->timestamp);
     rdbSaveVectorClock(rdb, tombstone->meta->vectorClock);
@@ -195,7 +191,7 @@ void RdbSaveCrdtLWWExpireTombstone(RedisModuleIO *rdb, void *value) {
 void AofRewriteCrdtLWWExpireTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     CrdtLWWExpireTombstone* tombstone = retrieveCrdtLWWExpireTombstone(value);
     sds vclockSds = vectorClockToSds(tombstone->meta->vectorClock);
-    RedisModule_EmitAOF(aof, "CRDT.PERSIST", "sllcl", key, tombstone->meta->gid, tombstone->meta->timestamp, vclockSds, tombstone->parent.dataType);
+    RedisModule_EmitAOF(aof, "CRDT.PERSIST", "sllcl", key, tombstone->meta->gid, tombstone->meta->timestamp, vclockSds, getDataType(tombstone->parent.parent.type));
     sdsfree(vclockSds);
 }
 
@@ -213,13 +209,11 @@ void freeCrdtLWWExpireTombstone(void* value) {
         freeCrdtMeta(tombstone->meta);
         tombstone->meta = NULL;
     }
-    tombstone->parent.method = NULL;
-    tombstone->parent.parent.method = NULL;
     RedisModule_Free(tombstone);
 }
 CrdtLWWExpireTombstone* LWWExpireTombstoneDup(CrdtTombstone* target) {
     CrdtLWWExpireTombstone* t = retrieveCrdtLWWExpireTombstone(target);
-    CrdtLWWExpireTombstone* result = createCrdtExpireTombstone(t->parent.dataType);
+    CrdtLWWExpireTombstone* result = createCrdtExpireTombstone(getDataType(t->parent.parent.type));
     result->meta = dupMeta(t->meta);
     return result;
 }
@@ -228,20 +222,21 @@ CrdtTombstone* crdtLWWExpireTombstoneMerge(CrdtTombstone* target, CrdtTombstone*
         return NULL;
     }
     if(target == NULL) {
-        return LWWExpireTombstoneDup(target);
+        return LWWExpireTombstoneDup(other);
     }
     if(other == NULL) {
         return LWWExpireTombstoneDup(target);
     }
     CrdtLWWExpireTombstone* t = retrieveCrdtLWWExpireTombstone(target);
     CrdtLWWExpireTombstone* o = retrieveCrdtLWWExpireTombstone(other);
-    CrdtLWWExpireTombstone* result = createCrdtExpireTombstone(t->parent.dataType);
+    CrdtLWWExpireTombstone* result = createCrdtExpireTombstone(getDataType(t->parent.parent.type));
     result->meta = mergeMeta(t->meta, o->meta);
     return result;
 }
 
-CrdtTombstone* crdtLWWExpireTombstoneFilter(CrdtTombstone* target,long long gid, long long logic_time) {
+CrdtTombstone* crdtLWWExpireTombstoneFilter(CrdtTombstone* target,int gid, long long logic_time) {
     CrdtLWWExpireTombstone* tombstone = retrieveCrdtLWWExpireTombstone(target);
+    RedisModule_Debug(logLevel, "wwwww %lld, %lld", tombstone->meta->gid , gid);
     if(tombstone->meta->gid != gid) {
         return NULL;
     }
@@ -262,6 +257,7 @@ int crdtLWWExpireTombstonePurage(CrdtTombstone* t, CrdtObject* o) {
 }
 int crdtLWWExpireTombstoneGc(void* target, VectorClock* clock) {
     CrdtLWWExpireTombstone* t = retrieveCrdtLWWExpireTombstone(target);
+    RedisModule_Debug(logLevel, "gc expire tombstone");
     return isVectorClockMonoIncr(t->meta->vectorClock, clock);
 }
 
