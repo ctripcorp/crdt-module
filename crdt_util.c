@@ -15,23 +15,25 @@ CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index
     return createMeta(gid, timestamp, vclock);
 }
 CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other) {
+    VectorClock* result = vectorClockMerge(getMetaVectorClock(target), getMetaVectorClock(other));
     if(compareCrdtMeta(target, other) > 0) {
-        return createMeta(other->gid, other->timestamp, vectorClockMerge(target->vectorClock, other->vectorClock));
+        return createMeta(other->gid, other->timestamp, result);
     }else{
-        return createMeta(target->gid, target->timestamp, vectorClockMerge(target->vectorClock, other->vectorClock));
+        return createMeta(target->gid, target->timestamp, result);
     }
 }
 CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other) {
-    if(target == NULL) {
+    VectorClock* vc = getMetaVectorClock(target);
+    if(target == NULL || vc  == NULL) {
         return dupMeta(other);
     }
     if(compareCrdtMeta(target, other) > 0) {
         target->gid = other->gid;
         target->timestamp = other->timestamp;
     }
-    VectorClock* vc = target->vectorClock;
-    target->vectorClock = vectorClockMerge(vc, other->vectorClock);
-    if(vc != NULL) freeVectorClock(vc);
+    
+    merge(vc, getMetaVectorClock(other));
+    // clone(&target->vectorClock ,vectorClockMerge(vc, getMetaVectorClock(other)));
     return target;
 }
 RedisModuleKey* getWriteRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type) {

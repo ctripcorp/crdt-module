@@ -40,35 +40,8 @@
 #include "ctrip_crdt_common.h"
 #define CRDT_API_VERSION 1
 
-int testCreate() {
-    Crdt_Test_Object* a = RedisModule_Alloc(sizeof(Crdt_Test_Object));
-    RedisModule_Free(a);
-    Crdt_Final_Object* b = RedisModule_Alloc(sizeof(Crdt_Final_Object));
-    RedisModule_Free(b);
-    CRDT_Test_RegisterTombstone* c = RedisModule_Alloc(sizeof(CRDT_Test_RegisterTombstone));
-    RedisModule_Free(c);
-    CRDT_Final_RegisterTombstone* d = RedisModule_Alloc(sizeof(CRDT_Final_RegisterTombstone));
-    RedisModule_Free(d);
-    CRDT_Test_Expire* e = RedisModule_Alloc(sizeof(CRDT_Test_Expire));
-    RedisModule_Free(e);
-    CRDT_Final_Expire* f = RedisModule_Alloc(sizeof(CRDT_Final_Expire));
-    RedisModule_Free(f);
-    CRDT_Test_ExpireTombstone* g = RedisModule_Alloc(sizeof(CRDT_Test_ExpireTombstone));
-    RedisModule_Free(g);
-    CRDT_Final_ExpireTombstone* h = RedisModule_Alloc(sizeof(CRDT_Final_ExpireTombstone));
-    RedisModule_Free(h);
-    CRDT_Test_Hash* i = RedisModule_Alloc(sizeof(CRDT_Test_Hash));
-    RedisModule_Free(i);
-    CRDT_Final_Hash* j = RedisModule_Alloc(sizeof(CRDT_Final_Hash));
-    RedisModule_Free(j);
-    CRDT_Test_HashTombstone* k = RedisModule_Alloc(sizeof(CRDT_Test_HashTombstone));
-    RedisModule_Free(k);
-    CRDT_Final_HashTombstone* l = RedisModule_Alloc(sizeof(CRDT_Final_HashTombstone));
-    RedisModule_Free(l);
-    return 1;
-}
+
 int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    testCreate();
     RedisModule_AutoMemory(ctx);
 
     if (argc < 2) return RedisModule_WrongArity(ctx);
@@ -216,25 +189,18 @@ error:
     return result;
 }
 int isTombstone(int type) {
-    return type & CRDT_TOMBSTONE;
+    return getType(type) == CRDT_TOMBSTONE;
 }
 int isData(int type) {
-    return type & CRDT_DATA;
+    return getType(type) == CRDT_DATA;
 }
 int isExpire(int type) {
-    return type & CRDT_EXPIRE;
+    return getType(type) ==  CRDT_EXPIRE;
 }
-int getDataType(int type) {
-    if(type & CRDT_REGISTER_TYPE) {
-        return CRDT_REGISTER_TYPE;
-    } else if(type & CRDT_HASH_TYPE) {
-        return CRDT_HASH_TYPE;
-    }else{
-        RedisModule_Debug(logLevel, "getDataType over %lld", type);
-        exit(0);
-        return 0;
-    }
+int isExpireTombstone(int type) {
+    return getType(type) == CRDT_EXPIRE_TOMBSTONE;
 }
+
 CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
     if(!isData(data->type)) {
         return NULL;
@@ -249,10 +215,6 @@ CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
     }
 }
 CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
-    if(isTombstone(obj->type)) {
-        exit(1);
-        return NULL;
-    }
     if(isData(obj->type)) {
         switch (getDataType(obj->type)) {
             case CRDT_REGISTER_TYPE:
@@ -263,7 +225,6 @@ CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
                 return NULL;
         }
     } else if(isExpire(obj->type)) {
-        RedisModule_Debug(logLevel, "is expire");
         return &CrdtExpireCommonMethod;
     }
     return NULL;
@@ -276,11 +237,7 @@ CrdtExpireMethod* getCrdtExpireMethod(CrdtObject* obj) {
     return &ExpireMethod;
 }
 CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
-    if(!isTombstone(tombstone->type)) {
-        exit(1);
-        return NULL;
-    }
-    if(isData(tombstone->type)) {
+    if(isTombstone(tombstone->type)) {
         switch (getDataType(tombstone->type)) {
             case CRDT_REGISTER_TYPE:
                 return &RegisterTombstoneMethod;
@@ -289,7 +246,7 @@ CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
             default:
                 return NULL;
         }
-    } else if(isExpire(tombstone->type)) {
+    } else if(isExpireTombstone(tombstone->type)) {
         return &ExpireTombstoneCommonMethod;
     }
 }

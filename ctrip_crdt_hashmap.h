@@ -96,18 +96,17 @@ typedef struct CrdtHashMethod {
     updateLastVCFunc updateLastVC;
 } CrdtHashMethod;
 typedef struct CRDT_Hash {
-    CrdtData parent;
-    // CrdtHashMethod* method;
+    unsigned char type;
     dict *map;
-} CRDT_Hash;
+} __attribute__ ((packed, aligned(1))) CRDT_Hash;
 int changeCrdtHash(CRDT_Hash* hash, CrdtMeta* meta);
 CRDT_Hash* dupCrdtHash(void* data);
-VectorClock* getLastVcHash(void* data);
+VectorClock* getCrdtHashLastVc(void* data);
 void updateLastVCHash(void* data, VectorClock* vc);
 static CrdtHashMethod Hash_Methods = {
     .change = changeCrdtHash,
     .dup = dupCrdtHash,
-    .getLastVC = getLastVcHash,
+    .getLastVC = getCrdtHashLastVc,
     .updateLastVC = updateLastVCHash,
 };
 typedef CrdtMeta* (*updateMaxDelCrdtHashTombstoneFunc)(void* target, CrdtMeta* meta);
@@ -127,14 +126,16 @@ typedef struct CrdtHashTombstoneMethod {
     purageHashTombstoneFunc purage;
 } CrdtHashTombstoneMethod;
 typedef struct CRDT_HashTombstone {
-    CrdtDataTombstone parent;
+    unsigned char type;
     // CrdtHashTombstoneMethod* method;
     dict *map;
-} CRDT_HashTombstone;
+} __attribute__ ((packed, aligned(1))) CRDT_HashTombstone;
 
-
+VectorClock* getCrdtHashTombstoneLastVc(CRDT_HashTombstone* t);
+void mergeCrdtHashTombstoneLastVc(CRDT_HashTombstone* t, VectorClock* vc);
 void *createCrdtHash(void);
 void *createCrdtHashTombstone(void);
+
 
 
 int initCrdtHashModule(RedisModuleCtx *ctx);
@@ -198,12 +199,5 @@ CRDT_HashTombstone* dupCrdtHashTombstone(void* data);
 int gcCrdtHashTombstone(void* data, VectorClock* clock);
 CrdtMeta* getMaxDelCrdtHashTombstone(void* data);
 int changeCrdtHashTombstone(void* data, CrdtMeta* meta);
-static CrdtHashTombstoneMethod Hash_Tombstone_Methods = {
-    .updateMaxDel = updateMaxDelCrdtHashTombstone,
-    .isExpire = isExpireCrdtHashTombstone,
-    .dup = dupCrdtHashTombstone,
-    .gc = gcCrdtHashTombstone,
-    .getMaxDel = getMaxDelCrdtHashTombstone,
-    .change = changeCrdtHashTombstone
-};
+
 #endif //XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H
