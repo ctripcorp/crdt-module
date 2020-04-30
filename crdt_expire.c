@@ -5,17 +5,16 @@ CrdtExpireObj* addOrUpdateExpire(RedisModuleKey* moduleKey, CrdtData* data, Crdt
     CrdtExpire* expire =  RedisModule_GetCrdtExpire(moduleKey);
     if(expire == NULL) {
         expire = createCrdtExpire();
-        expire->parent.type |= getDataType(data->parent.type);
-        RedisModule_Debug(logLevel, " expire type %lld , %lld", expire->parent.type, getDataType(data->parent.type));
+        setDataType(expire , getDataType(data->type));
         RedisModule_SetCrdtExpire(moduleKey, CrdtExpireType, expire);
     } else {
-        appendVCForMeta(meta, crdtExpireGetObj(expire)->meta->vectorClock);
+        appendVCForMeta(meta, getCrdtExpireLastVectorClock(expire));
     }
     CrdtExpireObj *obj = createCrdtExpireObj(dupMeta(meta), expireTime);
     crdtExpireAddObj(expire,obj);
     CrdtDataMethod* method = getCrdtDataMethod(data);
     if(method != NULL) {
-        method->updateLastVC(data, meta->vectorClock);
+        method->updateLastVC(data, getMetaVectorClock(meta));
     }else{
         RedisModule_Debug(logLevel, "[CRDT] in addOrUpdateExpire function, getCrdtDataMethod error");
     }
@@ -34,16 +33,18 @@ int tryAddOrUpdateExpire(RedisModuleKey* moduleKey, int type, CrdtExpireObj* obj
     }
     if(expire == NULL) {
         expire = createCrdtExpire();
-        expire->parent.type |= type;
+        setDataType(expire ,type);
         RedisModule_SetCrdtExpire(moduleKey, CrdtExpireType, expire);
     }
-    if(getDataType(expire->parent.type) != type) {
+    if(getDataType(expire->type) != type) {
         return CRDT_ERROR;
     }
     if(data) {
         CrdtDataMethod* method = getCrdtDataMethod(data);
-        if(method == NULL) {}
-        method->updateLastVC(data, obj->meta->vectorClock);
+        if(method == NULL) {
+            return CRDT_ERROR;
+        }
+        method->updateLastVC(data, getMetaVectorClock(obj->meta));
     }
     
     crdtExpireAddObj(expire, obj);
@@ -68,8 +69,8 @@ int expireAt(RedisModuleCtx* ctx, RedisModuleString *key, long long expireTime) 
     expireobj = addOrUpdateExpire(moduleKey, data, meta, expireTime);
 end:
     if(meta != NULL) {
-        sds vcStr = vectorClockToSds(meta->vectorClock);
-        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllcll", key, meta->gid, meta->timestamp, vcStr, expireobj->expireTime, (long long)(getDataType(data->parent.type)));
+        sds vcStr = vectorClockToSds(getMetaVectorClock(meta));
+        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllcll", key, meta->gid, meta->timestamp, vcStr, expireobj->expireTime, (long long)(getDataType(data->type)));
         sdsfree(vcStr);
         freeCrdtMeta(meta);
     }
@@ -118,7 +119,7 @@ int crdtExpireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
     obj = createCrdtExpireObj(dupMeta(meta), expireTime);
     tryAddOrUpdateExpire(moduleKey, t, obj);
-    RedisModule_MergeVectorClock(meta->gid, meta->vectorClock);
+    RedisModule_MergeVectorClock(meta->gid, getMetaVectorClock(meta));
 end:
     if(meta != NULL) {
         if (meta->gid == RedisModule_CurrentGid()) {
@@ -134,10 +135,10 @@ end:
 }
 void expirePersist(CrdtExpire* expire,  RedisModuleKey* moduleKey, int dbId, RedisModuleString* key) {
     CrdtMeta* meta = createIncrMeta();
-    long long datatype = (long long)getDataType(expire->parent.type);
     delExpire(moduleKey, expire, meta);
-    sds vcStr = vectorClockToSds(meta->vectorClock);
-    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.persist", "sllcl", key, meta->gid, meta->timestamp, vcStr, datatype);
+    long long datatype = (long long)getDataType(expire->type);
+    sds vcStr = vectorClockToSds(getMetaVectorClock(meta));
+    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.persist", "sllcl", key, (long long)getMetaGid(meta) , getMetaTimestamp(meta), vcStr, datatype);
     sdsfree(vcStr);
     freeCrdtMeta(meta);
 }
@@ -187,9 +188,9 @@ int crdtPersistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
         if(method == NULL) {
             goto end;
         }
-        method->updateLastVC(data, meta->vectorClock);
+        method->updateLastVC(data, getMetaVectorClock(meta));
     }
-    RedisModule_MergeVectorClock(meta->gid, meta->vectorClock);
+    RedisModule_MergeVectorClock(meta->gid, getMetaVectorClock(meta));
 end: 
     if(meta != NULL) {
         if (meta->gid == RedisModule_CurrentGid()) {
@@ -218,11 +219,11 @@ int ttlCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     CrdtExpire *expire = RedisModule_GetCrdtExpire(moduleKey);
     if (expire != NULL) {
         if(data != NULL) {
-            CrdtExpireObj* obj = crdtExpireGetObj(expire);
-            if(obj->expireTime == -1) {
+            long long expireTime = getCrdtExpireLastExpireTime(expire);
+            if(expireTime == -1) {
                 result = -1;
             }else{
-                long long ttl = obj->expireTime - RedisModule_Milliseconds();
+                long long ttl = expireTime - RedisModule_Milliseconds();
                 if(ttl < 0) {
                     ttl = 0;
                 }
@@ -248,14 +249,13 @@ int crdtTtlCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
         RedisModule_CloseKey(moduleKey);
         return RedisModule_ReplyWithNull(ctx);
     }
-    CrdtExpireObj* obj = crdtExpireGetObj(expire);
     RedisModule_ReplyWithArray(ctx, 4);
-    RedisModule_ReplyWithLongLong(ctx, obj->meta->gid);
-    RedisModule_ReplyWithLongLong(ctx, obj->meta->timestamp);
-    sds vclockSds = vectorClockToSds(obj->meta->vectorClock);
+    RedisModule_ReplyWithLongLong(ctx, getCrdtExpireLastGid(expire));
+    RedisModule_ReplyWithLongLong(ctx, getCrdtExpireLastTimestamp(expire));
+    sds vclockSds = vectorClockToSds(getCrdtExpireLastVectorClock(expire));
     RedisModule_ReplyWithStringBuffer(ctx, vclockSds, sdslen(vclockSds));
     sdsfree(vclockSds);
-    RedisModule_ReplyWithLongLong(ctx, obj->expireTime);
+    RedisModule_ReplyWithLongLong(ctx, getCrdtExpireLastExpireTime(expire));
 }
 
 
@@ -317,11 +317,10 @@ int initCrdtExpireModule(RedisModuleCtx *ctx) {
 void delExpire(RedisModuleKey *moduleKey, CrdtExpire* expire, CrdtMeta* meta) {
     CrdtExpireTombstone *tombstone = RedisModule_GetCrdtExpireTombstone(moduleKey);
     if(tombstone == NULL) {
-        tombstone = createCrdtExpireTombstone(getDataType(expire->parent.type));
+        tombstone = createCrdtExpireTombstone(getDataType(expire->type));
         RedisModule_SetCrdtExpireTombstone(moduleKey, CrdtExpireTombstoneType, tombstone);
     } 
-    appendVCForMeta(meta, crdtExpireGetObj(expire)->meta->vectorClock);
-    
+    appendVCForMeta(meta, getCrdtExpireLastVectorClock(expire));
     CrdtExpireTombstoneAdd(tombstone, meta);
     RedisModule_SetCrdtExpire(moduleKey, CrdtExpireType, NULL);
 }
@@ -334,7 +333,7 @@ void addExpireTombstone(RedisModuleKey* moduleKey, int dataType, CrdtMeta* meta)
     } 
     CrdtExpireTombstoneAdd(tombstone, meta);
     if(expire != NULL) {
-        if(compareCrdtMeta(crdtExpireGetObj(expire)->meta, meta) > COMPARE_META_EQUAL) {
+        if(compareCrdtMeta(getCrdtExpireLastMeta(expire), meta) > COMPARE_META_EQUAL) {
             RedisModule_SetCrdtExpire(moduleKey, CrdtExpireType, NULL);
         }   
     }

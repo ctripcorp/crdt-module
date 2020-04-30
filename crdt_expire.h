@@ -3,14 +3,23 @@
 #include "ctrip_crdt_common.h"
 #include "crdt.h"
 #include "crdt_util.h"
+#include <assert.h>
+#include "include/redismodule.h"
 #define CRDT_EXPIRE_DATATYPE_NAME "crdt_expi"
 #define CRDT_EXPIRE_TOMBSTONE_DATATYPE_NAME "crdt_expt"
 
 static RedisModuleType *CrdtExpireType;
 static RedisModuleType *CrdtExpireTombstoneType;
+typedef CrdtObject CrdtExpire;
+typedef CrdtObject CrdtExpireTombstone;
 RedisModuleType* getCrdtExpireType();
 RedisModuleType* getCrdtExpireTombstoneType();
 void* createCrdtExpire();
+long long getCrdtExpireLastExpireTime(CrdtExpire* expire);
+int getCrdtExpireLastGid(CrdtExpire* expire);
+long long getCrdtExpireLastTimestamp(CrdtExpire* expire);
+VectorClock* getCrdtExpireLastVectorClock(CrdtExpire* expire);
+CrdtMeta* getCrdtExpireLastMeta(CrdtExpire* expire);
 int initCrdtExpireModule(RedisModuleCtx *ctx);
 void *RdbLoadCrdtExpire(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtExpire(RedisModuleIO *rdb, void *value);
@@ -31,11 +40,12 @@ CrdtExpireObj* crdtExpireGetObj(CrdtExpire* obj);
 CrdtExpire* crdtExpireDup(CrdtExpire* obj);
 void crdtExpireFree(CrdtExpire* obj);
 static CrdtExpireMethod ExpireMethod = {
-    add: crdtExpireAddObj,
-    get: crdtExpireGetObj,
-    dup: crdtExpireDup,
-    free: crdtExpireFree,
-    persist: expirePersist,
+    .add = crdtExpireAddObj,
+    .getLastExpireTime = getCrdtExpireLastExpireTime,
+    .getLastGid = getCrdtExpireLastGid,
+    .dup = crdtExpireDup,
+    .free = crdtExpireFree,
+    .persist = expirePersist,
 };
 
 CrdtExpireTombstone* createCrdtExpireTombstone(int dataType);

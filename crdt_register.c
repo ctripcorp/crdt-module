@@ -164,12 +164,7 @@ int initRegisterModule(RedisModuleCtx *ctx) {
 
 }
 
-void freeCrdtRegisterValue(CrdtRegisterValue *value) {
-    if(value->meta != NULL) {
-        freeCrdtMeta(value->meta);
-    }
-    RedisModule_Free(value);
-}
+
 /***
  * CRDT Lifecycle functionality*/
 
@@ -185,7 +180,7 @@ int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value) {
     CRDT_Register *current = (CRDT_Register*) value;
     CrdtMeta* meta = createIncrMeta();
     CrdtMeta* del_meta = dupMeta(meta);
-    appendVCForMeta(del_meta, getCrdtRegisterValue(current)->meta->vectorClock);
+    appendVCForMeta(del_meta, getCrdtRegisterLastVc(current));
     CRDT_RegisterTombstone *tombstone = getTombstone(moduleKey);
     if(tombstone == NULL || !isRegisterTombstone(tombstone)) {
         tombstone = createCrdtRegisterTombstone();
@@ -194,12 +189,12 @@ int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value) {
     addRegisterTombstone(tombstone, del_meta);
     CrdtExpire* expire = RedisModule_GetCrdtExpire(moduleKey);
 
-    sds vcSds = vectorClockToSds(del_meta->vectorClock);
+    sds vcSds = vectorClockToSds(getMetaVectorClock(del_meta));
     if(expire == NULL) {
         RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_REG", "sllc", keyRobj, del_meta->gid, del_meta->timestamp, vcSds);
     } else {
         delExpire(moduleKey, expire, meta);
-        sds expireVcSds = vectorClockToSds(meta->vectorClock);
+        sds expireVcSds = vectorClockToSds(getMetaVectorClock(meta));
         RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_REG", "sllcc", keyRobj, del_meta->gid, del_meta->timestamp, vcSds, expireVcSds);
         sdsfree(expireVcSds);
     }
@@ -237,7 +232,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     CRDT_RegisterTombstone* tombstone = NULL;
     if(t != NULL && isRegisterTombstone(t)) {    
         tombstone = (CRDT_RegisterTombstone*)t;
-        if(isExpireTombstone(tombstone, del_meta) == CRDT_OK) {
+        if(isExpireCrdtTombstone(tombstone, del_meta) == CRDT_OK) {
             goto end;
         }
     }
@@ -253,7 +248,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         if(!isRegister(current)) {
             const char* keyStr = RedisModule_StringPtrLen(moduleKey, NULL);
             RedisModule_Log(ctx, logLevel, "[TYPE CONFLICT][CRDT-Register][drop] key:{%s} ,prev: {%s} ",
-                            keyStr ,current->parent.parent.type);
+                            keyStr ,current->type);
             RedisModule_IncrCrdtConflict();      
             RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);  
             status = CRDT_ERROR;
@@ -267,7 +262,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     if(expire_meta != NULL) {
         addExpireTombstone(moduleKey,CRDT_REGISTER_TYPE, expire_meta);
     }
-    RedisModule_MergeVectorClock(del_meta->gid, del_meta->vectorClock);
+    RedisModule_MergeVectorClock(del_meta->gid, getMetaVectorClock(del_meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
 end: 
     if(del_meta != NULL) {
@@ -288,21 +283,21 @@ end:
 }
 
 int isRegister(void *data) {
-    CRDT_Register* tombstone = (CRDT_Register*) data;
-    if(tombstone != NULL && getDataType(tombstone->parent.parent.type) == CRDT_REGISTER_TYPE) {
+    CRDT_Register* reg = (CRDT_Register*) data;
+    if(reg != NULL && getDataType(reg->type) == CRDT_REGISTER_TYPE) {
         return CRDT_OK;
     } 
     return CRDT_NO;
 }
 int isRegisterTombstone(void *data) {
     CRDT_RegisterTombstone* tombstone = (CRDT_RegisterTombstone*) data;
-    if(tombstone != NULL && getDataType(tombstone->parent.parent.type) == CRDT_REGISTER_TYPE) {
+    if(tombstone != NULL && getDataType(tombstone->type) == CRDT_REGISTER_TYPE) {
         return CRDT_OK;
     } 
     return CRDT_NO;
 }
 
-CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_Register* tombstone, CRDT_Register* current, CrdtMeta* meta, RedisModuleString* key,sds value) {
+CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_RegisterTombstone* tombstone, CRDT_Register* current, CrdtMeta* meta, RedisModuleString* key,sds value) {
     if(current == NULL) {
         current = addRegister(tombstone, meta, value);
         if(current != NULL) {
@@ -310,8 +305,8 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
         }
     }else{
         if(!isRegister(current)) {
-            RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%s}",
-                            RedisModule_GetSds(key),current->parent.parent.type);
+            RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
+                            RedisModule_GetSds(key),getDataType(current->type));
             RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
             RedisModule_IncrCrdtConflict();
             return NULL;
@@ -437,7 +432,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     meta = createIncrMeta();
     set_meta = dupMeta(meta);
     if(current != NULL) {
-        appendVCForMeta(set_meta, getCrdtRegisterValue(current)->meta->vectorClock);
+        appendVCForMeta(set_meta, getCrdtRegisterLastVc(current));
     }
     current = addOrUpdateRegister(ctx, moduleKey, NULL, current, set_meta, argv[1], RedisModule_GetSds(argv[2]));
     if(current == NULL) {
@@ -461,10 +456,10 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 end:
     if(set_meta) {
-        sds vclockStr = vectorClockToSds(set_meta->vectorClock);
+        sds vclockStr = vectorClockToSds(getMetaVectorClock(set_meta));
         //crdt.set key value gid timestamp set-vc expire-vc expire-timestamp 
         if(crdtExpireObj != NULL) {
-            sds expire_vcStr =  vectorClockToSds(crdtExpireObj->meta->vectorClock);
+            sds expire_vcStr =  vectorClockToSds(getMetaVectorClock(crdtExpireObj->meta));
             RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllccl", argv[1], argv[2], meta->gid, meta->timestamp, vclockStr, expire_vcStr, crdtExpireObj->expireTime);
             sdsfree(expire_vcStr);
         }else{
@@ -488,6 +483,7 @@ end:
 // CRDT.SET key <val> <gid> <timestamp> <vc> <expire-at-vc> <expire-time>
 // 0         1    2     3      4         5        6             7
 int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    RedisModule_AutoMemory(ctx);
     if (argc < 6) return RedisModule_WrongArity(ctx);
     CrdtExpireObj *expireObj = NULL;
     VectorClock *expire_vclock = NULL;
@@ -530,7 +526,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         }
         
     }
-    RedisModule_MergeVectorClock(meta->gid, meta->vectorClock);
+    RedisModule_MergeVectorClock(meta->gid, getMetaVectorClock(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
 end:
     if (meta != NULL) {
@@ -568,8 +564,7 @@ int getCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     } else {
         crdtRegister = RedisModule_ModuleTypeGetValue(key);
     }
-    RedisModule_Debug(logLevel, "get register type %lld", crdtRegister->parent.parent.type);
-    sds val = getCrdtRegisterSds(crdtRegister);
+    sds val = getCrdtRegisterLastValue(crdtRegister);
     if(!val) {
         RedisModule_CloseKey(key);
         return RedisModule_ReplyWithNull(ctx);
@@ -605,40 +600,30 @@ int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     } else {
         crdtRegister = RedisModule_ModuleTypeGetValue(key);
     }
-    CrdtRegisterValue* val = getCrdtRegisterValue(crdtRegister);
-    if(!val->value) {
+    sds val = getCrdtRegisterLastValue(crdtRegister);
+    if(!val) {
         RedisModule_Log(ctx, "warning", "empty val for key");
         RedisModule_CloseKey(key);
         return RedisModule_ReplyWithNull(ctx);
     }
 
     RedisModule_ReplyWithArray(ctx, 4);
-    RedisModuleString *result = RedisModule_CreateString(ctx, val->value, sdslen(val->value));
+    
+    RedisModuleString *result = RedisModule_CreateString(ctx, val, sdslen(val));
     RedisModule_ReplyWithString(ctx, result);
-    RedisModule_ReplyWithLongLong(ctx, val->meta->gid);
-    RedisModule_ReplyWithLongLong(ctx, val->meta->timestamp);
-    sds vclockSds = vectorClockToSds(val->meta->vectorClock);
+    RedisModule_ReplyWithLongLong(ctx, getCrdtRegisterLastGid(crdtRegister));
+    RedisModule_ReplyWithLongLong(ctx, getCrdtRegisterLastTimestamp(crdtRegister));
+    sds vclockSds = vectorClockToSds(getCrdtRegisterLastVc(crdtRegister));
     RedisModule_ReplyWithStringBuffer(ctx, vclockSds, sdslen(vclockSds));
     sdsfree(vclockSds);
     RedisModule_CloseKey(key);
     return REDISMODULE_OK;
 }
 
-/**
- * RedisModule specified functionality
- * */
-int mergeCrdtRegisterValue(CrdtRegisterValue* target, CrdtRegisterValue* other) {
-    int compareResult = appendCrdtMeta(target->meta, other->meta);
-    if(compareResult > COMPARE_META_EQUAL) {
-        if(target->value) sdsfree(target->value);
-        target->value = sdsdup(other->value);
-    } 
-    return compareResult;
-}
 CRDT_Register* addRegister(void *data, CrdtMeta* meta, sds value) {
     CRDT_RegisterTombstone* tombstone = (CRDT_RegisterTombstone*) data;
     if(tombstone != NULL) {
-        if(isExpireTombstone(tombstone, meta) == CRDT_OK) {
+        if(isExpireCrdtTombstone(tombstone, meta) == CRDT_OK) {
             return NULL;
         }
     }
@@ -649,13 +634,10 @@ CRDT_Register* addRegister(void *data, CrdtMeta* meta, sds value) {
 int tryUpdateRegister(void* data, CrdtMeta* meta, CRDT_Register* reg, sds value) {
     CRDT_RegisterTombstone* tombstone = (CRDT_RegisterTombstone*) data;
     if(tombstone != NULL) {
-        if(isExpireTombstone(tombstone, meta) == CRDT_OK) {
+        if(isExpireCrdtTombstone(tombstone, meta) == CRDT_OK) {
             return COMPARE_META_VECTORCLOCK_LT;
         }
     }
     return setCrdtRegister(reg, meta, value);
 }
-VectorClock* crdtRegisterGetLastVC(void* data) {
-    CRDT_Register* reg = (CRDT_Register*) data;
-    return getCrdtRegisterValue(reg)->meta->vectorClock;
-}
+
