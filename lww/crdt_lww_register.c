@@ -51,7 +51,7 @@ sds getCrdtLWWRegisterValue(CRDT_LWW_Register* r) {
     return r->value;
 }
 void setCrdtLWWRegisterValue(CRDT_LWW_Register* r, sds value) {
-    if(r->value) {
+    if(r->value != NULL) {
         sdsfree(r->value);
     }
     r->value = value;
