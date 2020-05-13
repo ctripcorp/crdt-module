@@ -144,12 +144,8 @@ CrdtMeta* createIncrMeta() {
     long long gid = RedisModule_CurrentGid();
     RedisModule_IncrLocalVectorClock(1);
     VectorClock *currentVectorClock = RedisModule_CurrentVectorClock();
-    // VectorClockUnit* unit = getVectorClockUnit(currentVectorClock, gid);
-    // VectorClock *result = newVectorClock(1);
-    // addVectorClockUnit(result, gid, unit);
     VectorClock *result = getMonoVectorClock(currentVectorClock, gid);
     long long timestamp = RedisModule_Milliseconds();
-    freeVectorClock(currentVectorClock);
     return createMeta(gid, timestamp, result);
 };
 void freeCrdtMeta(CrdtMeta* meta) {
@@ -168,27 +164,7 @@ void freeCrdtObject(CrdtObject* object) {
 void freeCrdtTombstone(CrdtTombstone* tombstone) {
     RedisModule_Free(tombstone);
 }
-CrdtExpireObj* dupExpireObj(CrdtExpireObj* copy) {
-    if(copy == NULL) {
-        return NULL;
-    }
-    return createCrdtExpireObj(dupMeta(copy->meta), copy->expireTime);
-}
 
-CrdtExpireObj* createCrdtExpireObj(CrdtMeta* meta, long long expireTime) {
-    CrdtExpireObj* obj = RedisModule_Alloc(sizeof(CrdtExpireObj));
-    obj->meta = meta;
-    obj->expireTime = expireTime;
-    return obj;
-}
-
-void freeCrdtExpireObj(CrdtExpireObj* obj) {
-    if(obj->meta != NULL) {
-        freeCrdtMeta(obj->meta);
-        obj->meta = NULL;
-    }
-     RedisModule_Free(obj);
- }
 
 int getType(int type) {
     return type >> 4;

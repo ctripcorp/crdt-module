@@ -201,7 +201,6 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(current != NULL) {
         appendVCForMeta(meta, getCrdtHashLastVc(current));
     }
-    CrdtExpire* expire = RedisModule_GetCrdtExpire(moduleKey);
     int result = addOrUpdateHash(ctx, argv[1], moduleKey, NULL, current,meta, argv, 2, argc);
     if(result == CHANGE_HASH_ERR) {
         goto end;
@@ -290,13 +289,11 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     int status = CRDT_OK;
     int deleted = 0;
     int deleteall = CRDT_NO;
-    CrdtExpire* expire = NULL;
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
     if(moduleKey == NULL) {
         status = CRDT_ERROR;
         goto end;
     }
-    expire = RedisModule_GetCrdtExpire(moduleKey);
     CrdtTombstone* t = getTombstone(moduleKey);
     CRDT_HashTombstone* tombstone = NULL;
     if(t != NULL && isCrdtHashTombstone(t)) {
@@ -342,7 +339,6 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }    
     if (dictSize(current->map) == 0) {
         deleteall = CRDT_OK;
-        if(expire != NULL) delExpire(moduleKey, expire, meta);
         RedisModule_DeleteKey(moduleKey);
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
     }
@@ -357,11 +353,6 @@ end:
         freeCrdtMeta(del_meta);
     }
     if(meta) {
-        if(deleteall == CRDT_OK && expire != NULL) {
-            sds vcStr = vectorClockToSds(getMetaVectorClock(meta));
-            RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.PERSIST", "sllcl", argv[1], meta->gid, meta->timestamp, vcStr, CRDT_HASH_TYPE);
-            sdsfree(vcStr);
-        }
         freeCrdtMeta(meta);
     }
 
@@ -531,9 +522,6 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
     if (crdtHtNeedsResize(current->map)) dictResize(current->map);
     if (dictSize(current->map) == 0) {
         RedisModule_DeleteKey(moduleKey);
-    }
-    if(expire_meta) {
-        addExpireTombstone(moduleKey,CRDT_HASH_TYPE, expire_meta);
     }
     RedisModule_MergeVectorClock(meta->gid, getMetaVectorClock(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
@@ -956,16 +944,7 @@ int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value) {
     changeCrdtHashTombstone(tombstone, del_meta);
     sds vcSds = vectorClockToSds(getMetaVectorClock(result));
         sds maxDeletedVclock = vectorClockToSds(getCrdtHashLastVc(current));
-    CrdtExpire* expire = RedisModule_GetCrdtExpire(moduleKey);
-    if(expire == NULL) {
-        RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Hash", "sllcc", keyRobj, meta->gid, meta->timestamp, vcSds, vcSds);
-    }else{
-        delExpire(moduleKey, expire, meta);
-        sds expireVcSds = vectorClockToSds(getMetaVectorClock(meta));
-        RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Hash", "sllccc", keyRobj, meta->gid, meta->timestamp, vcSds, vcSds,expireVcSds);
-        sdsfree(expireVcSds);
-    }
-
+    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Hash", "sllcc", keyRobj, meta->gid, meta->timestamp, vcSds, vcSds);
     sdsfree(vcSds);
     sdsfree(maxDeletedVclock);
     freeCrdtMeta(meta);

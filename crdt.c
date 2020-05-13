@@ -105,7 +105,6 @@ VectorClock *getVectorClockFromString(RedisModuleString *vectorClockStr) {
 #define RDB_VALUE_EOF 0
 #define C_OK 0
 #define C_ERR -1
-
 int saveValue(void *rio, RedisModuleType* type, void* data) {
     uint64_t id = RedisModule_GetModuleTypeId(type);
     if(RedisModule_SaveLen(rio, id) == C_ERR) return C_ERR;
@@ -138,14 +137,6 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key) {
         }
     }
     
-    CrdtExpire *expire = RedisModule_GetCrdtExpire(moduleKey);
-    if(expire != NULL) {
-        saveValue(rio, getCrdtExpireType(), expire);
-    }
-    CrdtExpireTombstone* expire_tombstone = RedisModule_GetCrdtExpireTombstone(moduleKey);
-    if(expire_tombstone != NULL) {
-        saveValue(rio, getCrdtExpireTombstoneType(), expire_tombstone);
-    }
     RedisModule_SaveLen(rio, RDB_VALUE_EOF);
 error:
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
@@ -175,11 +166,7 @@ int RdbLoadCrdtValue(void* db, RedisModuleString* key, void* rio) {
             RedisModule_ModuleTombstoneSetValue(moduleKey, type, data);
         } else if(type == getCrdtHashTombstone()) {
             RedisModule_ModuleTombstoneSetValue(moduleKey, type, data);
-        } else if(type == getCrdtExpireType()) {
-            RedisModule_SetCrdtExpire(moduleKey, type, data);
-        } else if(type == getCrdtExpireTombstoneType()) {
-            RedisModule_SetCrdtExpireTombstone(moduleKey, type, data);
-        }else{
+        } else{
             result = C_ERR;
             goto error;
         }
@@ -194,12 +181,7 @@ int isTombstone(int type) {
 int isData(int type) {
     return getType(type) == CRDT_DATA;
 }
-int isExpire(int type) {
-    return getType(type) ==  CRDT_EXPIRE;
-}
-int isExpireTombstone(int type) {
-    return getType(type) == CRDT_EXPIRE_TOMBSTONE;
-}
+
 
 CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
     if(!isData(data->type)) {
@@ -224,18 +206,10 @@ CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
             default:
                 return NULL;
         }
-    } else if(isExpire(obj->type)) {
-        return &CrdtExpireCommonMethod;
-    }
+    } 
     return NULL;
 }
 
-CrdtExpireMethod* getCrdtExpireMethod(CrdtObject* obj) {
-    if(!isExpire(obj->type)) {
-        return NULL;
-    }
-    return &ExpireMethod;
-}
 CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
     if(isTombstone(tombstone->type)) {
         switch (getDataType(tombstone->type)) {
@@ -246,9 +220,7 @@ CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
             default:
                 return NULL;
         }
-    } else if(isExpireTombstone(tombstone->type)) {
-        return &ExpireTombstoneCommonMethod;
-    }
+    } 
 }
 
 /* This function must be present on each Redis module. It is used in order to
