@@ -85,8 +85,7 @@ int crdtExpireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     if (argc < 6) return RedisModule_WrongArity(ctx);
     long long expireTime;
     long long gid;
-    if ((RedisModule_StringToLongLong(argv[2],&gid) != REDISMODULE_OK)) {
-        RedisModule_ReplyWithError(ctx,"ERR invalid value: gid must be a signed 64 bit integer");
+    if ((redisModuleStringToGid(ctx, argv[2],&gid) != REDISMODULE_OK)) {
         return NULL;
     } 
     long long time;
@@ -155,8 +154,7 @@ int crdtPersistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
         return NULL;
     }
     long long gid;
-    if ((RedisModule_StringToLongLong(argv[2],&gid) != REDISMODULE_OK)) {
-        RedisModule_ReplyWithError(ctx,"ERR invalid gid: must be a signed 64 bit integer");
+    if ((redisModuleStringToGid(ctx, argv[2],&gid) != REDISMODULE_OK)) {
         return NULL;
     }
     CrdtData* data = NULL;
