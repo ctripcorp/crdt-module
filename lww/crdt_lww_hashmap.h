@@ -107,16 +107,16 @@ int changeCrdtHash(CRDT_Hash* hash, CrdtMeta* meta) {
     return changeCrdtLWWHash(hash,meta);
 }
 CRDT_Hash* dupCrdtLWWHash(void* data);
-CRDT_Hash* dupCrdtHash(void* data) {
+CRDT_Hash* dupCrdtHash(CRDT_Hash* data) {
     return dupCrdtLWWHash(data);
 }
 VectorClock getCrdtLWWHashLastVc(CRDT_LWW_Hash* r);
-VectorClock getCrdtHashLastVc(void* data) {
-    return getCrdtLWWHashLastVc(data);
+VectorClock getCrdtHashLastVc(CRDT_Hash* data) {
+    return getCrdtLWWHashLastVc((CRDT_LWW_Hash*)data);
 }
 
 void updateLastVCLWWHash(void* data, VectorClock vc);
-void updateLastVCHash(void* data, VectorClock vc) {
+void updateLastVCHash(CRDT_Hash* data, VectorClock vc) {
     return updateLastVCLWWHash(data, vc);
 }
 
@@ -139,11 +139,12 @@ int gcCrdtHashTombstone(void* data, VectorClock clock) {
 }
 VectorClock getCrdtLWWHashTombstoneLastVc(CRDT_LWW_HashTombstone* t);
 VectorClock getCrdtHashTombstoneLastVc(CRDT_HashTombstone* t) {
-    return getCrdtLWWHashTombstoneLastVc(t);
+    return getCrdtLWWHashTombstoneLastVc((CRDT_LWW_HashTombstone*)t);
 }
 void setCrdtLWWHashTombstoneLastVc(CRDT_LWW_HashTombstone* t, VectorClock vc);
 void mergeCrdtHashTombstoneLastVc(CRDT_HashTombstone* t, VectorClock vc) {
-    setCrdtLWWHashTombstoneLastVc(t, vectorClockMerge(getCrdtLWWHashTombstoneLastVc(t), vc));
+    CRDT_LWW_HashTombstone* tombstone = (CRDT_LWW_HashTombstone*)t;
+    setCrdtLWWHashTombstoneLastVc(tombstone, vectorClockMerge(getCrdtLWWHashTombstoneLastVc(tombstone), vc));
 }
 CrdtMeta* getCrdtLWWHashTombstoneMaxDelMeta(CRDT_LWW_HashTombstone* data);
 CrdtMeta* getMaxDelCrdtHashTombstone(void* data) {

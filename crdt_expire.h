@@ -14,8 +14,7 @@
 
 //utils
 void setExpire(RedisModuleKey *key, CrdtData *data, long long expiteTime);
-int trySetExpire(RedisModuleKey* moduleKey, long long  time, int type, long long expireTime) ;
-
-//debug
-// int crdtGetExpireTombstoneCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc);
+int trySetExpire(RedisModuleKey* moduleKey, RedisModuleString* key, long long  time, int type, long long expireTime) ;
+//command
+int initCrdtExpireModule(RedisModuleCtx *ctx);
 #endif 

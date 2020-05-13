@@ -49,7 +49,7 @@ void* getTombstone(RedisModuleKey *moduleKey) {
 }
 
 VectorClock rdbLoadVectorClock(RedisModuleIO *rdb) {
-    size_t vcLength, strLength;
+    size_t vcLength;
     char* vcStr = RedisModule_LoadStringBuffer(rdb, &vcLength);
     sds vclockSds = sdsnewlen(vcStr, vcLength);
     VectorClock result = sdsToVectorClock(vclockSds);

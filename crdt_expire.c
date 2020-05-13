@@ -22,13 +22,7 @@ int expireAt(RedisModuleCtx* ctx, RedisModuleString *key, long long expireTime) 
     setExpire(moduleKey, data, expireTime);
 end:
     if(data != NULL) {
-        CrdtDataMethod* method = getCrdtDataMethod(data);
-        if(method != NULL) {
-            RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllll", key, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
-        }else{
-            RedisModule_Debug(logLevel, "[CRDT] in addOrUpdateCrdtExpire function, getCrdtDataMethod error");
-        }
-        
+        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllll", key, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
     }
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     return RedisModule_ReplyWithLongLong(ctx, 0);
@@ -42,14 +36,14 @@ int expireAtCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     }
     return expireAt(ctx, argv[1], time);
 }
-int trySetExpire(RedisModuleKey* moduleKey, long long  time, int type, long long expireTime) {
+int trySetExpire(RedisModuleKey* moduleKey, RedisModuleString* key, long long  time, int type, long long expireTime) {
     CrdtData* data = RedisModule_ModuleTypeGetValue(moduleKey);
     if(data == NULL) {
-        RedisModule_Debug(logLevel, "data is null: %lld",expireTime);
+        RedisModule_Debug(logLevel, "key: %s, data is null: %lld", RedisModule_GetSds(key), expireTime);
         return CRDT_ERROR;
     }
     if(getDataType(data) != type) {
-         RedisModule_Debug(logLevel, "type diff: %lld",expireTime);
+         RedisModule_Debug(logLevel, "key: %s ,type diff: %lld", RedisModule_GetSds(key),expireTime);
         return CRDT_ERROR;
     }
     if(expireTime == -1) {
@@ -84,26 +78,22 @@ int crdtExpireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     if (argc < 6) return RedisModule_WrongArity(ctx);
     long long expireTime;
     long long gid;
-    if ((redisModuleStringToGid(ctx, argv[2],&gid) != REDISMODULE_OK)) {
-        return NULL;
+    if ((RedisModule_StringToLongLong(argv[2],&gid) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: gid must be a signed 64 bit integer");
     } 
     long long time;
     if ((RedisModule_StringToLongLong(argv[3],&time) != REDISMODULE_OK)) {
-        RedisModule_ReplyWithError(ctx,"ERR invalid value: time must be a signed 64 bit integer");
-        return NULL;
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: time must be a signed 64 bit integer");
     } 
     if ((RedisModule_StringToLongLong(argv[4],&expireTime) != REDISMODULE_OK)) {
-        RedisModule_ReplyWithError(ctx,"ERR invalid value: expireTime must be a signed 64 bit integer");
-        return NULL;
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: expireTime must be a signed 64 bit integer");
     } 
     long long type;
     if ((RedisModule_StringToLongLong(argv[5],&type) != REDISMODULE_OK)) {
-        RedisModule_ReplyWithError(ctx,"ERR invalid value: type must be a signed 64 bit integer");
-        return NULL;
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: type must be a signed 64 bit integer");
     } 
     RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE);
-    trySetExpire(moduleKey, time, type, expireTime);
-end:
+    trySetExpire(moduleKey, argv[1], time, type, expireTime);
     if(moduleKey != NULL) {
         if (gid == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
@@ -149,12 +139,11 @@ int crdtPersistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     if (argc < 4) return RedisModule_WrongArity(ctx);
     long long dataType;
     if ((RedisModule_StringToLongLong(argv[3],&dataType) != REDISMODULE_OK)) {
-        RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
-        return NULL;
+        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
     }
     long long gid;
-    if ((redisModuleStringToGid(ctx, argv[2],&gid) != REDISMODULE_OK)) {
-        return NULL;
+    if ((RedisModule_StringToLongLong(argv[2],&gid) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx,"ERR invalid gid: must be a signed 64 bit integer");
     }
     CrdtData* data = NULL;
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE);

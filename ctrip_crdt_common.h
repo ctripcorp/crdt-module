@@ -44,10 +44,9 @@
 //type
 #define CRDT_DATA 0
 #define CRDT_TOMBSTONE 1
-
 //data type
-#define CRDT_REGISTER_TYPE 1
-#define CRDT_HASH_TYPE 2
+#define CRDT_REGISTER_TYPE 0
+#define CRDT_HASH_TYPE 1
 
 
 #define LWW_TYPE  (0 << 1)
@@ -73,17 +72,17 @@ typedef struct CrdtObject {
     unsigned char dataType:3;
 } __attribute__ ((packed, aligned(1))) CrdtObject;
 int getDataType(CrdtObject *obj);
-int setDataType(CrdtObject *obj, int type);
+void setDataType(CrdtObject *obj, int type);
 void setType(CrdtObject *obj, int type);
 int getType(CrdtObject *obj);
 typedef CrdtObject CrdtData;
 typedef CrdtObject CrdtTombstone;
-typedef void *(*crdtMergeFunc)(void *curVal, void *value);
+typedef CrdtObject *(*crdtMergeFunc)(CrdtObject *curVal, CrdtObject *value);
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
-typedef void* (*crdtFilterFunc)(void* common, int gid, long long logic_time);
-typedef int (*crdtCleanFunc)(struct CrdtObject* value, struct CrdtTombstone* tombstone);
-typedef int (*crdtGcFunc)(struct CrdtTombstone* value, VectorClock clock);
-typedef int (*crdtPurageFunc)(struct CrdtTombstone* tombstone, struct CrdtObject* obj);
+typedef CrdtObject* (*crdtFilterFunc)(CrdtObject* common, int gid, long long logic_time);
+typedef int (*crdtCleanFunc)( CrdtObject* value, CrdtTombstone* tombstone);
+typedef int (*crdtGcFunc)( CrdtTombstone* value, VectorClock clock);
+typedef int (*crdtPurageFunc)(CrdtTombstone* tombstone,  CrdtObject* obj);
 
 typedef struct CrdtMeta {
     unsigned long long type:8;
@@ -103,8 +102,9 @@ typedef struct CrdtObjectMethod {
 } CrdtObjectMethod;
 
 
+
 typedef VectorClock (*crdtGetLastVCFunc)(void* value);
-typedef void* (*crdtUpdateLastVCFunc)(void* value,VectorClock data);
+typedef void (*crdtUpdateLastVCFunc)(void* value,VectorClock data);
 typedef struct CrdtDataMethod {
     crdtGetLastVCFunc getLastVC;
     crdtUpdateLastVCFunc updateLastVC;
@@ -138,6 +138,8 @@ CrdtDataMethod* getCrdtDataMethod(CrdtObject* data);
 int compareCrdtMeta(CrdtMeta *a, CrdtMeta *b);
 int isConflictMeta(int result);
 int appendCrdtMeta(CrdtMeta *target , CrdtMeta* other);
+int isConflictCommon(int result);
+// int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 
 
 #endif //REDIS_CTRIP_CRDT_COMMON_H

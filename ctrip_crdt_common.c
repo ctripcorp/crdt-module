@@ -157,7 +157,7 @@ int getType(CrdtObject* obj) {
 void setType(CrdtObject* obj, int type) {
     obj->type = type;
 }
-int setDataType(CrdtObject* obj, int type) {
+void setDataType(CrdtObject* obj, int type) {
     obj->dataType = type;
 }
 int getDataType(CrdtObject* obj) {
@@ -175,6 +175,12 @@ void setMetaVectorClock(CrdtMeta* meta, VectorClock vc) {
 }
 
 CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other) {
+    if(target == NULL) {
+        return dupMeta(other);
+    }
+    if(other == NULL) {
+        return dupMeta(target);
+    }
     VectorClock result = vectorClockMerge(getMetaVectorClock(target), getMetaVectorClock(other));
     if(compareCrdtMeta(target, other) > 0) {
         return createMeta(getMetaGid(other), getMetaTimestamp(other), result);
