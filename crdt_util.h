@@ -6,6 +6,7 @@
 #include "crdt.h"
 #include "ctrip_crdt_common.h"
 int redisModuleStringToGid(RedisModuleCtx *ctx, RedisModuleString *argv, long long *gid);
+hange sturct vectorClock
 CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index);
 RedisModuleKey* getWriteRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type);
 void* getCurrentValue(RedisModuleKey *moduleKey);
@@ -13,6 +14,6 @@ void* getTombstone(RedisModuleKey *moduleKey);
 CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other);
 CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other);
 
-VectorClock* rdbLoadVectorClock(RedisModuleIO *rdb);
-int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock* clock);
+VectorClock rdbLoadVectorClock(RedisModuleIO *rdb);
+int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock clock);
 #endif //XREDIS_CRDT_CRDT_UTIL_H

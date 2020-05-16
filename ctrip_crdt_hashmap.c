@@ -40,14 +40,14 @@
 */
 int isCrdtHash(void* data) {
     CRDT_Hash* hash = (CRDT_Hash*)data;
-    if(hash != NULL && (getDataType(hash->type) == CRDT_HASH_TYPE)) {
+    if(hash != NULL && (getDataType(hash) == CRDT_HASH_TYPE)) {
         return CRDT_OK;
     }
     return CRDT_NO;
 }
 int isCrdtHashTombstone(void *data) {
     CRDT_HashTombstone* tombstone = (CRDT_HashTombstone*)data;
-    if(tombstone != NULL && (getDataType(tombstone->type) ==  CRDT_HASH_TYPE)) {
+    if(tombstone != NULL && (getDataType(tombstone) ==  CRDT_HASH_TYPE)) {
         return CRDT_OK;
     }
     return CRDT_NO;
@@ -58,7 +58,6 @@ CRDT_Hash* retrieveCrdtHash(void* t) {
     }
     CRDT_Hash* result = (CRDT_Hash*)t;
     assert(result->map != NULL);
-    // assert(result->map->type == &crdtHashDictType);
     return result;
 }
 
@@ -212,7 +211,7 @@ end:
         sds vclockStr = vectorClockToSds(getMetaVectorClock(meta));
         size_t argc_repl = (size_t) (argc - 2);
         void *argv_repl = (void *) (argv + 2);
-        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.HSET", "sllclv", argv[1], meta->gid, meta->timestamp, vclockStr, (long long) (argc-2), argv_repl, argc_repl);
+        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.HSET", "sllclv", argv[1], getMetaGid(meta), getMetaTimestamp(meta), vclockStr, (long long) (argc-2), argv_repl, argc_repl);
         sdsfree(vclockStr);
         freeCrdtMeta(meta);
     }
@@ -348,7 +347,7 @@ end:
         size_t argc_repl = (size_t) deleted;
         void *argv_repl = (void *) deleted_objs;
         //CRDT.REM_HASH <key> gid timestamp <del-op-vclock> <field1> <field2> ...
-        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.REM_HASH", "sllcv", argv[1], meta->gid, meta->timestamp, vcStr, argv_repl, argc_repl);
+        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.REM_HASH", "sllcv", argv[1], getMetaGid(meta), getMetaTimestamp(meta), vcStr, argv_repl, argc_repl);
         sdsfree(vcStr);
         freeCrdtMeta(del_meta);
     }
@@ -392,11 +391,11 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         status = CRDT_ERROR;
         goto end;
     }
-    RedisModule_MergeVectorClock(meta->gid, getMetaVectorClock(meta));
+    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClock(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hset", argv[1]);
 end:
     if (meta != NULL) {
-        if (meta->gid == RedisModule_CurrentGid()) {
+        if (getMetaGid(meta) == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
         } else {
             RedisModule_ReplicateVerbatim(ctx);
@@ -467,11 +466,6 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
     if(meta == NULL) {
         return CRDT_ERROR;
     }
-    CrdtMeta* expire_meta = NULL;
-    if(argc > 6) {
-        VectorClock *vclock = getVectorClockFromString(argv[6]);
-        expire_meta = createMeta(meta->gid, meta->timestamp, vclock);
-    }
 
     int status = CRDT_OK;
     int deleted = 0;
@@ -523,18 +517,17 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
     if (dictSize(current->map) == 0) {
         RedisModule_DeleteKey(moduleKey);
     }
-    RedisModule_MergeVectorClock(meta->gid, getMetaVectorClock(meta));
+    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClock(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
 end:
     if(meta) {
-        if (meta->gid == RedisModule_CurrentGid()) {
+        if (getMetaGid(meta) == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
         } else {
             RedisModule_ReplicateVerbatim(ctx);
         }
         freeCrdtMeta(meta);
     }
-    if(expire_meta) freeCrdtMeta(expire_meta);
     if(moduleKey) RedisModule_CloseKey(moduleKey);
     if(status == CRDT_OK) {
         return RedisModule_ReplyWithLongLong(ctx, deleted); 
@@ -610,14 +603,14 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         }
     }
     
-    RedisModule_MergeVectorClock(meta->gid, getMetaVectorClock(meta));
+    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClock(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hdel", argv[1]);
     if(keyremoved == CRDT_OK) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
     }
 end:
     if(meta) {
-        if (meta->gid == RedisModule_CurrentGid()) {
+        if (getMetaGid(meta) == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
         } else {
             RedisModule_ReplicateVerbatim(ctx);
@@ -944,7 +937,7 @@ int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value) {
     changeCrdtHashTombstone(tombstone, del_meta);
     sds vcSds = vectorClockToSds(getMetaVectorClock(result));
         sds maxDeletedVclock = vectorClockToSds(getCrdtHashLastVc(current));
-    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Hash", "sllcc", keyRobj, meta->gid, meta->timestamp, vcSds, vcSds);
+    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Hash", "sllcc", keyRobj, getMetaGid(meta), getMetaTimestamp(meta), vcSds, vcSds);
     sdsfree(vcSds);
     sdsfree(maxDeletedVclock);
     freeCrdtMeta(meta);
@@ -968,6 +961,7 @@ void* crdtHashFilter(void* common, int gid, long long logic_time) {
             freeCrdtMeta(meta);
         }
     }
+
     dictReleaseIterator(di);
     if(dictSize(result->map) == 0) {
         freeCrdtHash(result);
@@ -999,9 +993,6 @@ int crdtHashTombstonePurage( void* tombstone, void* current) {
     if(dictSize(crdtHash->map) == 0) {
         return CRDT_OK;
     }
-    return CRDT_NO;
-}
-int crdtHashGc(void* target, VectorClock* clock) {
     return CRDT_NO;
 }
 
@@ -1060,16 +1051,16 @@ void* crdtHashTombstoneFilter(void* common, int gid, long long logic_time) {
     return result;
 }
 
-int crdtHashTombstoneGc(void* common, VectorClock* clock) {
+int crdtHashTombstoneGc(void* common, VectorClock clock) {
     CRDT_HashTombstone* target = retrieveCrdtHashTombstone(common);
     return gcCrdtHashTombstone(target, clock);
 }
 
-VectorClock* crdtHashGetLastVC(void* data) {
+VectorClock crdtHashGetLastVC(void* data) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(data);
     return getCrdtHashLastVc(crdtHash);
 }
-void crdtHashUpdateLastVC(void* data, VectorClock* vc) {
+void crdtHashUpdateLastVC(void* data, VectorClock vc) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(data);
     updateLastVCHash(crdtHash, vc);
 }

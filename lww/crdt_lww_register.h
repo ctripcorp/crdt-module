@@ -7,9 +7,9 @@
 #include <assert.h>
 
 typedef struct CRDT_LWW_Register {//26
-    unsigned char type;
-    unsigned char gid;
-    long long timestamp;
+    unsigned long long type:8;
+    unsigned long long gid:4;
+    unsigned long long timestamp:52;
     VectorClock vectorClock;
     sds value;
 } __attribute__ ((packed, aligned(1))) CRDT_LWW_Register;
@@ -26,12 +26,12 @@ sds getCrdtLWWRegisterValue(CRDT_LWW_Register* r);
 sds getCrdtRegisterLastValue(CRDT_Register* r) {
     return getCrdtLWWRegisterValue(r);
 }
-VectorClock* getCrdtLWWRegisterVectorClock(CRDT_LWW_Register* r);
-VectorClock* getCrdtRegisterLastVc(CRDT_Register* r) {
+VectorClock getCrdtLWWRegisterVectorClock(CRDT_LWW_Register* r);
+VectorClock getCrdtRegisterLastVc(CRDT_Register* r) {
     return getCrdtLWWRegisterVectorClock(r);
 }
 CrdtMeta* createCrdtRegisterLastMeta(CRDT_Register* reg) {
-    VectorClock* vc = getCrdtRegisterLastVc(reg);
+    VectorClock vc = getCrdtRegisterLastVc(reg);
     if(vc != NULL) {
         return createMeta(
             getCrdtRegisterLastGid(reg), 
@@ -64,9 +64,9 @@ CRDT_Register* mergeRegister(CRDT_Register* target, CRDT_Register* other) {
 }
 
 typedef struct  CRDT_LWW_RegisterTombstone {//20
-    unsigned char type;
-    unsigned char gid;
-    long long timestamp;
+    unsigned long long type:8;
+    unsigned long long gid:4;
+    unsigned long long timestamp:52;
     VectorClock vectorClock;//8
 } __attribute__ ((packed, aligned(1))) CRDT_LWW_RegisterTombstone;
 /**
@@ -135,11 +135,10 @@ void* createCrdtLWWCrdtRegisterTombstone(void);
 void freeCrdtLWWCrdtRegisterTombstone(void *obj);
 void freeCrdtLWWCrdtRegister(void *obj);
 //gc
-int crdtLWWRegisterTombstoneGc(void* target, VectorClock* clock);
-int crdtLWWRegisterGc(void* target, VectorClock* clock);
+int crdtLWWRegisterTombstoneGc(void* target, VectorClock clock);
 
-void updateLastVCLWWRegister(CRDT_Register* r, VectorClock* vc);
-void crdtRegisterUpdateLastVC(void *data, VectorClock* vc) {
+void updateLastVCLWWRegister(CRDT_Register* r, VectorClock vc);
+void crdtRegisterUpdateLastVC(void *data, VectorClock vc) {
     CRDT_Register* reg = (CRDT_Register*) data;
     updateLastVCLWWRegister(reg, vc);
 }
@@ -206,12 +205,10 @@ void freeCrdtRegisterTombstone(void *obj) {
 
 
 //gc
-int crdtRegisterTombstoneGc(void* target, VectorClock* clock) {
+int crdtRegisterTombstoneGc(void* target, VectorClock clock) {
     return crdtLWWRegisterTombstoneGc(target, clock);
 }
-int crdtRegisterGc(void* target, VectorClock* clock) {
-    crdtLWWRegisterGc(target, clock);
-}
+
 
 
 

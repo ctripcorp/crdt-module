@@ -38,6 +38,8 @@
 #include "crdt_pubsub.h"
 #include "crdt_expire.h"
 #include "ctrip_crdt_common.h"
+#include <stdlib.h>
+#include <stdio.h>
 #define CRDT_API_VERSION 1
 
 
@@ -94,11 +96,11 @@ int crdtDebugCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return RedisModule_ReplyWithSimpleString(ctx, "OK");
 }
 
-VectorClock *getVectorClockFromString(RedisModuleString *vectorClockStr) {
+VectorClock getVectorClockFromString(RedisModuleString *vectorClockStr) {
     size_t vcStrLength;
     const char *vcStr = RedisModule_StringPtrLen(vectorClockStr, &vcStrLength);
     sds vclockSds = sdsnewlen(vcStr, vcStrLength);
-    VectorClock *vclock = sdsToVectorClock(vclockSds);
+    VectorClock vclock = sdsToVectorClock(vclockSds);
     sdsfree(vclockSds);
     return vclock;
 }
@@ -114,7 +116,7 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key) {
     RedisModuleKey* moduleKey = RedisModule_GetKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
     CrdtObject* data = RedisModule_ModuleTypeGetValue(moduleKey);
     if(data != NULL) {
-        switch (getDataType(data->type))
+        switch (getDataType(data))
         {
         case CRDT_REGISTER_TYPE:
             saveValue(rio, getCrdtRegister(), data);
@@ -126,7 +128,7 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key) {
     }
     CrdtTombstone* tombstone = RedisModule_ModuleTypeGetTombstone(moduleKey);
     if(tombstone != NULL) {
-        switch (getDataType(tombstone->type))
+        switch (getDataType(tombstone))
         {
         case CRDT_REGISTER_TYPE:
             saveValue(rio, getCrdtRegisterTombstone(), tombstone);
@@ -175,19 +177,19 @@ error:
     if(moduleKey != NULL) {RedisModule_CloseKey(moduleKey);}
     return result;
 }
-int isTombstone(int type) {
-    return getType(type) == CRDT_TOMBSTONE;
+int isTombstone(CrdtObject* data) {
+    return getType(data) == CRDT_TOMBSTONE;
 }
-int isData(int type) {
-    return getType(type) == CRDT_DATA;
+int isData(CrdtObject* data) {
+    return getType(data) == CRDT_DATA;
 }
 
 
 CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
-    if(!isData(data->type)) {
+    if(!isData(data)) {
         return NULL;
     }
-    switch (getDataType(data->type)) {
+    switch (getDataType(data)) {
         case CRDT_REGISTER_TYPE:
             return &RegisterDataMethod;
         case CRDT_HASH_TYPE:
@@ -197,8 +199,8 @@ CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
     }
 }
 CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
-    if(isData(obj->type)) {
-        switch (getDataType(obj->type)) {
+    if(isData(obj)) {
+        switch (getDataType(obj)) {
             case CRDT_REGISTER_TYPE:
                 return &RegisterCommonMethod;
             case CRDT_HASH_TYPE:
@@ -211,8 +213,8 @@ CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
 }
 
 CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
-    if(isTombstone(tombstone->type)) {
-        switch (getDataType(tombstone->type)) {
+    if(isTombstone(tombstone)) {
+        switch (getDataType(tombstone)) {
             case CRDT_REGISTER_TYPE:
                 return &RegisterTombstoneMethod;
             case CRDT_HASH_TYPE:
@@ -259,6 +261,5 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     if (RedisModule_CreateCommand(ctx,"crdt.debug",
                                   crdtDebugCommand,"write",1,-1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
-
     return REDISMODULE_OK;
 }
