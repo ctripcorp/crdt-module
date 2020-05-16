@@ -11,31 +11,10 @@ CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index
         RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
         return NULL;
     }
-    VectorClock *vclock = getVectorClockFromString(argv[start_index+2]);
+    VectorClock vclock = getVectorClockFromString(argv[start_index+2]);
     return createMeta(gid, timestamp, vclock);
 }
-CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other) {
-    VectorClock* result = vectorClockMerge(getMetaVectorClock(target), getMetaVectorClock(other));
-    if(compareCrdtMeta(target, other) > 0) {
-        return createMeta(other->gid, other->timestamp, result);
-    }else{
-        return createMeta(target->gid, target->timestamp, result);
-    }
-}
-CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other) {
-    VectorClock* vc = getMetaVectorClock(target);
-    if(target == NULL || vc  == NULL) {
-        return dupMeta(other);
-    }
-    if(compareCrdtMeta(target, other) > 0) {
-        target->gid = other->gid;
-        target->timestamp = other->timestamp;
-    }
-    
-    merge(vc, getMetaVectorClock(other));
-    // clone(&target->vectorClock ,vectorClockMerge(vc, getMetaVectorClock(other)));
-    return target;
-}
+
 RedisModuleKey* getWriteRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type) {
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv,
                                     REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);                      
@@ -60,16 +39,16 @@ void* getTombstone(RedisModuleKey *moduleKey) {
     return tombstone;
 }
 
-VectorClock* rdbLoadVectorClock(RedisModuleIO *rdb) {
+VectorClock rdbLoadVectorClock(RedisModuleIO *rdb) {
     size_t vcLength, strLength;
     char* vcStr = RedisModule_LoadStringBuffer(rdb, &vcLength);
     sds vclockSds = sdsnewlen(vcStr, vcLength);
-    VectorClock* result = sdsToVectorClock(vclockSds);
+    VectorClock result = sdsToVectorClock(vclockSds);
     sdsfree(vclockSds);
     RedisModule_Free(vcStr);
     return result;
 }
-int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock* vectorClock) {
+int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock vectorClock) {
     sds vclockStr = vectorClockToSds(vectorClock);
     RedisModule_SaveStringBuffer(rdb, vclockStr, sdslen(vclockStr));
     sdsfree(vclockStr);

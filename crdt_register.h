@@ -50,7 +50,7 @@ typedef CrdtObject CRDT_Register ;
 int getCrdtRegisterLastGid(CRDT_Register* r);
 sds getCrdtRegisterLastValue(CRDT_Register* r);
 long long getCrdtRegisterLastTimestamp(CRDT_Register* r);
-VectorClock* getCrdtRegisterLastVc(CRDT_Register* r);
+VectorClock getCrdtRegisterLastVc(CRDT_Register* r);
 CrdtMeta* createCrdtRegisterLastMeta(CRDT_Register* reg);
 
 typedef CrdtObject CRDT_RegisterTombstone ;
@@ -63,7 +63,7 @@ typedef sds (*getInfoCrdtRegisterFunc)(CRDT_Register* target);
 typedef struct CRDT_Register* (*filterCrdtRegisterFunc)(CRDT_Register* target,int gid, long long logic_time);
 typedef int (*cleanCrdtRegisterFunc)(CRDT_Register* target, CRDT_RegisterTombstone* tombstone);
 typedef struct CRDT_Register* (*mergeCrdtRegisterFunc)(CRDT_Register* target, struct CRDT_Register* other);
-typedef void (*updateLastVCCrdtRegisterFunc)(CRDT_Register* target, VectorClock* vc);
+typedef void (*updateLastVCCrdtRegisterFunc)(CRDT_Register* target, VectorClock vc);
 typedef struct CrdtRegisterMethod {
     dupCrdtRegisterFunc dup;
     delCrdtRegisterFunc del;
@@ -106,10 +106,9 @@ void *crdtRegisterMerge(void *currentVal, void *value);
 int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value);
 CrdtObject* crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time);
 int crdtRegisterTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current);
-int crdtRegisterGc(void* target, VectorClock* clock);
 CRDT_Register* dupCrdtRegister(CRDT_Register *val);
 
-void crdtRegisterUpdateLastVC(void *data, VectorClock* vc);
+void crdtRegisterUpdateLastVC(void *data, VectorClock vc);
 CRDT_Register* filterRegister(CRDT_Register*  common, int gid, long long logic_time);
 static CrdtObjectMethod RegisterCommonMethod = {
     .merge = crdtRegisterMerge,
@@ -123,7 +122,7 @@ static CrdtDataMethod RegisterDataMethod = {
 //register tombstone command methods
 void* crdtRegisterTombstoneMerge(void* target, void* other);
 void* crdtRegisterTombstoneFilter(void* target, int gid, long long logic_time) ;
-int crdtRegisterTombstoneGc(void* target, VectorClock* clock);
+int crdtRegisterTombstoneGc(void* target, VectorClock clock);
 static CrdtTombstoneMethod RegisterTombstoneMethod = {
     .merge = crdtRegisterTombstoneMerge,
     .filter =  crdtRegisterTombstoneFilter,

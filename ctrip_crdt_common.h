@@ -42,43 +42,59 @@
 
 
 //type
-#define CRDT_DATA 1
-#define CRDT_TOMBSTONE 2
-#define CRDT_EXPIRE 3
-#define CRDT_EXPIRE_TOMBSTONE 4
+#define CRDT_DATA 0
+#define CRDT_TOMBSTONE 1
+
 //data type
 #define CRDT_REGISTER_TYPE 1
 #define CRDT_HASH_TYPE 2
 
 
-#define LWW_TYPE 1
-#define ORSET_TYPE 2
+#define LWW_TYPE  (0 << 1)
+#define ORSET_TYPE (1 << 1) 
+
+
+
+#define setTimestampToLongLong(l, timestamp) do { \
+    l &= ((long long)0xFFF) ;\
+    l |= ((timestamp << 12) & 0xFFFFFFFFFFFFF000);\
+} while(0)
+#define getTimestampFromLongLong(l) (l >> 12)
+
+#define getGidFromLongLong(l) ((l >> 8) & 0x00F)
+#define setGidToLongLong(l, gid) do { \
+    l &= 0xFFFFFFFFFFFFF0FF;\
+    l |= (((long long)gid << 8) & 0xF00);\
+} while(0)
+
 typedef struct CrdtObject {
-    char type;
-} CrdtObject;
-int getDataType(int type);
+    unsigned char reserved:3;
+    unsigned char type:2;
+    unsigned char dataType:3;
+} __attribute__ ((packed, alignrd(1))) CrdtObject;
+int getDataType(CrdtObject *obj);
 int setDataType(CrdtObject *obj, int type);
 void setType(CrdtObject *obj, int type);
-int getType(int type);
+int getType(CrdtObject *obj);
 typedef CrdtObject CrdtData;
 typedef CrdtObject CrdtTombstone;
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
 typedef void* (*crdtFilterFunc)(void* common, int gid, long long logic_time);
 typedef int (*crdtCleanFunc)(struct CrdtObject* value, struct CrdtTombstone* tombstone);
-typedef int (*crdtGcFunc)(struct CrdtTombstone* value, VectorClock* clock);
+typedef int (*crdtGcFunc)(struct CrdtTombstone* value, VectorClock clock);
 typedef int (*crdtPurageFunc)(struct CrdtTombstone* tombstone, struct CrdtObject* obj);
 
-// typedef void* (*crdtDupFunc)(void *data);
 typedef struct CrdtMeta {
-    unsigned char gid;
-    long long timestamp;
+    unsigned long long type:8;
+    unsigned long long gid:4;
+    unsigned long long timestamp:52;
     VectorClock vectorClock;
-} __attribute__ ((packed, aligned(1))) CrdtMeta;
+} __attribute__ ((packed, alignrd(1))) CrdtMeta;
 int getMetaGid(CrdtMeta* meta);
-void setMetaVectorClock(CrdtMeta* meta, VectorClock* vc);
+void setMetaVectorClock(CrdtMeta* meta, VectorClock vc);
 long long getMetaTimestamp(CrdtMeta* meta) ;
-VectorClock* getMetaVectorClock(CrdtMeta* meta);
+VectorClock getMetaVectorClock(CrdtMeta* meta);
 int isNullVectorClock(VectorClock vc);
 
 typedef struct CrdtObjectMethod {
@@ -87,8 +103,8 @@ typedef struct CrdtObjectMethod {
 } CrdtObjectMethod;
 
 
-typedef VectorClock* (*crdtGetLastVCFunc)(void* value);
-typedef void* (*crdtUpdateLastVCFunc)(void* value,VectorClock* data);
+typedef VectorClock (*crdtGetLastVCFunc)(void* value);
+typedef void* (*crdtUpdateLastVCFunc)(void* value,VectorClock data);
 typedef struct CrdtDataMethod {
     crdtGetLastVCFunc getLastVC;
     crdtUpdateLastVCFunc updateLastVC;
@@ -105,13 +121,12 @@ typedef struct CrdtTombstoneMethod {
 
 typedef int (*crdtIsExpireFunc)(void* target, CrdtMeta* meta);
 
-CrdtMeta* createMeta(int gid, long long timestamp, VectorClock* vclock);
+CrdtMeta* createMeta(int gid, long long timestamp, VectorClock vclock);
 CrdtMeta* createIncrMeta();
 CrdtMeta* dupMeta(CrdtMeta* meta);
-void appendVCForMeta(CrdtMeta* target, VectorClock* vc);
+void appendVCForMeta(CrdtMeta* target, VectorClock vc);
 void freeCrdtMeta(CrdtMeta* meta);
 CrdtDataMethod* getCrdtDataMethod(CrdtObject* data);
-// void freeCommon(CrdtCommon* common);
 
 #define COMPARE_META_VECTORCLOCK_GT 1
 #define COMPARE_META_VECTORCLOCK_LT -1
@@ -124,7 +139,6 @@ int compareCrdtMeta(CrdtMeta *a, CrdtMeta *b);
 int isConflictMeta(int result);
 void crdtMetaCp(CrdtMeta *from, CrdtMeta* to);
 int appendCrdtMeta(CrdtMeta *target , CrdtMeta* other);
-// int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 
 
 #endif //REDIS_CTRIP_CRDT_COMMON_H

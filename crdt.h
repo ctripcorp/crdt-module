@@ -51,6 +51,6 @@ char *logLevel;
 
 int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 
-VectorClock *getVectorClockFromString(RedisModuleString *redisModuleString);
+VectorClock getVectorClockFromString(RedisModuleString *redisModuleString);
 
 #endif //XREDIS_CRDT_CRDT_H

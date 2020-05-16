@@ -24,8 +24,7 @@ end:
     if(data != NULL) {
         CrdtDataMethod* method = getCrdtDataMethod(data);
         if(method != NULL) {
-            CrdtMeta* meta = method->getLastVC(data);
-            RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllll", key, meta->gid, meta->timestamp, expireTime, (long long)(getDataType(data->type)));
+            RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllll", key, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
         }else{
             RedisModule_Debug(logLevel, "[CRDT] in addOrUpdateCrdtExpire function, getCrdtDataMethod error");
         }
@@ -49,7 +48,7 @@ int trySetExpire(RedisModuleKey* moduleKey, long long  time, int type, long long
         RedisModule_Debug(logLevel, "data is null: %lld",expireTime);
         return CRDT_ERROR;
     }
-    if(getDataType(data->type) != type) {
+    if(getDataType(data) != type) {
          RedisModule_Debug(logLevel, "type diff: %lld",expireTime);
         return CRDT_ERROR;
     }
@@ -138,7 +137,7 @@ int persistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
         goto end;
     }
     RedisModule_SetExpire(moduleKey, REDISMODULE_NO_EXPIRE);
-    RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.persist", "sll", argv[1], RedisModule_CurrentGid() ,  (long long )getDataType(data->type));
+    RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.persist", "sll", argv[1], RedisModule_CurrentGid() ,  (long long )getDataType(data));
     
 end:  
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
@@ -169,7 +168,7 @@ int crdtPersistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
             }
         }
     }
-    if(getDataType(data->type) != dataType) {
+    if(getDataType(data) != dataType) {
         goto end;
     }
     RedisModule_SetExpire(moduleKey, REDISMODULE_NO_EXPIRE);
