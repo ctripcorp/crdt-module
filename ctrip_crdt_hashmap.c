@@ -391,7 +391,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         status = CRDT_ERROR;
         goto end;
     }
-    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClock(meta));
+    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hset", argv[1]);
 end:
     if (meta != NULL) {
@@ -517,7 +517,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
     if (dictSize(current->map) == 0) {
         RedisModule_DeleteKey(moduleKey);
     }
-    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClock(meta));
+    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
 end:
     if(meta) {
@@ -603,7 +603,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         }
     }
     
-    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClock(meta));
+    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hdel", argv[1]);
     if(keyremoved == CRDT_OK) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
@@ -961,7 +961,6 @@ void* crdtHashFilter(void* common, int gid, long long logic_time) {
             freeCrdtMeta(meta);
         }
     }
-
     dictReleaseIterator(di);
     if(dictSize(result->map) == 0) {
         freeCrdtHash(result);

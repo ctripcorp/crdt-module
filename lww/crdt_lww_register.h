@@ -32,7 +32,7 @@ VectorClock getCrdtRegisterLastVc(CRDT_Register* r) {
 }
 CrdtMeta* createCrdtRegisterLastMeta(CRDT_Register* reg) {
     VectorClock vc = getCrdtRegisterLastVc(reg);
-    if(vc != NULL) {
+    if(!isNullVectorClock(vc)) {
         return createMeta(
             getCrdtRegisterLastGid(reg), 
             getCrdtRegisterLastTimestamp(reg),

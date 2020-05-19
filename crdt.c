@@ -79,7 +79,6 @@ int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_ReplyWithLongLong(ctx, numl);
     return REDISMODULE_OK;
 }
-
 int crdtDebugCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     RedisModule_AutoMemory(ctx);

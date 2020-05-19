@@ -253,7 +253,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
             deleted = 1;
         }
     }
-    RedisModule_MergeVectorClock(getMetaGid(del_meta), getMetaVectorClock(del_meta));
+    RedisModule_MergeVectorClock(getMetaGid(del_meta), getMetaVectorClockToLongLong(del_meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
 end: 
     if(del_meta != NULL) {
@@ -525,7 +525,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(expire_time != -2) {
         trySetExpire(moduleKey, getMetaTimestamp(meta),  CRDT_REGISTER_TYPE, expire_time);
     }
-    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClock(meta));
+    RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
 end:
     if (meta != NULL) {

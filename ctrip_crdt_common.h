@@ -71,7 +71,7 @@ typedef struct CrdtObject {
     unsigned char reserved:3;
     unsigned char type:2;
     unsigned char dataType:3;
-} __attribute__ ((packed, alignrd(1))) CrdtObject;
+} __attribute__ ((packed, aligned(1))) CrdtObject;
 int getDataType(CrdtObject *obj);
 int setDataType(CrdtObject *obj, int type);
 void setType(CrdtObject *obj, int type);
@@ -90,13 +90,13 @@ typedef struct CrdtMeta {
     unsigned long long gid:4;
     unsigned long long timestamp:52;
     VectorClock vectorClock;
-} __attribute__ ((packed, alignrd(1))) CrdtMeta;
+} __attribute__ ((packed, aligned(1))) CrdtMeta;
 int getMetaGid(CrdtMeta* meta);
 void setMetaVectorClock(CrdtMeta* meta, VectorClock vc);
 long long getMetaTimestamp(CrdtMeta* meta) ;
 VectorClock getMetaVectorClock(CrdtMeta* meta);
 int isNullVectorClock(VectorClock vc);
-
+long long getMetaVectorClockToLongLong(CrdtMeta* meta);
 typedef struct CrdtObjectMethod {
     crdtMergeFunc merge;
     crdtFilterFunc filter;
@@ -137,7 +137,6 @@ CrdtDataMethod* getCrdtDataMethod(CrdtObject* data);
 #define COMPARE_META_EQUAL 0
 int compareCrdtMeta(CrdtMeta *a, CrdtMeta *b);
 int isConflictMeta(int result);
-void crdtMetaCp(CrdtMeta *from, CrdtMeta* to);
 int appendCrdtMeta(CrdtMeta *target , CrdtMeta* other);
 
 

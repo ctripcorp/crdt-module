@@ -7,7 +7,7 @@ VectorClock getCrdtLWWHashLastVc(CRDT_LWW_Hash* r) {
 }
 void setCrdtLWWHashLastVc(CRDT_LWW_Hash* r, VectorClock vc) {
     if(!isNullVectorClock(getCrdtLWWHashLastVc(r))) {
-        freeInnerClocks(getCrdtLWWHashLastVc(r));
+        freeVectorClock(getCrdtLWWHashLastVc(r));
     } 
     r->lastVc = vc;
 }
@@ -31,7 +31,7 @@ VectorClock getCrdtLWWHashTombstoneMaxDelVectorClock(CRDT_LWW_HashTombstone* t) 
 }
 void setCrdtLWWHashTombstoneMaxDelVectorClock(CRDT_LWW_HashTombstone* t, VectorClock vc) {
     if(!isNullVectorClock(getCrdtLWWHashTombstoneMaxDelVectorClock(t))) {
-        freeInnerClocks(getCrdtLWWHashTombstoneMaxDelVectorClock(t));
+        freeVectorClock(getCrdtLWWHashTombstoneMaxDelVectorClock(t));
     } 
     t->maxDelvectorClock = vc;
 }
@@ -43,7 +43,7 @@ void setCrdtLWWHashTombstoneMaxDelMeta(CRDT_LWW_HashTombstone* t, CrdtMeta* meta
     if(meta == NULL) {
         setCrdtLWWHashTombstoneMaxDelGid(t, -1);
         setCrdtLWWHashTombstoneMaxDelTimestamp(t, -1);
-        setCrdtLWWHashTombstoneMaxDelVectorClock(t, LOGIC_CLOCK_UNDEFINE);
+        setCrdtLWWHashTombstoneMaxDelVectorClock(t, newVectorClock(0));
     }else{
         setCrdtLWWHashTombstoneMaxDelGid(t, getMetaGid(meta));
         setCrdtLWWHashTombstoneMaxDelTimestamp(t, getMetaTimestamp(meta));
@@ -57,7 +57,7 @@ VectorClock getCrdtLWWHashTombstoneLastVc(CRDT_LWW_HashTombstone* t) {
 }
 void setCrdtLWWHashTombstoneLastVc(CRDT_LWW_HashTombstone* t, VectorClock vc) {
     if(!isNullVectorClock(getCrdtLWWHashTombstoneLastVc(t))) {
-        freeInnerClocks(getCrdtLWWHashTombstoneLastVc(t));
+        freeVectorClock(getCrdtLWWHashTombstoneLastVc(t));
     } 
     t->lastVc = vc; 
 }
@@ -102,7 +102,7 @@ void* createCrdtLWWHash() {
     setDataType((CrdtObject*)crdtHash , CRDT_HASH_TYPE);
     dict *hash = dictCreate(&crdtHashDictType, NULL);
     crdtHash->map = hash;
-    crdtHash->lastVc = LOGIC_CLOCK_UNDEFINE;
+    crdtHash->lastVc = newVectorClock(0);
     return crdtHash;
 }
 
@@ -162,8 +162,8 @@ void* createCrdtLWWHashTombstone() {
     setType((CrdtObject*)crdtHashTombstone,  CRDT_TOMBSTONE);
     dict *hash = dictCreate(&crdtHashTombstoneDictType, NULL);
     crdtHashTombstone->map = hash;
-    crdtHashTombstone->maxDelvectorClock = LOGIC_CLOCK_UNDEFINE;
-    crdtHashTombstone->lastVc = LOGIC_CLOCK_UNDEFINE;
+    crdtHashTombstone->maxDelvectorClock = newVectorClock(0);
+    crdtHashTombstone->lastVc = newVectorClock(0);
     return crdtHashTombstone;
 }
 CRDT_LWW_HashTombstone* retrieveCrdtLWWHashTombstone(void* data) {
@@ -205,7 +205,7 @@ void freeCrdtLWWHash(void *obj) {
     }
     CRDT_LWW_Hash* crdtHash = retrieveCrdtLWWHash(obj); 
     if(crdtHash->map != NULL) {dictRelease(crdtHash->map);}
-    setCrdtLWWHashLastVc(crdtHash, LOGIC_CLOCK_UNDEFINE);
+    setCrdtLWWHashLastVc(crdtHash, newVectorClock(0));
     RedisModule_Free(crdtHash);
 }
 size_t crdtLWWHashMemUsageFunc(const void *value) {
@@ -265,8 +265,8 @@ void freeCrdtLWWHashTombstone(void *obj) {
         dictRelease(crdtHash->map);
         crdtHash->map = NULL;
     }
-    setCrdtLWWHashTombstoneLastVc(crdtHash, LOGIC_CLOCK_UNDEFINE);
-    setCrdtLWWHashTombstoneMaxDelVectorClock(crdtHash, LOGIC_CLOCK_UNDEFINE);
+    setCrdtLWWHashTombstoneLastVc(crdtHash, newVectorClock(0));
+    setCrdtLWWHashTombstoneMaxDelVectorClock(crdtHash, newVectorClock(0));
     RedisModule_Free(crdtHash);
 }
 size_t crdtLWWHashTombstoneMemUsageFunc(const void *value) {

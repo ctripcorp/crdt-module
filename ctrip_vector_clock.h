@@ -36,6 +36,7 @@
 #include "include/rmutil/sds.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 
 // "<gid>:<clock>;<gid>:<clock>"
 #define VECTOR_CLOCK_SEPARATOR ";"
@@ -44,7 +45,7 @@
 #define min(x, y) x > y ? y : x
 
 #define max(x, y) x > y ? x : y
-
+#define GIDSIZE 4
 /**
  * To shrink down mem usage, an unsigned long long will stand for [gid, clock]
  * where, higher 4 bits is allocated for gid (16 gid in total)
@@ -53,7 +54,7 @@
  * |4bit|4bit|56            bits|
  * |option |gid | logic clock      |
  * */
-typedef unsigned long long clk;
+// typedef unsigned long long clk;
 
 /**
  * single one
@@ -66,50 +67,141 @@ typedef unsigned long long clk;
  * |4bit|4bit   | 56          bits |
  * |len |option | address          |
  * */
-typedef unsigned long long VectorClock;
+// typedef unsigned long long VectorClock;
+typedef unsigned long long ULONGLONG;
+
+typedef struct {
+    ULONGLONG clock:(64-2*GIDSIZE);
+    ULONGLONG gid:GIDSIZE;
+    ULONGLONG opt:GIDSIZE;
+}VectorClockUnit;
+
+// #define clk VectorClockUnit
+typedef VectorClockUnit clk;
+#if defined(TCL_TEST)
+    typedef struct {
+        char len;
+        VectorClockUnit vcu[];
+    } TestVectorClock;
+    typedef TestVectorClock* VectorClock ;
+    static inline char get_len(VectorClock vclock) {
+        if(vclock == NULL) {
+            return 0;
+        }
+        return vclock->len;
+    }
+
+    static inline void set_len(VectorClock *vclock, char length) {
+        assert(length < 16 && length > 0);
+        (*vclock)->len = length;
+    }
+    static clk* clocks_address(VectorClock value) {
+        return &value->vcu;
+    }
+    static inline clk* get_clock_unit_by_index(VectorClock *vc, char index) {
+        assert(vc != NULL);
+        assert(index < (*vc)->len);
+        return &(*vc)->vcu[(int)index];
+    }
+#else
+    typedef union{
+        struct{
+            ULONGLONG   opt:(64-GIDSIZE);
+            ULONGLONG   len:GIDSIZE;
+        }vc;
+        VectorClockUnit unit;
+        struct{
+            ULONGLONG   pvc:(64-GIDSIZE);
+            ULONGLONG   opt:GIDSIZE;
+        }pvc;
+    }VectorClock;
+    static inline char get_len(VectorClock vclock) {
+        return vclock.vc.len;
+    }
+
+    static inline void set_len(VectorClock *vclock, char length) {
+        assert(length < (1 << GIDSIZE) && length > 0);
+        vclock->vc.len = length;
+    }
+    static clk* clocks_address(VectorClock value) {
+        if(get_len(value) == 1) {
+            return &value.unit;
+        }
+        return (clk*)value.pvc.pvc;
+    }
+    static inline clk get_frist_unit(VectorClock value) {
+        return value.unit;
+    }
+    static inline clk* get_clock_unit_by_index(VectorClock *vc, char index) {
+        char len = get_len(*vc);
+        if (index > len) {
+            return NULL;
+        }
+        if(len == 1) {
+            return &(vc->unit);
+        }
+        return (clk *) (clocks_address(*vc) + (int)index);
+    }
+#endif
 
 
 
-#define VectorClockUnit clk
 #define APPEND(x, y) x ## y
 #define ULL(val) (unsigned long long) val
 
-static const size_t       XAddressOffsetBits    = 56; // 65536TB
-static const size_t       XLogicClockOffsetBits = 56; // 65536TB
-static const size_t       XGidOffsetBits        = 4;
-static const size_t       XLengthOffsetBits     = 60;
-
-static const VectorClock  XAddressOffsetMask    = (1ull << XAddressOffsetBits) - 1;
-static const clk          XLogicClockOffsetMask = (1ull << XLogicClockOffsetBits) - 1;
-static const size_t       XGidMask              = (1 << XGidOffsetBits) - 1;
-static const size_t       XLenMask              = (1 << XGidOffsetBits) - 1;
-
-static const clk          GidCleanUpMask        = ~(ULL(XGidMask) << XLogicClockOffsetBits);
-static const clk          LogicTimeCleanUpMask  = ~(XLogicClockOffsetMask);
-
-
 /**-------------------------------------------length utils-------------------------------------------------**/
-char get_len(VectorClock vclock);
 
-void set_len(VectorClock *vclock, char length) ;
-int ismulti(VectorClock vclock);
+
+static inline int ismulti(VectorClock vclock) {
+    return get_len(vclock) > 1 ? 1 : 0;
+}
 /**-------------------------------------------gid utils-------------------------------------------------**/
-char get_gid(clk clock);
+static inline char get_gid(clk clock) {
+    return (char) clock.gid;
+}
 
-void set_gid(clk *clock, char gid);
+static inline void set_gid(clk *clock, char gid) {
+    assert(gid < (1 << GIDSIZE) && gid > 0);
+    clock->gid = gid;
+}
 
 /**-------------------------------------------logic clock utils-----------------------------------------**/
-long long get_logic_clock(clk clock) ;
+static inline long long get_logic_clock(clk clock) {
+    return (long long) clock.clock;
+}
 
-void set_logic_clock(clk *clock, long long logic_time);
+static inline void set_logic_clock(clk *clock, long long logic_time) {
+    clock->clock = logic_time;
+}
+
 /**-------------------------------------------vector clock utils-------------------------------------------------**/
-clk* clocks_address(VectorClock value);
 
-clk* get_clock_unit_by_index(VectorClock *vc, char index);
 
-void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time);
+
+
+static void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time) {
+    clk *clock = get_clock_unit_by_index(vclock, index);
+    // *clock = gid_logic_time;
+    set_gid(clock, get_gid(gid_logic_time));
+    set_logic_clock(clock, get_logic_clock(gid_logic_time));
+}
+#define VCU(unit) (*(clk*)(&unit))
+#define VC(vc) (*(VectorClock*)(&vc))
+static int isNullVectorClock(VectorClock vc) {
+    return get_len(vc) == 0;
+}
+static int isNullVectorClockUnit(VectorClockUnit unit) {
+    return unit.clock == 0;
+}
 //
-clk init_clock(char gid, clk logic_clk);
+static inline clk init_clock(char gid, long long logic_clk) {
+    long long unit = 0;
+    clk result = VCU(unit);
+    result.gid = gid;
+    result.clock = logic_clk; 
+    return result;
+}
+
 //#define null NULL
 #define CLOCK_UNIT_MAX 0
 #define CLOCK_UNIT_ALIGN 1
@@ -124,8 +216,6 @@ newVectorClock(int numVcUnits);
 void
 freeVectorClock(VectorClock vc);
 
-void
-freeInnerClocks(VectorClock vclock);
 
 VectorClock
 addVectorClockUnit(VectorClock vc, int gid, long long logic_time);

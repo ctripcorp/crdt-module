@@ -35,9 +35,7 @@
 
 #include <stdlib.h>
 
-int isNullVectorClock(VectorClock vc) {
-    return vc == LOGIC_CLOCK_UNDEFINE;
-}
+
 void setMetaGid(CrdtMeta* meta, int gid) {
     meta->gid = gid;
 } 
@@ -51,8 +49,12 @@ long long getMetaTimestamp(CrdtMeta* meta) {
     return meta->timestamp;
 }
 VectorClock getMetaVectorClock(CrdtMeta* meta) {
-    if(meta == NULL) return LOGIC_CLOCK_UNDEFINE;
+    if(meta == NULL) return newVectorClock(0);
     return meta->vectorClock;
+}
+long long getMetaVectorClockToLongLong(CrdtMeta* meta) {
+    if(meta == NULL) return 0;
+    return *(long long*)(&meta->vectorClock);
 }
 int isConflictCommon(int result) {
     if(result > COMPARE_META_VECTORCLOCK_GT || result < COMPARE_META_VECTORCLOCK_LT) {
@@ -61,20 +63,6 @@ int isConflictCommon(int result) {
     return CRDT_NO;
 }
 
-void crdtMetaCp(CrdtMeta* from, CrdtMeta* to) {
-    // VectorClock clock =  to->vectorClock;
-    if(to == NULL) return;
-    if(isNullVectorClock(getMetaVectorClock(to))) {
-        freeInnerClocks(getMetaVectorClock(to));
-    }
-    setMetaGid(to, getMetaGid(from));
-    setMetaTimestamp(to, getMetaTimestamp(from));
-    if(!isNullVectorClock(to->vectorClock)) {
-        freeInnerClocks(to->vectorClock);
-    }
-    to->vectorClock = dupVectorClock(getMetaVectorClock(from));
-    // cloneVectorClock(&to->vectorClock,getMetaVectorClock(from));
-}
 
 int appendCrdtMeta(CrdtMeta* target , CrdtMeta* other) {
     int result = compareCrdtMeta(target, other);
@@ -130,7 +118,7 @@ void appendVCForMeta(CrdtMeta* target, VectorClock vc) {
     if(!isNullVectorClock(getMetaVectorClock(target))) {
         VectorClock v = getMetaVectorClock(target);
         target->vectorClock = vectorClockMerge(getMetaVectorClock(target), vc);
-        freeInnerClocks(v);
+        freeVectorClock(v);
     }
     
 }
@@ -141,7 +129,8 @@ CrdtMeta* dupMeta(CrdtMeta* meta) {
 CrdtMeta* createIncrMeta() {
     long long gid = RedisModule_CurrentGid();
     RedisModule_IncrLocalVectorClock(1);
-    VectorClock currentVectorClock = RedisModule_CurrentVectorClock();
+    long long cvc = RedisModule_CurrentVectorClock();
+    VectorClock currentVectorClock = VC(cvc);
     VectorClock result = getMonoVectorClock(currentVectorClock, gid);
     long long timestamp = RedisModule_Milliseconds();
     return createMeta(gid, timestamp, result);
@@ -150,7 +139,7 @@ void freeCrdtMeta(CrdtMeta* meta) {
     if(meta == NULL) {
         return;
     }
-    setMetaVectorClock(meta, LOGIC_CLOCK_UNDEFINE);
+    setMetaVectorClock(meta, newVectorClock(0));
     RedisModule_Free(meta);
 }
 
@@ -179,7 +168,7 @@ int getDataType(CrdtObject* obj) {
  */ 
 void setMetaVectorClock(CrdtMeta* meta, VectorClock vc) {
     if(!isNullVectorClock(getMetaVectorClock(meta))) {
-        freeInnerClocks(meta->vectorClock);
+        freeVectorClock(meta->vectorClock);
     }
     meta->vectorClock = vc;
     
@@ -195,7 +184,7 @@ CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other) {
 }
 CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other) {
     VectorClock vc = getMetaVectorClock(target);
-    if(target == NULL || vc  == NULL) {
+    if(target == NULL || isNullVectorClock(vc)) {
         return dupMeta(other);
     }
     if(compareCrdtMeta(target, other) > 0) {
