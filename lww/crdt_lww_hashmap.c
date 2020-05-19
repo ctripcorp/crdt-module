@@ -244,7 +244,11 @@ void *RdbLoadCrdtLWWHashTombstone(RedisModuleIO *rdb, int encver) {
     }
     CRDT_LWW_HashTombstone *crdtHashTombstone = createCrdtLWWHashTombstone();
     if(RedisModule_LoadSigned(rdb) == HASH_MAXDEL) {
-        setCrdtLWWHashTombstoneMaxDelGid(crdtHashTombstone, RedisModule_LoadSigned(rdb));
+        int gid = RedisModule_LoadSigned(rdb);
+        if(RedisModule_CheckGid(gid) == REDISMODULE_ERR) {
+            return NULL;
+        }
+        setCrdtLWWHashTombstoneMaxDelGid(crdtHashTombstone, gid);
         setCrdtLWWHashTombstoneMaxDelTimestamp(crdtHashTombstone, RedisModule_LoadSigned(rdb));
         setCrdtLWWHashTombstoneMaxDelVectorClock(crdtHashTombstone, rdbLoadVectorClock(rdb));
     }

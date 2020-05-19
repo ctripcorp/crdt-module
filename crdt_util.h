@@ -5,6 +5,7 @@
 #include "utils.h"
 #include "crdt.h"
 #include "ctrip_crdt_common.h"
+int redisModuleStringToGid(RedisModuleCtx *ctx, RedisModuleString *argv, long long *gid);
 CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index);
 RedisModuleKey* getWriteRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type);
 void* getCurrentValue(RedisModuleKey *moduleKey);

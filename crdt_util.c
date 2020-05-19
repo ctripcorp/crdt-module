@@ -1,9 +1,18 @@
 #include "crdt_util.h"
-
+int redisModuleStringToGid(RedisModuleCtx *ctx, RedisModuleString *argv, long long *gid) {
+    if ((RedisModule_StringToLongLong(argv,gid) != REDISMODULE_OK)) {
+        RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+        return REDISMODULE_ERR;
+    }
+    if(RedisModule_CheckGid(*gid) != REDISMODULE_OK) {
+        RedisModule_ReplyWithError(ctx,"ERR invalid value: must be < 15");
+        return REDISMODULE_ERR;
+    }
+    return REDISMODULE_OK;
+}
 CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index) {
     long long gid;
-    if ((RedisModule_StringToLongLong(argv[start_index],&gid) != REDISMODULE_OK)) {
-        RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+    if ((redisModuleStringToGid(ctx, argv[start_index],&gid) != REDISMODULE_OK)) {
         return NULL;
     }
     long long timestamp;

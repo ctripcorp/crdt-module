@@ -201,6 +201,7 @@ int REDISMODULE_API_FUNC(RedisModule_ReplyWithNull)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithDouble)(RedisModuleCtx *ctx, double d);
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithCallReply)(RedisModuleCtx *ctx, RedisModuleCallReply *reply);
 int REDISMODULE_API_FUNC(RedisModule_StringToLongLong)(const RedisModuleString *str, long long *ll);
+int REDISMODULE_API_FUNC(RedisModule_CheckGid)(int gid);
 int REDISMODULE_API_FUNC(RedisModule_StringToDouble)(const RedisModuleString *str, double *d);
 void *REDISMODULE_API_FUNC(RedisModule_GetSds)(const RedisModuleString *str);
 void REDISMODULE_API_FUNC(RedisModule_AutoMemory)(RedisModuleCtx *ctx);
@@ -424,6 +425,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(DigestEndSequence);
     REDISMODULE_GET_API(CurrentVectorClock);
     REDISMODULE_GET_API(CurrentGid);
+    REDISMODULE_GET_API(CheckGid);
     REDISMODULE_GET_API(IncrLocalVectorClock);
     REDISMODULE_GET_API(MergeVectorClock);
     REDISMODULE_GET_API(ModuleTombstoneSetValue);

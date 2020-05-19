@@ -11,8 +11,7 @@ int crdtPublishCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     RedisModule_AutoMemory(ctx);
     if(argc < 4)  return RedisModule_WrongArity(ctx);
     long long gid;
-    if (RedisModule_StringToLongLong(argv[3], &gid) != REDISMODULE_OK) {
-        RedisModule_ReplyWithError(ctx, "ERR invalid value: must be a signed 64 bit integer");
+    if (redisModuleStringToGid(ctx, argv[3], &gid) != REDISMODULE_OK) {
         return 0;
     }
     int receivers = RedisModule_CrdtPubsubPublishMessage(argv[1], argv[2]);
