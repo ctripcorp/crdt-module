@@ -151,7 +151,7 @@ typedef struct RedisModuleTypeMethods {
 
 #define REDISMODULE_API_FUNC(x) (*x)
 
-
+size_t REDISMODULE_API_FUNC(RedisModule_UsedMemory)();
 void *REDISMODULE_API_FUNC(RedisModule_Alloc)(size_t bytes);
 void *REDISMODULE_API_FUNC(RedisModule_Realloc)(void *ptr, size_t bytes);
 void REDISMODULE_API_FUNC(RedisModule_Free)(void *ptr);
@@ -276,10 +276,10 @@ void REDISMODULE_API_FUNC(RedisModule_DigestAddStringBuffer)(RedisModuleDigest *
 void REDISMODULE_API_FUNC(RedisModule_DigestAddLongLong)(RedisModuleDigest *md, long long ele);
 void REDISMODULE_API_FUNC(RedisModule_DigestEndSequence)(RedisModuleDigest *md);
 /* Experimental APIs */
-void *REDISMODULE_API_FUNC(RedisModule_CurrentVectorClock)(void);
+long long REDISMODULE_API_FUNC(RedisModule_CurrentVectorClock)(void);
 long long REDISMODULE_API_FUNC(RedisModule_CurrentGid)(void);
 void REDISMODULE_API_FUNC(RedisModule_IncrLocalVectorClock) (long long delta);
-void REDISMODULE_API_FUNC(RedisModule_MergeVectorClock) (int gid, void *vclock);
+void REDISMODULE_API_FUNC(RedisModule_MergeVectorClock) (int gid, long long vclock);
 int REDISMODULE_API_FUNC(RedisModule_ModuleTombstoneSetValue) (RedisModuleKey *key, RedisModuleType *mt, void *value);
 void *REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetTombstone)(RedisModuleKey *key);
 void REDISMODULE_API_FUNC(RedisModule_NotifyKeyspaceEvent)(RedisModuleCtx *ctx,int type, char *event, RedisModuleString *key);
@@ -304,6 +304,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     void *getapifuncptr = ((void**)ctx)[0];
     RedisModule_GetApi = (int (*)(const char *, void *)) (unsigned long)getapifuncptr;
     REDISMODULE_GET_API(Alloc);
+    REDISMODULE_GET_API(UsedMemory);
     REDISMODULE_GET_API(Calloc);
     REDISMODULE_GET_API(Free);
     REDISMODULE_GET_API(Realloc);

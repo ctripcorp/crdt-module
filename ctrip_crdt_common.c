@@ -35,24 +35,26 @@
 
 #include <stdlib.h>
 
-// int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock) {
-//     void *tombstone = RedisModule_ModuleTypeGetTombstone(key);
-//     if (tombstone == NULL) {
-//         return CRDT_NO;
-//     }
-//     CrdtCommon *common = tombstone;
-//     if (isVectorClockMonoIncr(vclock, common->vectorClock) == CRDT_OK) {
-//         return CRDT_YES;
-//     }
-//     return CRDT_NO;
-// }
-int isNullVectorClock(VectorClock vc) {
-    return vc.length == -1;
+
+void setMetaGid(CrdtMeta* meta, int gid) {
+    meta->gid = gid;
+} 
+int getMetaGid(CrdtMeta* meta) {
+    return (int)meta->gid;
 }
-VectorClock* getMetaVectorClock(CrdtMeta* meta) {
-    if(meta == NULL) return NULL;
-    if(isNullVectorClock(meta->vectorClock)) return NULL; 
-    return &meta->vectorClock;
+void setMetaTimestamp(CrdtMeta* meta, long long timestamp) {
+    meta->timestamp = timestamp;
+}
+long long getMetaTimestamp(CrdtMeta* meta) {
+    return meta->timestamp;
+}
+VectorClock getMetaVectorClock(CrdtMeta* meta) {
+    if(meta == NULL) return newVectorClock(0);
+    return meta->vectorClock;
+}
+long long getMetaVectorClockToLongLong(CrdtMeta* meta) {
+    if(meta == NULL) return 0;
+    return *(long long*)(&meta->vectorClock);
 }
 int isConflictCommon(int result) {
     if(result > COMPARE_META_VECTORCLOCK_GT || result < COMPARE_META_VECTORCLOCK_LT) {
@@ -61,40 +63,24 @@ int isConflictCommon(int result) {
     return CRDT_NO;
 }
 
-void crdtMetaCp(CrdtMeta* from, CrdtMeta* to) {
-    // VectorClock clock =  to->vectorClock;
-    if(to == NULL) return;
-    if(getMetaVectorClock(to) != NULL) {
-        freeInnerClocks(getMetaVectorClock(to));
-    }
-    to->gid = from->gid;
-    to->timestamp = from->timestamp;
-
-    cloneVectorClock(&to->vectorClock,getMetaVectorClock(from));
-}
 
 int appendCrdtMeta(CrdtMeta* target , CrdtMeta* other) {
     int result = compareCrdtMeta(target, other);
-    // VectorClock* clock =  &target->vectorClock;
     if(result >COMPARE_META_EQUAL) {
-        target->gid = other->gid;
-        target->timestamp = other->timestamp;
+        setMetaGid(target, getMetaGid(other));
+        setMetaTimestamp(target, getMetaTimestamp(other));
     }
     
     setMetaVectorClock(target, vectorClockMerge(getMetaVectorClock(target), getMetaVectorClock(other)));
-    
-
-    // if(clock.length != -1) freeInnerClocks(clock);
-    // clone(&target->vectorClock , vectorClockMerge(clock, &other->vectorClock));
     
     return result;
 }
 
 int compareCrdtMeta(CrdtMeta* old_common, CrdtMeta* new_common) {
-    if(old_common == NULL || getMetaVectorClock(old_common)  == NULL) {
+    if(old_common == NULL || isNullVectorClock(getMetaVectorClock(old_common))) {
         return COMPARE_META_VECTORCLOCK_GT;
     }
-    if(new_common == NULL || getMetaVectorClock(new_common) == NULL) {
+    if(new_common == NULL || isNullVectorClock(getMetaVectorClock(new_common))) {
         return COMPARE_META_VECTORCLOCK_LT;
     }
     if (isVectorClockMonoIncr(getMetaVectorClock(old_common), getMetaVectorClock(new_common)) == CRDT_OK) {
@@ -102,49 +88,50 @@ int compareCrdtMeta(CrdtMeta* old_common, CrdtMeta* new_common) {
     } else if (isVectorClockMonoIncr(getMetaVectorClock(new_common), getMetaVectorClock(old_common)) == CRDT_OK) {
         return COMPARE_META_VECTORCLOCK_LT;
     } 
-    if(old_common->timestamp < new_common->timestamp) {
+    long long old_time = getMetaTimestamp(old_common);
+    long long new_time = getMetaTimestamp(new_common);
+    if(old_time < new_time) {
         return COMPARE_META_TIMESTAMPE_GT;
-    }else if (old_common->timestamp > new_common->timestamp) {
+    }else if (old_time > new_time) {
         return COMPARE_META_TIMESTAMPE_LT;
     }
-    if(old_common->gid > new_common->gid) {
+    int old_gid = getMetaGid(old_common);
+    int new_gid = getMetaGid(new_common);
+    if(old_gid > new_gid) {
         return COMPARE_META_GID_GT;
-    }else if(old_common->gid < new_common->gid) {
+    }else if(old_gid < new_gid) {
         return COMPARE_META_GID_LT;
     }
     return COMPARE_META_EQUAL;
 }
-CrdtMeta* createMeta(int gid, long long timestamp, VectorClock* vclock) {
+CrdtMeta* createMeta(int gid, long long timestamp, VectorClock vclock) {
     CrdtMeta* meta = RedisModule_Alloc(sizeof(CrdtMeta));
-    meta->gid = gid;
-    meta->timestamp = timestamp;
-    if(vclock != NULL) {
-        cloneVectorClock(&meta->vectorClock, vclock);
-        freeVectorClock(vclock);
-    }
+    meta->type = 0;
+    meta->timestamp = 0;
+    meta->gid = 1;
+    setMetaGid(meta, gid);
+    setMetaTimestamp(meta,timestamp);
+    meta->vectorClock = vclock;
     return meta;  
 };
-void appendVCForMeta(CrdtMeta* target, VectorClock* vc) {
-    // VectorClock* clock = target->vectorClock;
-    // target->vectorClock = vectorClockMerge(clock, vc);
-    // if(clock != NULL) freeVectorClock(clock);
-    if(getMetaVectorClock(target) == NULL) {
-        RedisModule_Debug(logLevel, "err");
-        exit(1);
-    }else{
-        merge(getMetaVectorClock(target), vc);
+void appendVCForMeta(CrdtMeta* target, VectorClock vc) {
+    if(!isNullVectorClock(getMetaVectorClock(target))) {
+        VectorClock v = getMetaVectorClock(target);
+        target->vectorClock = vectorClockMerge(getMetaVectorClock(target), vc);
+        freeVectorClock(v);
     }
     
 }
 CrdtMeta* dupMeta(CrdtMeta* meta) {
     if(meta == NULL) return NULL;
-    return createMeta(meta->gid, meta->timestamp, dupVectorClock(getMetaVectorClock(meta)));
+    return createMeta(getMetaGid(meta), getMetaTimestamp(meta), dupVectorClock(getMetaVectorClock(meta)));
 }
 CrdtMeta* createIncrMeta() {
     long long gid = RedisModule_CurrentGid();
     RedisModule_IncrLocalVectorClock(1);
-    VectorClock *currentVectorClock = RedisModule_CurrentVectorClock();
-    VectorClock *result = getMonoVectorClock(currentVectorClock, gid);
+    long long cvc = RedisModule_CurrentVectorClock();
+    VectorClock currentVectorClock = VC(cvc);
+    VectorClock result = getMonoVectorClock(currentVectorClock, gid);
     long long timestamp = RedisModule_Milliseconds();
     return createMeta(gid, timestamp, result);
 };
@@ -152,12 +139,10 @@ void freeCrdtMeta(CrdtMeta* meta) {
     if(meta == NULL) {
         return;
     }
-    setMetaVectorClock(meta, NULL);
+    setMetaVectorClock(meta, newVectorClock(0));
     RedisModule_Free(meta);
 }
-// void freeCommon(CrdtCommon* common) {
-//     RedisModule_Free(common);
-// }
+
 void freeCrdtObject(CrdtObject* object) {
     RedisModule_Free(object);
 }
@@ -166,44 +151,52 @@ void freeCrdtTombstone(CrdtTombstone* tombstone) {
 }
 
 
-int getType(int type) {
-    return type >> 4;
+int getType(CrdtObject* obj) {
+    return obj->type;
 }
 void setType(CrdtObject* obj, int type) {
-    obj->type &= 0x0F;
-    obj->type |= (type << 4);
+    obj->type = type;
 }
 int setDataType(CrdtObject* obj, int type) {
-    obj->type &= 0xF0;
-    obj->type |= type;
+    obj->dataType = type;
 }
-int getDataType(int type) {
-    return type & 0x0F;
+int getDataType(CrdtObject* obj) {
+    return obj->dataType;
 }
 /**
  * CrdtMeta Get Set Functions
  */ 
-void setMetaVectorClock(CrdtMeta* meta, VectorClock* vc) {
-    if(getMetaVectorClock(meta) != NULL) {
-        freeInnerClocks(getMetaVectorClock(meta));
+void setMetaVectorClock(CrdtMeta* meta, VectorClock vc) {
+    if(!isNullVectorClock(getMetaVectorClock(meta))) {
+        freeVectorClock(meta->vectorClock);
     }
-    if(vc != NULL) {
-        cloneVectorClock(&meta->vectorClock, vc);
-        freeVectorClock(vc);
+    meta->vectorClock = vc;
+    
+}
+
+CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other) {
+    VectorClock result = vectorClockMerge(getMetaVectorClock(target), getMetaVectorClock(other));
+    if(compareCrdtMeta(target, other) > 0) {
+        return createMeta(getMetaGid(other), getMetaTimestamp(other), result);
     }else{
-        meta->vectorClock.length = -1;
+        return createMeta(getMetaGid(target), getMetaTimestamp(target), result);
     }
-    
-    
 }
-int getMetaGid(CrdtMeta* meta) {
-    return meta->gid;
+CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other) {
+    VectorClock vc = getMetaVectorClock(target);
+    if(target == NULL || isNullVectorClock(vc)) {
+        return dupMeta(other);
+    }
+    if(compareCrdtMeta(target, other) > 0) {
+        setMetaGid(target, getMetaGid(other));
+        setMetaTimestamp(target, getMetaTimestamp(other));
+    }
+    vc =  vectorClockMerge(vc, getMetaVectorClock(other));
+    target->vectorClock = vc;
+    // merge(vc, getMetaVectorClock(other));
+    // clone(&target->vectorClock ,vectorClockMerge(vc, getMetaVectorClock(other)));
+    return target;
 }
-long long getMetaTimestamp(CrdtMeta* meta) {
-    return meta->timestamp;
-}
-
-
 #if defined(CRDT_COMMON_TEST_MAIN)
 #include <stdio.h>
 #include "testhelp.h"

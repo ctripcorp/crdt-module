@@ -22,7 +22,9 @@ else
 	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup
 endif
 CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -O0 -g -fPIC -lc -lm -std=gnu99  -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API
-
+ifeq ($(TEST),tcl)
+	CFLAGS+= -DTCL_TEST
+endif
 all: rmutil crdt.so
 
 rmutil:

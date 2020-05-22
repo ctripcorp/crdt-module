@@ -2,26 +2,20 @@
 /**
  *  LWW Hash Get Set Function
  */ 
-VectorClock* getCrdtLWWHashLastVc(CRDT_LWW_Hash* r) {
-    if(isNullVectorClock(r->lastVc)) return NULL;
-    return &r->lastVc;
+VectorClock getCrdtLWWHashLastVc(CRDT_LWW_Hash* r) {
+    return r->lastVc;
 }
-void setCrdtLWWHashLastVc(CRDT_LWW_Hash* r, VectorClock* vc) {
-    if(getCrdtLWWHashLastVc(r) != NULL) {
-        freeInnerClocks(getCrdtLWWHashLastVc(r));
+void setCrdtLWWHashLastVc(CRDT_LWW_Hash* r, VectorClock vc) {
+    if(!isNullVectorClock(getCrdtLWWHashLastVc(r))) {
+        freeVectorClock(getCrdtLWWHashLastVc(r));
     } 
-    if(vc == NULL) {
-        r->lastVc.length = -1;
-    }else{
-        cloneVectorClock(&r->lastVc, vc);
-        freeVectorClock(vc);
-    }
+    r->lastVc = vc;
 }
 /**
  *  LWW Hash TOMBSTONE Get Set  Function
  */ 
 int getCrdtLWWHashTombstoneMaxDelGid(CRDT_LWW_HashTombstone* t) {
-    return t->maxDelGid;
+    return (t->maxDelGid);
 }
 void setCrdtLWWHashTombstoneMaxDelGid(CRDT_LWW_HashTombstone* t, int gid) {
     t->maxDelGid = gid;
@@ -32,30 +26,24 @@ long long getCrdtLWWHashTombstoneMaxDelTimestamp(CRDT_LWW_HashTombstone* t) {
 void setCrdtLWWHashTombstoneMaxDelTimestamp(CRDT_LWW_HashTombstone* t, long long time) {
     t->maxDelTimestamp = time;
 }
-VectorClock* getCrdtLWWHashTombstoneMaxDelVectorClock(CRDT_LWW_HashTombstone* t) {
-    if(isNullVectorClock(t->maxDelvectorClock)) return NULL;
-    return &t->maxDelvectorClock;
+VectorClock getCrdtLWWHashTombstoneMaxDelVectorClock(CRDT_LWW_HashTombstone* t) {
+    return t->maxDelvectorClock;
 }
-void setCrdtLWWHashTombstoneMaxDelVectorClock(CRDT_LWW_HashTombstone* t, VectorClock* vc) {
-    if(getCrdtLWWHashTombstoneMaxDelVectorClock(t) != NULL) {
-        freeInnerClocks(getCrdtLWWHashTombstoneMaxDelVectorClock(t));
+void setCrdtLWWHashTombstoneMaxDelVectorClock(CRDT_LWW_HashTombstone* t, VectorClock vc) {
+    if(!isNullVectorClock(getCrdtLWWHashTombstoneMaxDelVectorClock(t))) {
+        freeVectorClock(getCrdtLWWHashTombstoneMaxDelVectorClock(t));
     } 
-    if(vc == NULL) {
-        t->maxDelvectorClock.length = -1;
-    }else{
-        cloneVectorClock(&t->maxDelvectorClock, vc);
-        freeVectorClock(vc);
-    }
+    t->maxDelvectorClock = vc;
 }
 CrdtMeta* getCrdtLWWHashTombstoneMaxDelMeta(CRDT_LWW_HashTombstone* t) {
-    if(getCrdtLWWHashTombstoneMaxDelVectorClock(t) == NULL) return NULL;
-    return (CrdtMeta*)&t->maxDelGid;
+    if(isNullVectorClock(getCrdtLWWHashTombstoneMaxDelVectorClock(t))) return NULL;
+    return (CrdtMeta*)t;
 }
 void setCrdtLWWHashTombstoneMaxDelMeta(CRDT_LWW_HashTombstone* t, CrdtMeta* meta) {
     if(meta == NULL) {
         setCrdtLWWHashTombstoneMaxDelGid(t, -1);
         setCrdtLWWHashTombstoneMaxDelTimestamp(t, -1);
-        setCrdtLWWHashTombstoneMaxDelVectorClock(t, NULL);
+        setCrdtLWWHashTombstoneMaxDelVectorClock(t, newVectorClock(0));
     }else{
         setCrdtLWWHashTombstoneMaxDelGid(t, getMetaGid(meta));
         setCrdtLWWHashTombstoneMaxDelTimestamp(t, getMetaTimestamp(meta));
@@ -64,20 +52,14 @@ void setCrdtLWWHashTombstoneMaxDelMeta(CRDT_LWW_HashTombstone* t, CrdtMeta* meta
     
     freeCrdtMeta(meta);
 }
-VectorClock* getCrdtLWWHashTombstoneLastVc(CRDT_LWW_HashTombstone* t) {
-    if(isNullVectorClock(t->lastVc)) return NULL;
-    return &t->lastVc;
+VectorClock getCrdtLWWHashTombstoneLastVc(CRDT_LWW_HashTombstone* t) {
+    return t->lastVc;
 }
-void setCrdtLWWHashTombstoneLastVc(CRDT_LWW_HashTombstone* t, VectorClock* vc) {
-    if(getCrdtLWWHashTombstoneLastVc(t) != NULL) {
-        freeInnerClocks(getCrdtLWWHashTombstoneLastVc(t));
+void setCrdtLWWHashTombstoneLastVc(CRDT_LWW_HashTombstone* t, VectorClock vc) {
+    if(!isNullVectorClock(getCrdtLWWHashTombstoneLastVc(t))) {
+        freeVectorClock(getCrdtLWWHashTombstoneLastVc(t));
     } 
-    if(vc == NULL) {
-        t->lastVc.length = -1;
-    }else{
-        cloneVectorClock(&t->lastVc, vc);
-        freeVectorClock(vc);
-    }   
+    t->lastVc = vc; 
 }
 /**
  * createHash
@@ -107,7 +89,7 @@ CRDT_Hash* dupCrdtLWWHash(void* data) {
     return (CRDT_Hash*)result;
 }
 
-void updateLastVCLWWHash(void* data, VectorClock* vc) {
+void updateLastVCLWWHash(void* data, VectorClock vc) {
     CRDT_LWW_Hash* crdtHash = retrieveCrdtLWWHash(data);
     setCrdtLWWHashLastVc(crdtHash, vectorClockMerge(getCrdtLWWHashLastVc(crdtHash), vc));
 }
@@ -120,7 +102,7 @@ void* createCrdtLWWHash() {
     setDataType((CrdtObject*)crdtHash , CRDT_HASH_TYPE);
     dict *hash = dictCreate(&crdtHashDictType, NULL);
     crdtHash->map = hash;
-    crdtHash->lastVc.length = -1;
+    crdtHash->lastVc = newVectorClock(0);
     return crdtHash;
 }
 
@@ -157,7 +139,7 @@ CRDT_HashTombstone* dupCrdtLWWHashTombstone(void* data) {
     }
     return (CRDT_HashTombstone*)result;
 }
-int gcCrdtLWWHashTombstone(void* data, VectorClock* clock) {
+int gcCrdtLWWHashTombstone(void* data, VectorClock clock) {
     CRDT_LWW_HashTombstone* target = retrieveCrdtLWWHashTombstone(data);
     if(isVectorClockMonoIncr(getCrdtLWWHashTombstoneLastVc(target), clock) == CRDT_OK) {
         return CRDT_OK;
@@ -174,20 +156,20 @@ int changeCrdtLWWHashTombstone(void* data, CrdtMeta* meta) {
 void* createCrdtLWWHashTombstone() {
     CRDT_LWW_HashTombstone *crdtHashTombstone = RedisModule_Alloc(sizeof(CRDT_LWW_HashTombstone));
     crdtHashTombstone->type = 0;
+    crdtHashTombstone->maxDelGid = 0;
+    crdtHashTombstone->maxDelTimestamp = 0;
     setDataType((CrdtObject*)crdtHashTombstone, CRDT_HASH_TYPE);
     setType((CrdtObject*)crdtHashTombstone,  CRDT_TOMBSTONE);
     dict *hash = dictCreate(&crdtHashTombstoneDictType, NULL);
     crdtHashTombstone->map = hash;
-    crdtHashTombstone->maxDelGid = -1;
-    crdtHashTombstone->maxDelTimestamp = -1;
-    crdtHashTombstone->maxDelvectorClock.length = -1;
-    crdtHashTombstone->lastVc.length = -1;
+    crdtHashTombstone->maxDelvectorClock = newVectorClock(0);
+    crdtHashTombstone->lastVc = newVectorClock(0);
     return crdtHashTombstone;
 }
 CRDT_LWW_HashTombstone* retrieveCrdtLWWHashTombstone(void* data) {
     if(data == NULL) return NULL;
     CRDT_LWW_HashTombstone* result = (CRDT_LWW_HashTombstone*)data;
-    assert(getDataType(result->type) == CRDT_HASH_TYPE);
+    assert(getDataType(result) == CRDT_HASH_TYPE);
     return result;
 }
 
@@ -223,7 +205,7 @@ void freeCrdtLWWHash(void *obj) {
     }
     CRDT_LWW_Hash* crdtHash = retrieveCrdtLWWHash(obj); 
     if(crdtHash->map != NULL) {dictRelease(crdtHash->map);}
-    setCrdtLWWHashLastVc(crdtHash, NULL);
+    setCrdtLWWHashLastVc(crdtHash, newVectorClock(0));
     RedisModule_Free(crdtHash);
 }
 size_t crdtLWWHashMemUsageFunc(const void *value) {
@@ -259,7 +241,7 @@ void *RdbLoadCrdtLWWHashTombstone(RedisModuleIO *rdb, int encver) {
 void RdbSaveCrdtLWWHashTombstone(RedisModuleIO *rdb, void *value) {
     RedisModule_SaveSigned(rdb, LWW_TYPE);
     CRDT_LWW_HashTombstone *crdtHashTombstone = retrieveCrdtLWWHashTombstone(value);
-    if(getCrdtLWWHashTombstoneMaxDelVectorClock(crdtHashTombstone) == NULL) {
+    if(isNullVectorClock(getCrdtLWWHashTombstoneMaxDelVectorClock(crdtHashTombstone))) {
         RedisModule_SaveSigned(rdb, NO_HASH_MAXDEL);
     }else{
         RedisModule_SaveSigned(rdb, HASH_MAXDEL);
@@ -283,8 +265,8 @@ void freeCrdtLWWHashTombstone(void *obj) {
         dictRelease(crdtHash->map);
         crdtHash->map = NULL;
     }
-    setCrdtLWWHashTombstoneLastVc(crdtHash, NULL);
-    setCrdtLWWHashTombstoneMaxDelVectorClock(crdtHash, NULL);
+    setCrdtLWWHashTombstoneLastVc(crdtHash, newVectorClock(0));
+    setCrdtLWWHashTombstoneMaxDelVectorClock(crdtHash, newVectorClock(0));
     RedisModule_Free(crdtHash);
 }
 size_t crdtLWWHashTombstoneMemUsageFunc(const void *value) {
