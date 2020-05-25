@@ -50,7 +50,7 @@ typedef CrdtObject CRDT_Register ;
 int getCrdtRegisterLastGid(CRDT_Register* r);
 sds getCrdtRegisterLastValue(CRDT_Register* r);
 long long getCrdtRegisterLastTimestamp(CRDT_Register* r);
-VectorClock getCrdtRegisterLastVc(CRDT_Register* r);
+VectorClock getCrdtRegisterLastVc(void* r);
 CrdtMeta* createCrdtRegisterLastMeta(CRDT_Register* reg);
 
 typedef CrdtObject CRDT_RegisterTombstone ;
@@ -76,13 +76,12 @@ typedef struct CrdtRegisterMethod {
     updateLastVCCrdtRegisterFunc updateLastVC;
 } CrdtRegisterMethod;
 
-typedef int (*isExpireCrdtRegisterTombstoneFunc)(struct
- CRDT_RegisterTombstone* target, CrdtMeta* meta);
-typedef CrdtMeta* (*addCrdtRegisterTombstoneFunc)(struct CRDT_RegisterTombstone* target,struct CrdtMeta* other);
-typedef struct CRDT_RegisterTombstone* (*filterCrdtRegisterTombstoneFunc)(struct CRDT_RegisterTombstone* target, int gid, long long logic_time);
-typedef struct CRDT_RegisterTombstone* (*dupCrdtRegisterTombstoneFunc)(struct CRDT_RegisterTombstone* target);
-typedef struct CRDT_RegisterTombstone* (*mergeRegisterTombstoneFunc)(struct CRDT_RegisterTombstone* target, struct CRDT_RegisterTombstone* other);
-typedef int (*purageTombstoneFunc)(void* tombstone, void* obj);
+typedef int (*isExpireCrdtRegisterTombstoneFunc)(CRDT_RegisterTombstone* target, CrdtMeta* meta);
+typedef CrdtMeta* (*addCrdtRegisterTombstoneFunc)(CRDT_RegisterTombstone* target,CrdtMeta* other);
+typedef CRDT_RegisterTombstone* (*filterCrdtRegisterTombstoneFunc)(CRDT_RegisterTombstone* target, int gid, long long logic_time);
+typedef CRDT_RegisterTombstone* (*dupCrdtRegisterTombstoneFunc)(CRDT_RegisterTombstone* target);
+typedef CRDT_RegisterTombstone* (*mergeRegisterTombstoneFunc)(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other);
+typedef int (*purageTombstoneFunc)(CrdtTombstone* tombstone, CrdtObject* obj);
 typedef struct CrdtRegisterTombstoneMethod {
     isExpireCrdtRegisterTombstoneFunc isExpire;
     addCrdtRegisterTombstoneFunc add;
@@ -102,7 +101,7 @@ int delCrdtRegister(CRDT_Register* current, CrdtMeta* meta);
 int initRegisterModule(RedisModuleCtx *ctx);
 
 //register command methods
-void *crdtRegisterMerge(void *currentVal, void *value);
+CrdtObject *crdtRegisterMerge(CrdtObject *currentVal, CrdtObject *value);
 int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value);
 CrdtObject* crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time);
 int crdtRegisterTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current);
@@ -120,9 +119,9 @@ static CrdtDataMethod RegisterDataMethod = {
     .updateLastVC = crdtRegisterUpdateLastVC,
 };
 //register tombstone command methods
-void* crdtRegisterTombstoneMerge(void* target, void* other);
-void* crdtRegisterTombstoneFilter(void* target, int gid, long long logic_time) ;
-int crdtRegisterTombstoneGc(void* target, VectorClock clock);
+CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other);
+CrdtTombstone* crdtRegisterTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time) ;
+int crdtRegisterTombstoneGc(CrdtTombstone* target, VectorClock clock);
 static CrdtTombstoneMethod RegisterTombstoneMethod = {
     .merge = crdtRegisterTombstoneMerge,
     .filter =  crdtRegisterTombstoneFilter,
@@ -152,6 +151,7 @@ CRDT_RegisterTombstone* createCrdtRegisterTombstone();
 CRDT_RegisterTombstone* dupCrdtRegisterTombstone(CRDT_RegisterTombstone* target);
 CRDT_RegisterTombstone* mergeRegisterTombstone(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other);
 CRDT_RegisterTombstone* filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time);
+int purageRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
 CrdtMeta* addRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta);
 int isExpireCrdtTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);
 #endif //XREDIS_CRDT_CRDT_REGISTER_H

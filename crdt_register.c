@@ -37,6 +37,7 @@
 #include "ctrip_vector_clock.h"
 #include "utils.h"
 #include "crdt.h"
+#include <strings.h>
 /**
  * ==============================================Pre-defined functions=========================================================*/
 
@@ -68,7 +69,7 @@ RedisModuleType* getCrdtRegisterTombstone() {
     return CrdtRegisterTombstone;
 }
 
-void *crdtRegisterMerge(void *currentVal, void *value) {
+CrdtObject *crdtRegisterMerge(CrdtObject *currentVal, CrdtObject *value) {
     if(currentVal == NULL && value == NULL) {
         return NULL;
     }
@@ -85,11 +86,25 @@ void *crdtRegisterMerge(void *currentVal, void *value) {
 CrdtObject* crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time) {
     return filterRegister(common, gid, logic_time);
 }
+int isRegister(void *data) {
+    CRDT_Register* reg = (CRDT_Register*) data;
+    if(reg != NULL && getDataType(reg) == CRDT_REGISTER_TYPE) {
+        return CRDT_OK;
+    } 
+    return CRDT_NO;
+}
+int isRegisterTombstone(void *data) {
+    CRDT_RegisterTombstone* tombstone = (CRDT_RegisterTombstone*) data;
+    if(tombstone != NULL && getDataType(tombstone) == CRDT_REGISTER_TYPE) {
+        return CRDT_OK;
+    } 
+    return CRDT_NO;
+}
 int crdtRegisterTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current) {
-    if(!isRegister(current)) {
+    if(!isRegister((void*)current)) {
         return 0;
     }
-    if(!isRegisterTombstone(tombstone)) {
+    if(!isRegisterTombstone((void*)tombstone)) {
         return 0;
     }
     CRDT_Register* reg = (CRDT_Register*) current;
@@ -97,7 +112,7 @@ int crdtRegisterTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current) {
     return purageRegisterTombstone(t, reg);
 }
 
-void* crdtRegisterTombstoneMerge(void* target, void* other) {
+CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other) {
     if(!isRegisterTombstone(target) || !isRegisterTombstone(other)) {
         return NULL;
     }
@@ -107,7 +122,7 @@ void* crdtRegisterTombstoneMerge(void* target, void* other) {
 
 
 
-void* crdtRegisterTombstoneFilter(void* target, int gid, long long logic_time) {
+CrdtObject* crdtRegisterTombstoneFilter(CrdtObject* target, int gid, long long logic_time) {
     if(!isRegisterTombstone(target)) {
         return NULL;
     }
@@ -195,7 +210,6 @@ int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value) {
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegisterTombstone, tombstone);
     }
     addRegisterTombstone(tombstone, del_meta);
-    long long expire = RedisModule_GetExpire(moduleKey);
     sds vcSds = vectorClockToSds(getMetaVectorClock(del_meta));
     RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_REG", "sllc", keyRobj, getMetaGid(del_meta), getMetaTimestamp(del_meta), vcSds);
     sdsfree(vcSds);
@@ -239,8 +253,8 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     CRDT_Register* current = getCurrentValue(moduleKey);
     
     if(current != NULL) {
-        if(!isRegister(current)) {
-            const char* keyStr = RedisModule_StringPtrLen(moduleKey, NULL);
+        if(isRegister(current) != CRDT_OK) {
+            const char* keyStr = RedisModule_StringPtrLen(argv[1], NULL);
             RedisModule_Log(ctx, logLevel, "[TYPE CONFLICT][CRDT-Register][drop] key:{%s} ,prev: {%s} ",
                             keyStr ,current->type);
             RedisModule_IncrCrdtConflict();      
@@ -272,20 +286,6 @@ end:
     }
 }
 
-int isRegister(void *data) {
-    CRDT_Register* reg = (CRDT_Register*) data;
-    if(reg != NULL && getDataType(reg) == CRDT_REGISTER_TYPE) {
-        return CRDT_OK;
-    } 
-    return CRDT_NO;
-}
-int isRegisterTombstone(void *data) {
-    CRDT_RegisterTombstone* tombstone = (CRDT_RegisterTombstone*) data;
-    if(tombstone != NULL && getDataType(tombstone) == CRDT_REGISTER_TYPE) {
-        return CRDT_OK;
-    } 
-    return CRDT_NO;
-}
 
 CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_RegisterTombstone* tombstone, CRDT_Register* current, CrdtMeta* meta, RedisModuleString* key,sds value) {
     if(current == NULL) {
@@ -304,7 +304,7 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
         sds prev = crdtRegisterInfo(current);
         //tryUpdateRegister function will be change "current" object
         int result = tryUpdateRegister(tombstone, meta, current, value);
-        if(isConflictCommon(result)) {
+        if(isConflictCommon(result) == CRDT_OK) {
             CRDT_Register* incomeValue = addRegister(NULL, meta, value);
             sds income = crdtRegisterInfo(incomeValue);
             sds future = crdtRegisterInfo(current);
@@ -523,7 +523,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     
     current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, meta, argv[1], RedisModule_GetSds(argv[2]));
     if(expire_time != -2) {
-        trySetExpire(moduleKey, getMetaTimestamp(meta),  CRDT_REGISTER_TYPE, expire_time);
+        trySetExpire(moduleKey, argv[1], getMetaTimestamp(meta),  CRDT_REGISTER_TYPE, expire_time);
     }
     RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);

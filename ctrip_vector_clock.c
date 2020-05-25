@@ -32,7 +32,7 @@
 
 #include "ctrip_vector_clock.h"
 #include "include/rmutil/sds.h"
-#include "include/rmutil/util.h"
+#include "util.h"
 #include "include/rmutil/zmalloc.h"
 #include <string.h>
 #include <stdlib.h>
@@ -71,6 +71,9 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
     freeVectorClock(VectorClock vc) {
         zfree(vc);
     }
+    clk* clocks_address(VectorClock value) {
+        return (clk*)(&value->vcu);
+    }
 #else
     VectorClock
     newVectorClock(int numVcUnits) {
@@ -92,6 +95,12 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
             return;
         }
         zfree(clocks_address(vc));
+    }
+    clk* clocks_address(VectorClock value) {
+        if(get_len(value) == 1) {
+            return (clk*)(&value.unit);
+        }
+        return (clk*)value.pvc.pvc;
     }
 #endif
 
@@ -125,7 +134,18 @@ addVectorClockUnit(VectorClock vc, int gid, long long logic_time) {
 
 
 /**------------------------Vector Clock Util--------------------------------------*/
-
+int isNullVectorClock(VectorClock vc) {
+    return get_len(vc) == 0;
+}
+int isNullVectorClockUnit(VectorClockUnit unit) {
+    return unit.clock == 0;
+}
+void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time) {
+    clk *clock = get_clock_unit_by_index(vclock, index);
+    // *clock = gid_logic_time;
+    set_gid(clock, get_gid(gid_logic_time));
+    set_logic_clock(clock, get_logic_clock(gid_logic_time));
+}
 /* Sort comparators for qsort() */
 static int sort_vector_clock_unit(const void *a, const void *b) {
     const clk *vcu_a = a, *vcu_b = b;

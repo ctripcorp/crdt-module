@@ -139,12 +139,10 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key) {
     }
     
     RedisModule_SaveLen(rio, RDB_VALUE_EOF);
-error:
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
 }
 
 int RdbLoadCrdtValue(void* db, RedisModuleString* key, void* rio) {
-    void *data = NULL;
     RedisModuleKey* moduleKey = RedisModule_GetKey(db, key, REDISMODULE_WRITE| REDISMODULE_TOMBSTONE);
     int result = C_OK;
     while(1) {
@@ -222,6 +220,7 @@ CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
                 return NULL;
         }
     } 
+    return NULL;
 }
 
 /* This function must be present on each Redis module. It is used in order to

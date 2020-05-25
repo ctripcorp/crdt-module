@@ -27,7 +27,7 @@ void setCrdtLWWRegisterVectorClock(CRDT_LWW_Register* r, VectorClock vc) {
 }
 CrdtMeta* getCrdtLWWRegisterMeta(CRDT_LWW_Register* r) {
     if(isNullVectorClock(r->vectorClock)) return NULL;
-    return r;
+    return (CrdtMeta*)r;
 }
 void setCrdtLWWRegisterMeta(CRDT_LWW_Register* r, CrdtMeta* meta) {
     if(meta == NULL) {
@@ -53,7 +53,7 @@ void setCrdtLWWRegisterValue(CRDT_LWW_Register* r, sds value) {
 /**
  *  LWW RegisterTombstone Get Set Function
  */ 
- int getCrdtLWWRegisterTombstoneGid(CRDT_LWW_RegisterTombstone* t) {
+int getCrdtLWWRegisterTombstoneGid(CRDT_LWW_RegisterTombstone* t) {
     return t->gid;
 }
  void setCrdtLWWRegisterTombstoneGid(CRDT_LWW_RegisterTombstone* t, int gid) {
@@ -79,11 +79,11 @@ void setCrdtLWWRegisterTombstoneTimestamp(CRDT_LWW_RegisterTombstone* t, long lo
     t->timestamp = timestamp;
 }
 CrdtMeta* createCrdtRegisterTombstoneLastMeta(CRDT_RegisterTombstone* t) {
-    VectorClock vc = getCrdtLWWRegisterTombstoneVectorClock(t);
+    VectorClock vc = getCrdtLWWRegisterTombstoneVectorClock((CRDT_LWW_RegisterTombstone*)t);
     if(!isNullVectorClock(vc)) {
         return createMeta(
-            getCrdtLWWRegisterTombstoneGid(t), 
-            getCrdtLWWRegisterTombstoneTimestamp(t),
+            getCrdtLWWRegisterTombstoneGid((CRDT_LWW_RegisterTombstone*)t), 
+            getCrdtLWWRegisterTombstoneTimestamp((CRDT_LWW_RegisterTombstone*)t),
             dupVectorClock(vc)  
         );
     }
@@ -120,10 +120,10 @@ CRDT_LWW_Register* dupCrdtLWWRegister(CRDT_LWW_Register *target) {
     setCrdtLWWRegisterValue(result, sdsdup(getCrdtLWWRegisterValue(target)));
     return result;
 }
-CRDT_Register* mergeLWWRegister(CRDT_Register* target, CRDT_Register* other) {
+CRDT_LWW_Register* mergeLWWRegister(CRDT_LWW_Register* target, CRDT_LWW_Register* other) {
     if(target == NULL) {return dupCrdtLWWRegister(other);}
     if(other == NULL) {return dupCrdtLWWRegister(target);}
-    CRDT_Register* result = dupCrdtLWWRegister(target);
+    CRDT_LWW_Register* result = dupCrdtLWWRegister(target);
     if(compareCrdtMeta(getCrdtLWWRegisterMeta(target), getCrdtLWWRegisterMeta(other)) > COMPARE_META_EQUAL ) {
         setCrdtLWWRegisterValue(result, sdsdup(getCrdtLWWRegisterValue(other)));
     }
@@ -180,7 +180,7 @@ int delLWWCrdtRegister(CRDT_Register* current, CrdtMeta* meta) {
     return 0;
     
 }
-CRDT_RegisterTombstone* createCrdtLWWRegisterTombstone() {
+CRDT_LWW_RegisterTombstone* createCrdtLWWRegisterTombstone() {
     CRDT_LWW_RegisterTombstone *tombstone = RedisModule_Alloc(sizeof(CRDT_LWW_RegisterTombstone));
     tombstone->type = 0;
     tombstone->timestamp = 0;
@@ -237,7 +237,7 @@ int setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
     setCrdtLWWRegisterMeta(data, mergeMeta(getCrdtLWWRegisterMeta(data), meta));
     return result;
 }
-CRDT_Register* filterLWWRegister(CRDT_Register* target, int gid, long long logic_time) {
+CRDT_LWW_Register* filterLWWRegister(CRDT_LWW_Register* target, int gid, long long logic_time) {
     CRDT_LWW_Register* reg = retrieveCrdtLWWRegister(target);
     if(getCrdtLWWRegisterGid(reg) != gid) {
         return NULL;
@@ -259,7 +259,7 @@ sds crdtLWWRegisterInfo(CRDT_LWW_Register *crdtRegister) {
     sdsfree(vcStr);
     return result;
 }
-size_t crdtLWWRegisterTombstoneMemUsageFunc(void *value) {
+size_t crdtLWWRegisterTombstoneMemUsageFunc(const void *value) {
     //to do 
     return 1;
 }
@@ -289,12 +289,12 @@ void AofRewriteCrdtLWWRegister(RedisModuleIO *aof, RedisModuleString *key, void 
 /**
  * tombstone
  */ 
-CrdtMeta* addCrdtLWWRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta) {
+CrdtMeta* addCrdtLWWRegisterTombstone(CRDT_LWW_RegisterTombstone* target, CrdtMeta* meta) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
     setCrdtLWWRegisterTombstoneMeta(t, mergeMeta(getCrdtLWWRegisterTombstoneMeta(t), meta));
     return meta;
 }
-CRDT_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other) {
+CRDT_LWW_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_LWW_RegisterTombstone* target, CRDT_LWW_RegisterTombstone* other) {
     CRDT_LWW_RegisterTombstone* result = NULL;
     if(target == NULL && other == NULL) return NULL;
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
@@ -307,14 +307,14 @@ CRDT_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_RegisterTombstone* target
 }
 CRDT_RegisterTombstone* filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
-    if(getCrdtLWWRegisterGid(t) != gid) return NULL;
+    if(getCrdtLWWRegisterTombstoneGid(t) != gid) return NULL;
     VectorClockUnit unit = getVectorClockUnit(getCrdtLWWRegisterTombstoneVectorClock(t), gid);
     if(isNullVectorClockUnit(unit)) return NULL;
     long long vcu = get_logic_clock(unit);
     if(vcu < logic_time) return NULL;
-    return dupLWWCrdtRegisterTombstone(t);
+    return (CRDT_RegisterTombstone*)dupLWWCrdtRegisterTombstone(t);
 }
-CRDT_LWW_RegisterTombstone* dupLWWCrdtRegisterTombstone(CRDT_RegisterTombstone* target) {
+CRDT_LWW_RegisterTombstone* dupLWWCrdtRegisterTombstone(CRDT_LWW_RegisterTombstone* target) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
     CRDT_LWW_RegisterTombstone* result = createCrdtLWWRegisterTombstone();
     setCrdtLWWRegisterTombstoneGid(result, getCrdtLWWRegisterTombstoneGid(t));
