@@ -13,7 +13,7 @@
 
 
 //utils
-void setExpire(RedisModuleKey *key, CrdtData *data, long long expiteTime);
+int setExpire(RedisModuleKey *key, long long expiteTime);
 int trySetExpire(RedisModuleKey* moduleKey, RedisModuleString* key, long long  time, int type, long long expireTime) ;
 //command
 int initCrdtExpireModule(RedisModuleCtx *ctx);
