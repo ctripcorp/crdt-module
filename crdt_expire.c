@@ -1,16 +1,18 @@
 #include "crdt_expire.h"
 #include "crdt_register.h"
-void setExpire(RedisModuleKey *key, CrdtData *data, long long expiteTime) {
-    if(expiteTime == -1) {
-       RedisModule_SetExpire(key, -1); 
-       return;
+int setExpire(RedisModuleKey *key, long long expiteTime) {
+    if(expiteTime == REDISMODULE_NO_EXPIRE) {
+        RedisModule_SetExpire(key, REDISMODULE_NO_EXPIRE); 
+    }else{
+        RedisModule_SetExpire(key, expiteTime - RedisModule_Milliseconds());
     }
-    RedisModule_SetExpire(key, expiteTime - RedisModule_Milliseconds());
+    return CRDT_OK;
 }
 int expireAt(RedisModuleCtx* ctx, RedisModuleString *key, long long expireTime) {
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, key, REDISMODULE_WRITE);
     CrdtData *data = NULL;
     int type = RedisModule_KeyType(moduleKey);
+    int result = 0;
     if(type != REDISMODULE_KEYTYPE_EMPTY) {
         data = RedisModule_ModuleTypeGetValue(moduleKey);
         if (data == NULL) {
@@ -19,13 +21,13 @@ int expireAt(RedisModuleCtx* ctx, RedisModuleString *key, long long expireTime) 
     } else {
         goto end;
     }
-    setExpire(moduleKey, data, expireTime);
+    result = setExpire(moduleKey, expireTime);
 end:
     if(data != NULL) {
         RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllll", key, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
     }
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
-    return RedisModule_ReplyWithLongLong(ctx, 0);
+    return RedisModule_ReplyWithLongLong(ctx, result);
 }
 int expireAtCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
@@ -125,7 +127,7 @@ int persistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     if(et == REDISMODULE_NO_EXPIRE) {
         goto end;
     }
-    RedisModule_SetExpire(moduleKey, REDISMODULE_NO_EXPIRE);
+    result = setExpire(moduleKey, REDISMODULE_NO_EXPIRE);
     RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.persist", "sll", argv[1], RedisModule_CurrentGid() ,  (long long )getDataType(data));
     
 end:  

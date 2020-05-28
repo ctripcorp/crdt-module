@@ -340,16 +340,15 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
 #define OBJ_SET_KEEPTTL (1<<4)
 #define UNIT_SECONDS 0
 #define UNIT_MILLISECONDS 1
-
 int setGenericCommand(RedisModuleCtx *ctx,  int flags, RedisModuleString* key, RedisModuleString* val, RedisModuleString* expire, int unit, int sendtype) {
-    RedisModuleKey* moduleKey = NULL;
     int result = 0;
+    RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, key, CrdtRegister);
     CrdtMeta* set_meta = NULL;
-    moduleKey =  getWriteRedisModuleKey(ctx, key, CrdtRegister);
     if(moduleKey == NULL) {
         result = 0;
         goto end;
     }
+    
     CRDT_Register* current = getCurrentValue(moduleKey);
     if((current != NULL && flags & OBJ_SET_NX) 
         || (current == NULL && flags & OBJ_SET_XX)) {
@@ -361,7 +360,7 @@ int setGenericCommand(RedisModuleCtx *ctx,  int flags, RedisModuleString* key, R
     if (expire) {
         if (RedisModule_StringToLongLong(expire, &milliseconds) != REDISMODULE_OK) {
             result = 0;
-            if(sendtype) RedisModule_ReplyWithSimpleString(ctx, "-ERR syntax error\r\n");
+            if(sendtype) RedisModule_ReplyWithSimpleString(ctx, "ERR syntax error\r\n");
             goto end;
         }
         if (milliseconds <= 0) {
@@ -384,9 +383,9 @@ int setGenericCommand(RedisModuleCtx *ctx,  int flags, RedisModuleString* key, R
     long long expire_time = -2;
     if(expire) {
         expire_time = getMetaTimestamp(set_meta) + milliseconds;
-        setExpire(moduleKey, current, expire_time);
+        setExpire(moduleKey, expire_time);
     }else if(!(flags & OBJ_SET_KEEPTTL)){
-        setExpire(moduleKey, current, -1);
+        setExpire(moduleKey, -1);
         expire_time = -1;
     }
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", key);
@@ -422,9 +421,16 @@ int msetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     int start_index = 1;
     int result = 0;
     for (int i = start_index; i < argc; i+=2) {
+        RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[i], CrdtRegister);
+        if(moduleKey == NULL) {
+            return 0;
+        }
+        RedisModule_CloseKey(moduleKey);
+    }
+    for (int i = start_index; i < argc; i+=2) {
         result += setGenericCommand(ctx, OBJ_SET_NO_FLAGS, argv[i], argv[i + 1], NULL, UNIT_SECONDS, 1);
     }
-    return RedisModule_ReplyWithLongLong(ctx, result);
+    return RedisModule_ReplyWithSimpleString(ctx, "OK");
 }
 int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
@@ -467,7 +473,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             expire = next;
             j++;
         } else {
-            RedisModule_ReplyWithError(ctx, "-ERR syntax error");
+            RedisModule_ReplyWithError(ctx, "ERR syntax error");
             return CRDT_ERROR;
         }
     }
