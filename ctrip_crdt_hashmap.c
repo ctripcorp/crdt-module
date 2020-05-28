@@ -145,18 +145,17 @@ int addOrUpdateHash(RedisModuleCtx* ctx, RedisModuleString* key, RedisModuleKey*
         sds field = RedisModule_GetSds(argv[i]);
         sds value = RedisModule_GetSds(argv[i + 1]);
         int result = addOrUpdateItem(ctx, tombstone, current, meta, key, field, value);
-        if(result > NO_CHANGE_HASH) changed++;
+        if(result == ADD_HASH) changed++;
     }
     if(changed > 0) {
         changeCrdtHash(current, meta);
         if(need_created == CRDT_OK) {
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtHash, current);
-            return ADD_HASH;
         }
-        return UPDATE_HASH;
+        return changed;
     }
     if(need_created == CRDT_OK)  freeCrdtHash(current);
-    return NO_CHANGE_HASH;
+    return changed;
 }
 CRDT_Register * hashTypeGetFromHashTable(CRDT_Hash *o, sds field) {
     dictEntry *de;
@@ -188,7 +187,7 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
     if (argc < 4) return RedisModule_WrongArity(ctx);
     if ((argc % 2) == 1) {
-        return RedisModule_ReplyWithError(ctx, "wrong number of arguments for HSET/HMSET");
+        return RedisModule_WrongArity(ctx);
     }
     CrdtMeta* meta = NULL;
     RedisModuleKey* moduleKey =  getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
@@ -220,7 +219,7 @@ end:
     sds cmdname = RedisModule_GetSds(argv[0]);
     if (cmdname[1] == 's' || cmdname[1] == 'S') {
         /* HSET */
-        return RedisModule_ReplyWithLongLong(ctx, result == ADD_HASH? CRDT_OK: CRDT_NO);
+        return RedisModule_ReplyWithLongLong(ctx, result);
     } else {
         /* HMSET */
         return RedisModule_ReplyWithSimpleString(ctx, "OK");
@@ -248,6 +247,7 @@ int hgetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 
 int hmgetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if(argc < 3) return RedisModule_WrongArity(ctx);
     /* Don't abort when the key cannot be found. Non-existing keys are empty
      * hashes, where HMGET should respond with a series of null bulks. */
     RedisModule_AutoMemory(ctx);
@@ -343,18 +343,20 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
 end:
     if(del_meta != NULL) {
-        sds vcStr = vectorClockToSds(getMetaVectorClock(del_meta));
-        size_t argc_repl = (size_t) deleted;
-        void *argv_repl = (void *) deleted_objs;
-        //CRDT.REM_HASH <key> gid timestamp <del-op-vclock> <field1> <field2> ...
-        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.REM_HASH", "sllcv", argv[1], getMetaGid(del_meta), getMetaTimestamp(del_meta), vcStr, argv_repl, argc_repl);
-        sdsfree(vcStr);
+        if(deleted > 0) {
+            sds vcStr = vectorClockToSds(getMetaVectorClock(del_meta));
+            size_t argc_repl = (size_t) deleted;
+            void *argv_repl = (void *) deleted_objs;
+            //CRDT.REM_HASH <key> gid timestamp <del-op-vclock> <field1> <field2> ...
+            RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.REM_HASH", "sllcv", argv[1], getMetaGid(del_meta), getMetaTimestamp(del_meta), vcStr, argv_repl, argc_repl);
+            sdsfree(vcStr);
+        }
         freeCrdtMeta(del_meta);
     }
 
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     if(status == CRDT_OK) {
-        return RedisModule_ReplyWithLongLong(ctx, 0);
+        return RedisModule_ReplyWithLongLong(ctx, deleted);
     }else{
         return CRDT_ERROR;
     }
@@ -623,7 +625,7 @@ end:
 }
 
 int genericHgetallCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int flags) {
-
+    if(argc != 2) return RedisModule_WrongArity(ctx);
     int multiplier = 0;
     int length, count = 0;
 
