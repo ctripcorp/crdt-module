@@ -114,6 +114,11 @@
 
 #ifndef REDISMODULE_CORE
 
+#define TYPECONFLICT (1<<0)
+#define NONTYPECONFLICT (1<<1)
+#define MODIFYCONFLICT (1<<2)
+#define MERGECONFLICT (1<<3)
+
 typedef long long mstime_t;
 
 /* Incomplete structures for compiler checks but opaque access. */
@@ -212,7 +217,7 @@ int REDISMODULE_API_FUNC(RedisModule_ReplicateStraightForward)(RedisModuleCtx *c
 int REDISMODULE_API_FUNC(RedisModule_CrdtReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_CrdtReplicateAlsoNormReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_ReplicationFeedAllSlaves)(int dbId, const char *cmdname, const char *fmt, ...);
-int REDISMODULE_API_FUNC(RedisModule_IncrCrdtConflict)(void);
+int REDISMODULE_API_FUNC(RedisModule_IncrCrdtConflict)(int type);
 int REDISMODULE_API_FUNC(RedisModule_CrdtMultiWrappedReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 const char *REDISMODULE_API_FUNC(RedisModule_CallReplyStringPtr)(RedisModuleCallReply *reply, size_t *len);
 RedisModuleString *REDISMODULE_API_FUNC(RedisModule_CreateStringFromCallReply)(RedisModuleCallReply *reply);
