@@ -134,7 +134,7 @@ void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
 
 sds crdtRegisterInfo(CRDT_Register *crdtRegister);
-CRDT_Register* mergeRegister(CRDT_Register* target, CRDT_Register* other);
+CRDT_Register* mergeRegister(CRDT_Register* target, CRDT_Register* other, int* conflict);
 sds getCrdtRegisterSds(CRDT_Register* r);
 CRDT_Register* addRegister(void *tombstone, CrdtMeta* meta, sds value);
 int tryUpdateRegister(void* data, CrdtMeta* meta, CRDT_Register* reg, sds value);
@@ -149,10 +149,10 @@ void AofRewriteCrdtRegisterTombstone(RedisModuleIO *aof, RedisModuleString *key,
 
 CRDT_RegisterTombstone* createCrdtRegisterTombstone();
 CRDT_RegisterTombstone* dupCrdtRegisterTombstone(CRDT_RegisterTombstone* target);
-CRDT_RegisterTombstone* mergeRegisterTombstone(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other);
+CRDT_RegisterTombstone* mergeRegisterTombstone(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other, int* comapre);
 CRDT_RegisterTombstone* filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time);
 int purageRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
-CrdtMeta* addRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta);
+CrdtMeta* addRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta, int* compare);
 int isExpireCrdtTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);
 #endif //XREDIS_CRDT_CRDT_REGISTER_H
 static RedisModuleType *CrdtRegister;

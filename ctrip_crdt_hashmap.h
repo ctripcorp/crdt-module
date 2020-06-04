@@ -195,7 +195,7 @@ static dictType crdtHashTombstoneDictType = {
 RedisModuleType* getCrdtHash();
 RedisModuleType* getCrdtHashTombstone();
 
-CrdtMeta* updateMaxDelCrdtHashTombstone(void* data, CrdtMeta* meta);
+CrdtMeta* updateMaxDelCrdtHashTombstone(void* data, CrdtMeta* meta,int* comapre);
 int isExpireCrdtHashTombstone(void* data, CrdtMeta* meta);
 CRDT_HashTombstone* dupCrdtHashTombstone(void* data);
 int gcCrdtHashTombstone(void* data, VectorClock clock);

@@ -81,7 +81,12 @@ CrdtObject *crdtRegisterMerge(CrdtObject *currentVal, CrdtObject *value) {
     if(v == NULL) {
         return dupCrdtRegister(current);
     }
-    return mergeRegister(currentVal, value);
+    int compare = 0;
+    CrdtObject* result = mergeRegister(currentVal, value, &compare);
+    if(isConflictCommon(compare)) {
+        RedisModule_IncrCrdtConflict(MERGECONFLICT | NONTYPECONFLICT);
+    }
+    return result;
 }
 CrdtObject* crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time) {
     return filterRegister(common, gid, logic_time);
@@ -117,7 +122,10 @@ CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* 
         return NULL;
     }
     CRDT_RegisterTombstone* t = (CRDT_RegisterTombstone*) target;
-    return mergeRegisterTombstone(t, (CRDT_RegisterTombstone*) other);
+    int compare = 0;
+    CrdtTombstone* result = mergeRegisterTombstone(t, (CRDT_RegisterTombstone*) other, &compare);
+    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(MERGECONFLICT | NONTYPECONFLICT);
+    return result;
 }
 
 
@@ -209,7 +217,9 @@ int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value) {
         tombstone = createCrdtRegisterTombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegisterTombstone, tombstone);
     }
-    addRegisterTombstone(tombstone, del_meta);
+    int compare = 0;
+    addRegisterTombstone(tombstone, del_meta, &compare);
+    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(NONTYPECONFLICT | MODIFYCONFLICT);
     sds vcSds = vectorClockToSds(getMetaVectorClock(del_meta));
     RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_REG", "sllc", keyRobj, getMetaGid(del_meta), getMetaTimestamp(del_meta), vcSds);
     sdsfree(vcSds);
@@ -232,6 +242,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     int deleted = 0;
     RedisModuleKey* moduleKey =  getWriteRedisModuleKey(ctx, argv[1], CrdtRegister);
     if(moduleKey == NULL) {
+        RedisModule_IncrCrdtConflict(TYPECONFLICT | MODIFYCONFLICT);
         status = CRDT_ERROR;
         goto end;
     }
@@ -248,8 +259,9 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         tombstone = createCrdtRegisterTombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegisterTombstone, tombstone);
     }
-    addRegisterTombstone(tombstone, del_meta);
-
+    int compare = 0;
+    addRegisterTombstone(tombstone, del_meta, &compare);
+    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(NONTYPECONFLICT | MODIFYCONFLICT);
     CRDT_Register* current = getCurrentValue(moduleKey);
     
     if(current != NULL) {
@@ -257,7 +269,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
             const char* keyStr = RedisModule_StringPtrLen(argv[1], NULL);
             RedisModule_Log(ctx, logLevel, "[TYPE CONFLICT][CRDT-Register][drop] key:{%s} ,prev: {%s} ",
                             keyStr ,current->type);
-            RedisModule_IncrCrdtConflict();      
+            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);      
             RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);  
             status = CRDT_ERROR;
             goto end;
@@ -298,7 +310,7 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
             RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
                             RedisModule_GetSds(key),getDataType(current));
             RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
-            RedisModule_IncrCrdtConflict();
+            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);
             return NULL;
         }
         sds prev = crdtRegisterInfo(current);
@@ -318,7 +330,7 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
             freeCrdtRegister(incomeValue);
             sdsfree(income);
             sdsfree(future);
-            RedisModule_IncrCrdtConflict();
+            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | NONTYPECONFLICT);
         }
         sdsfree(prev);
     }
@@ -517,6 +529,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     //if key is null will be create one key
     RedisModuleKey* moduleKey =  getWriteRedisModuleKey(ctx, argv[1], CrdtRegister);
     if (moduleKey == NULL) {
+        RedisModule_IncrCrdtConflict(TYPECONFLICT | MODIFYCONFLICT);
         status = CRDT_ERROR;
         goto end;
     }

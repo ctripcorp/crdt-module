@@ -120,14 +120,14 @@ CRDT_LWW_Register* dupCrdtLWWRegister(CRDT_LWW_Register *target) {
     setCrdtLWWRegisterValue(result, sdsdup(getCrdtLWWRegisterValue(target)));
     return result;
 }
-CRDT_LWW_Register* mergeLWWRegister(CRDT_LWW_Register* target, CRDT_LWW_Register* other) {
+CRDT_LWW_Register* mergeLWWRegister(CRDT_LWW_Register* target, CRDT_LWW_Register* other, int* compare) {
     if(target == NULL) {return dupCrdtLWWRegister(other);}
     if(other == NULL) {return dupCrdtLWWRegister(target);}
     CRDT_LWW_Register* result = dupCrdtLWWRegister(target);
-    if(compareCrdtMeta(getCrdtLWWRegisterMeta(target), getCrdtLWWRegisterMeta(other)) > COMPARE_META_EQUAL ) {
+    setCrdtLWWRegisterMeta(result, mergeMeta(getCrdtLWWRegisterMeta(target), getCrdtLWWRegisterMeta(other), compare));
+    if(*compare > COMPARE_META_EQUAL) {
         setCrdtLWWRegisterValue(result, sdsdup(getCrdtLWWRegisterValue(other)));
     }
-    setCrdtLWWRegisterMeta(result, mergeMeta(getCrdtLWWRegisterMeta(target), getCrdtLWWRegisterMeta(other)));
     return result;
 }
 void updateLastVCLWWRegister(CRDT_Register* r, VectorClock vc) {
@@ -230,12 +230,12 @@ sds getLWWCrdtRegister(CRDT_Register* r) {
 
 int setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
-    int result = compareCrdtMeta(getCrdtLWWRegisterMeta(data), meta);
-    if(result > COMPARE_META_EQUAL) {
+    int compare = 0;
+    setCrdtLWWRegisterMeta(data, mergeMeta(getCrdtLWWRegisterMeta(data), meta, &compare));
+    if(compare > COMPARE_META_EQUAL) {
         setCrdtLWWRegisterValue(data, sdsdup(value));
     }
-    setCrdtLWWRegisterMeta(data, mergeMeta(getCrdtLWWRegisterMeta(data), meta));
-    return result;
+    return compare;
 }
 CRDT_LWW_Register* filterLWWRegister(CRDT_LWW_Register* target, int gid, long long logic_time) {
     CRDT_LWW_Register* reg = retrieveCrdtLWWRegister(target);
@@ -289,12 +289,12 @@ void AofRewriteCrdtLWWRegister(RedisModuleIO *aof, RedisModuleString *key, void 
 /**
  * tombstone
  */ 
-CrdtMeta* addCrdtLWWRegisterTombstone(CRDT_LWW_RegisterTombstone* target, CrdtMeta* meta) {
+CrdtMeta* addCrdtLWWRegisterTombstone(CRDT_LWW_RegisterTombstone* target, CrdtMeta* meta, int* compare) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
-    setCrdtLWWRegisterTombstoneMeta(t, mergeMeta(getCrdtLWWRegisterTombstoneMeta(t), meta));
+    setCrdtLWWRegisterTombstoneMeta(t, mergeMeta(getCrdtLWWRegisterTombstoneMeta(t), meta, compare));
     return meta;
 }
-CRDT_LWW_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_LWW_RegisterTombstone* target, CRDT_LWW_RegisterTombstone* other) {
+CRDT_LWW_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_LWW_RegisterTombstone* target, CRDT_LWW_RegisterTombstone* other, int* comapre) {
     CRDT_LWW_RegisterTombstone* result = NULL;
     if(target == NULL && other == NULL) return NULL;
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
@@ -302,7 +302,7 @@ CRDT_LWW_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_LWW_RegisterTombstone
     if(t == NULL) {return dupLWWCrdtRegisterTombstone(o);}
     if(o == NULL) {return dupLWWCrdtRegisterTombstone(t);}
     result = dupLWWCrdtRegisterTombstone(t);
-    addCrdtLWWRegisterTombstone(result, getCrdtLWWRegisterTombstoneMeta(o));
+    addCrdtLWWRegisterTombstone(result, getCrdtLWWRegisterTombstoneMeta(o), comapre);
     return result;
 }
 CRDT_RegisterTombstone* filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time) {

@@ -10,7 +10,7 @@ CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index
 RedisModuleKey* getWriteRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type);
 void* getCurrentValue(RedisModuleKey *moduleKey);
 void* getTombstone(RedisModuleKey *moduleKey);
-CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other);
+CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other, int* compare);
 CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other);
 
 VectorClock rdbLoadVectorClock(RedisModuleIO *rdb);

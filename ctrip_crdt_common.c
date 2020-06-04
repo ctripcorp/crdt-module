@@ -174,15 +174,18 @@ void setMetaVectorClock(CrdtMeta* meta, VectorClock vc) {
     
 }
 
-CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other) {
+CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other, int* compare) {
     if(target == NULL) {
+        *compare = COMPARE_META_VECTORCLOCK_GT;
         return dupMeta(other);
     }
     if(other == NULL) {
+        *compare = COMPARE_META_VECTORCLOCK_LT;
         return dupMeta(target);
     }
     VectorClock result = vectorClockMerge(getMetaVectorClock(target), getMetaVectorClock(other));
-    if(compareCrdtMeta(target, other) > 0) {
+    *compare = compareCrdtMeta(target, other) ;
+    if(*compare> 0) {
         return createMeta(getMetaGid(other), getMetaTimestamp(other), result);
     }else{
         return createMeta(getMetaGid(target), getMetaTimestamp(target), result);

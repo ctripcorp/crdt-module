@@ -121,9 +121,9 @@ void updateLastVCHash(CRDT_Hash* data, VectorClock vc) {
 }
 
 //tombstone
-CrdtMeta* updateMaxDelCrdtLWWHashTombstone(void* data, CrdtMeta* meta);
-CrdtMeta* updateMaxDelCrdtHashTombstone(void* data, CrdtMeta* meta) {
-    return updateMaxDelCrdtLWWHashTombstone(data, meta);
+CrdtMeta* updateMaxDelCrdtLWWHashTombstone(void* data, CrdtMeta* meta, int* comapre);
+CrdtMeta* updateMaxDelCrdtHashTombstone(void* data, CrdtMeta* meta, int* comapre) {
+    return updateMaxDelCrdtLWWHashTombstone(data, meta, comapre);
 }
 int isExpireCrdtLWWHashTombstone(void* data, CrdtMeta* meta);
 int isExpireCrdtHashTombstone(void* data, CrdtMeta* meta) {
