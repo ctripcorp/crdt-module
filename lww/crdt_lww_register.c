@@ -102,9 +102,7 @@ void setCrdtLWWRegisterTombstoneMeta(CRDT_LWW_RegisterTombstone* t, CrdtMeta* me
     freeCrdtMeta(meta);
 }
 void *createCrdtLWWCrdtRegister(void) {
-    // size_t size = RedisModule_UsedMemory();
     CRDT_LWW_Register *crdtRegister = RedisModule_Alloc(sizeof(CRDT_LWW_Register));
-    // RedisModule_Debug(logLevel, "sizeof: %lld,size: %lld", sizeof(CRDT_LWW_Register),RedisModule_UsedMemory() - size );
     crdtRegister->type = 0;
     setType((CrdtObject*)crdtRegister, CRDT_DATA);
     setDataType((CrdtObject*)crdtRegister, CRDT_REGISTER_TYPE);
