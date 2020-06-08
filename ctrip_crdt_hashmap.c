@@ -110,7 +110,7 @@ int addOrUpdateItem(RedisModuleCtx* ctx, CRDT_HashTombstone* tombstone, CRDT_Has
             CRDT_Register* incomeValue = addRegister(NULL, meta, value);
             sds income = crdtRegisterInfo(incomeValue);
             sds future = crdtRegisterInfo(v);
-            RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-HASH] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
+            RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-HASH] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
                     keyStr, field, prev, income, future);
             freeCrdtRegister(incomeValue);
             sdsfree(income);
@@ -129,7 +129,7 @@ int addOrUpdateHash(RedisModuleCtx* ctx, RedisModuleString* key, RedisModuleKey*
     if(current != NULL) {
         if(!isCrdtHash(current)) {
             const char* keyStr = RedisModule_StringPtrLen(key, NULL);
-            RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-HASH][type conflict] key:{%s} prev: {%s} ",
+            RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-HASH][type conflict] key:{%s} prev: {%s} ",
                             keyStr ,current->type);
             RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);      
             RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);          
@@ -311,7 +311,7 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     appendVCForMeta(del_meta, getCrdtHashLastVc(current));
     if(!isCrdtHash(current)) {
         const char* keyStr = RedisModule_StringPtrLen(argv[1], NULL);
-        RedisModule_Log(ctx, logLevel, "[HDELCOMMAND][CONFLICT][CRDT-HASH][type conflict] key:{%s} prev: {%s} ",
+        RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[HDELCOMMAND][CONFLICT][CRDT-HASH][type conflict] key:{%s} prev: {%s} ",
                         keyStr , current->type);
         RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);
         RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
@@ -496,7 +496,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
     }
     if(!isCrdtHash(current)) {
         const char* keyStr = RedisModule_StringPtrLen(argv[1], NULL);
-        RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-HASH][type conflict] key:{%s} prev: {%s} ",
+        RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-HASH][type conflict] key:{%s} prev: {%s} ",
                         keyStr , current->type);
         RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);      
         RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE); 
@@ -572,7 +572,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     CRDT_Hash* current =  getCurrentValue(moduleKey);
     if(current != NULL && !isCrdtHash(current)) {
         const char* keyStr = RedisModule_StringPtrLen(argv[1], NULL);
-        RedisModule_Log(ctx, logLevel, "[CRDT_RemHashCommand][CONFLICT][CRDT-HASH][type conflict] key:{%s} prev: {%s} ",
+        RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CRDT_RemHashCommand][CONFLICT][CRDT-HASH][type conflict] key:{%s} prev: {%s} ",
                         keyStr ,current->type);
         RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);      
         RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE); 

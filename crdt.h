@@ -44,6 +44,7 @@
 #define CRDT_NO 0
 
 #define CRDT_DEFAULT_LOG_LEVEL "warning"
+#define CRDT_DEBUG_LOG_LEVEL "debug"
 
 char *logLevel;
 

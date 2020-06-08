@@ -41,11 +41,11 @@ int expireAtCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
 int trySetExpire(RedisModuleKey* moduleKey, RedisModuleString* key, long long  time, int type, long long expireTime) {
     CrdtData* data = RedisModule_ModuleTypeGetValue(moduleKey);
     if(data == NULL) {
-        RedisModule_Debug(logLevel, "key: %s, data is null: %lld", RedisModule_GetSds(key), expireTime);
+        RedisModule_Debug(CRDT_DEBUG_LOG_LEVEL, "key: %s, data is null: %lld", RedisModule_GetSds(key), expireTime);
         return CRDT_ERROR;
     }
     if(getDataType(data) != type) {
-         RedisModule_Debug(logLevel, "key: %s ,type diff: %lld", RedisModule_GetSds(key),expireTime);
+         RedisModule_Debug(CRDT_DEBUG_LOG_LEVEL, "key: %s ,type diff: %lld", RedisModule_GetSds(key),expireTime);
         return CRDT_ERROR;
     }
     if(expireTime == -1) {
