@@ -11,6 +11,24 @@ CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 
 ================================================================================
+XRedis-CRDT 1.0.3  Released Tue Jun  9 15:58:31 CST 2020
+================================================================================
+Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
+Major things:
+* crdtServer and server now shares a same repl_id and repl_id2
+* reduce log by ignoring expire conflict when merge
+* crdt slave now will consider it as master if its master is norm redis
+
+The last change includes a little tricky change that, though we consider the crdt redis slave as a master(when its master is a original redis), 
+there's still a piece of special logic for stable expire data.
+Which, as a consequnce, redis will create another global dict to store keys when receiving expire commands as a slave, 
+and the dict will never be freed once the redis turning into a master.
+In this circumstance, we surely will cause a mem leak, as we're actually transfering the RDB into commands, to make original redis'
+RDB compitable for CRDT ones, thus, expire command is executing on crdt server which will consider itself as a slave previously.
+Finally, the fix is simple, we make crdt redis thought it was a master when it's actually a slave of an original redis.
+
+
+================================================================================
 XRedis-CRDT 1.0.2  Released Thu Nov 14 11:17:40 CST 2019
 ================================================================================
 This version aim to address the issue, that a crash would happen due to networking writing when full sync with peers.
