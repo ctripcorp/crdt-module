@@ -126,6 +126,21 @@ CrdtMeta* dupMeta(CrdtMeta* meta) {
     if(meta == NULL) return NULL;
     return createMeta(getMetaGid(meta), getMetaTimestamp(meta), dupVectorClock(getMetaVectorClock(meta)));
 }
+//initStaticStringObject(key,keystr);
+void initIncrMeta(CrdtMeta* meta) {
+    long long gid = RedisModule_CurrentGid();
+    RedisModule_IncrLocalVectorClock(1);
+    long long cvc = RedisModule_CurrentVectorClock();
+    VectorClock currentVectorClock = VC(cvc);
+    VectorClock result = getMonoVectorClock(currentVectorClock, gid);
+    meta->vectorClock = result;
+    meta->gid = gid;
+    long long timestamp = RedisModule_Milliseconds();
+    meta->timestamp = timestamp;
+}
+void freeIncrMeta(CrdtMeta* meta) {
+    setMetaVectorClock(meta, newVectorClock(0));
+}
 CrdtMeta* createIncrMeta() {
     long long gid = RedisModule_CurrentGid();
     RedisModule_IncrLocalVectorClock(1);

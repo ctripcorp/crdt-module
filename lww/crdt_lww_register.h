@@ -63,6 +63,7 @@ sds crdtRegisterInfo(CRDT_Register *crdtRegister) {
 }
 
 
+
 typedef struct  CRDT_LWW_RegisterTombstone {//20
     unsigned long long type:8;
     unsigned long long gid:4;
@@ -91,9 +92,17 @@ CRDT_LWW_RegisterTombstone* dupLWWCrdtRegisterTombstone(CRDT_LWW_RegisterTombsto
 CRDT_RegisterTombstone* dupCrdtRegisterTombstone(CRDT_RegisterTombstone *target) {
     return (CRDT_RegisterTombstone*)dupLWWCrdtRegisterTombstone((CRDT_LWW_RegisterTombstone*)target);
 }
-int setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
-int setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+void initLWWReigster(CRDT_LWW_Register *r);
+void initRegister(CRDT_Register *r) {
+    return initLWWReigster((CRDT_LWW_Register*)r);
+}
+void setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
+void setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
     return setLWWCrdtRegister(r, meta, value);
+}
+int appendLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
+int appendCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+    return appendLWWCrdtRegister(r, meta, value);
 }
 
 void RdbSaveLWWCrdtRegisterTombstone(RedisModuleIO *rdb, void *value);
@@ -112,6 +121,10 @@ int purageRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* ta
 sds getLWWCrdtRegister(CRDT_Register* r);
 sds getCrdtRegisterSds(CRDT_Register* r) {
     return getLWWCrdtRegister(r);
+}
+CrdtMeta* getCrdtLWWRegisterMeta(CRDT_LWW_Register* r);
+CrdtMeta* getCrdtRegisterLastMeta(CRDT_Register* r) {
+    return getCrdtLWWRegisterMeta((CRDT_LWW_Register*)r);
 }
 CRDT_LWW_Register* dupCrdtLWWRegister(CRDT_LWW_Register *val);
 CRDT_Register* dupCrdtRegister(CRDT_Register *val) {
@@ -213,6 +226,15 @@ int crdtRegisterTombstoneGc(CrdtTombstone* target, VectorClock clock) {
 int isExpireLWWTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);
 int isExpireCrdtTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
     return isExpireLWWTombstone(tombstone, meta);
+}
+sds crdtRegisterInfoFromMetaAndValue(CrdtMeta* meta, sds value) {
+    CRDT_LWW_Register c;
+    initLWWReigster(&c);
+    c.gid = getMetaGid(meta);
+    c.timestamp = getMetaTimestamp(meta);
+    c.vectorClock = getMetaVectorClock(meta);
+    c.value = value;
+    return crdtLWWRegisterInfo(&c);
 }
 
 #endif //XREDIS_CRDT_CRDT_LWW_REGISTER_H

@@ -139,6 +139,8 @@ int compareCrdtMeta(CrdtMeta *a, CrdtMeta *b);
 int isConflictMeta(int result);
 int appendCrdtMeta(CrdtMeta *target , CrdtMeta* other);
 int isConflictCommon(int result);
+void initIncrMeta(CrdtMeta* meta);
+void freeIncrMeta(CrdtMeta* meta);
 // int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 
 
