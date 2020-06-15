@@ -380,6 +380,8 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
 #define OBJ_SET_KEEPTTL (1<<4)
 #define UNIT_SECONDS 0
 #define UNIT_MILLISECONDS 1
+
+
 int setGenericCommand(RedisModuleCtx *ctx,  int flags, RedisModuleString* key, RedisModuleString* val, RedisModuleString* expire, int unit, int sendtype) {
     size_t num = RedisModule_ZmallocNum();
     int result = 0;
@@ -438,32 +440,60 @@ int setGenericCommand(RedisModuleCtx *ctx,  int flags, RedisModuleString* key, R
 end:
     // if(&set_meta == NULL) {
         {
-            sds vclockStr = vectorClockToSds(getMetaVectorClock(&set_meta));
+            // sds vclockStr = vectorClockToSds(getMetaVectorClock(&set_meta));
+            VectorClock setvc = getMetaVectorClock(&set_meta);
+            int vcunitlen = get_len(setvc);
+            char vcbuf[vcunitlen * 25]; //21 long long + 2 gid + 1 : + 1 ;) 
+            size_t vclen = vectorClockToString(vcbuf, setvc);
+            size_t keylen = 0;
+            char* k = RedisModule_StringPtrLen(key, &keylen);
+            size_t vallen = 0;
+            char* v = RedisModule_StringPtrLen(val, &vallen);
+            int gid = getMetaGid(&set_meta);
+            long long timestamp = getMetaTimestamp(&set_meta);
+            char timestampbuf[21];
+            size_t tlen = sdsll2str(timestampbuf, timestamp);
+            // size_t vclen = sdslen(vclockStr);
             if(expire_time > -2) {
                 // if(sendtype) {
                     // RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllcl", key, val, getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vclockStr,  expire_time);
                 // } else {
-                    RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.SET", "ssllcl", key, val, getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vclockStr,  expire_time);
+                    //RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.SET", "ssllcl", key, val, getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vclockStr,  expire_time);
                 // }
+                char expirebuf[21];
+                size_t expirelen = sdsll2str(expirebuf, expire_time);
+                char cmdbuf[487 + keylen + vallen]; //4 + (4 + 8 + 2) + (4 + 4) + (4 + 23) + (5 + 402) + (4 + 23) 
+                size_t cmdlen = sprintf(cmdbuf, "*7\r\n$8\r\nCRDT.SET\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%d\r\n$%d\r\n%lld\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", keylen, k, vallen, v, gid > 10? 2:1 ,gid, tlen,timestamp,vclen, vcbuf, expirelen, expirebuf);
+                RedisModuleString* cmd = RedisModule_CreateString(ctx, cmdbuf, cmdlen);
+                //RedisModuleString* cmd = RedisModule_CreateStringPrintf(ctx, "*7\r\n$8\r\nCRDT.SET\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%d\r\n$%d\r\n%lld\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", keylen, k, vallen, v, gid > 10? 2:1 ,gid, tlen,timestamp,vclen, vclockStr, expirelen, expirebuf);
+                RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmd);
+                RedisModule_FreeString(ctx, cmd);
             }else{
                 // if(sendtype) {
                     // RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.SET", "ssllc", key, val, getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vclockStr);
                 // } else {
-                    RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.SET", "ssllc", key, val, getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vclockStr);
+                    //RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.SET", "ssllc", key, val, getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vclockStr);
                 // }
+                //RedisModuleString* cmd = RedisModule_CreateStringPrintf(ctx, "*6\r\n$8\r\nCRDT.SET\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%d\r\n$%d\r\n%lld\r\n$%d\r\n%s\r\n", keylen, k, vallen, v, gid > 10? 2:1 ,gid, tlen,timestamp,vclen, vclockStr);
+                char cmdbuf[487 + keylen + vallen]; //4 + (4 + 8 + 2) + (4 + 4) + (4 + 23) + (5 + 402) + (4 + 23)
+                size_t cmdlen = sprintf(cmdbuf, "*6\r\n$8\r\nCRDT.SET\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%d\r\n$%d\r\n%lld\r\n$%d\r\n%s\r\n", keylen, k, vallen, v, gid > 10? 2:1 ,gid, tlen,timestamp,vclen, vcbuf);
+                RedisModuleString* cmd = RedisModule_CreateString(ctx, cmdbuf, cmdlen);
+                
+                RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmd);
+                RedisModule_FreeString(ctx, cmd);
             }
-            sdsfree(vclockStr);
+            // sdsfree(vclockStr);
             freeIncrMeta(&set_meta);
         }
         // freeCrdtMeta(set_meta);
     // }
 error:
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
-    RedisModule_Debug(logLevel,"setGenericCommand %lld", RedisModule_ZmallocNum() - num);
+    // RedisModule_Debug(logLevel,"setGenericCommand %lld", RedisModule_ZmallocNum() - num);
     return result;
 }
 int msetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    RedisModule_AutoMemory(ctx);
+    // RedisModule_AutoMemory(ctx);
     if (argc < 3) return RedisModule_WrongArity(ctx);
     int start_index = 1;
     int result = 0;
@@ -535,7 +565,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 //setex key  expire value
 int setexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    RedisModule_AutoMemory(ctx);
+    // RedisModule_AutoMemory(ctx);
     if(argc < 4) return RedisModule_WrongArity(ctx);
     int result = setGenericCommand(ctx, OBJ_SET_NO_FLAGS | OBJ_SET_EX, argv[1], argv[3], argv[2], UNIT_SECONDS, 1);
     if(result == CRDT_OK) {

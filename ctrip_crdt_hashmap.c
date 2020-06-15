@@ -86,12 +86,64 @@ int crdtHtNeedsResize(dict *dict) {
 #define UPDATE_HASH 2
 int addOrUpdateItem(RedisModuleCtx* ctx, CRDT_HashTombstone* tombstone, CRDT_Hash* current, CrdtMeta* meta,RedisModuleString* key, sds field, sds value) {
     int result_code = NO_CHANGE_HASH;
+    if(tombstone) {
+        dictEntry* tomDe = dictFind(tombstone->map, field);
+        if(tomDe) {
+            CRDT_RegisterTombstone* tombstoneValue = dictGetVal(tomDe);
+            if(isExpireCrdtTombstone(tombstoneValue, meta)) {
+                return result_code;
+            }
+        }
+    }
+    dictEntry* de = dictFind(current->map, field);
+    if(de == NULL) {
+        CRDT_Register* v = createCrdtRegister();
+        setCrdtRegister(v, meta, value);
+        dictAdd(current->map, sdsdup(field), v);
+        result_code = ADD_HASH;
+    } else {
+        CRDT_Register* v = dictGetVal(de);
+        int result = compareCrdtMeta(getCrdtRegisterLastMeta(v), meta);
+        if(result == COMPARE_META_VECTORCLOCK_LT) { return result_code; }
+        sds prev = NULL;
+        int isConflict = isConflictCommon(result);
+        if(isConflict == CRDT_YES) {
+            prev = crdtRegisterInfo(v);
+        }
+        appendCrdtRegister(v, meta, value);
+        if(isConflict == CRDT_YES) {
+            sds income = crdtRegisterInfoFromMetaAndValue(meta, value);
+            sds future = crdtRegisterInfo(v);
+            if(result > COMPARE_META_EQUAL) {
+                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-HASH][replace] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
+                            RedisModule_GetSds(key), field, prev, income, future);
+            }else{
+                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-HASH][drop] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
+                            RedisModule_GetSds(key), field, prev, income, future);
+            }
+            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | NONTYPECONFLICT);
+            sdsfree(income);
+            sdsfree(future);
+            sdsfree(prev);
+        }
+        if(result > COMPARE_META_EQUAL) {
+            result_code = UPDATE_HASH;
+        }
+    }
+    return result_code;
+}  
+int addOrUpdateItem_(RedisModuleCtx* ctx, CRDT_HashTombstone* tombstone, CRDT_Hash* current, CrdtMeta* meta,RedisModuleString* key, sds field, sds value) {
+    int result_code = NO_CHANGE_HASH;
     CRDT_RegisterTombstone* tombstoneValue = NULL;
     if(tombstone) {
         dictEntry* tomDe = dictFind(tombstone->map, field);
         if(tomDe) {
             tombstoneValue = dictGetVal(tomDe);
+            if(isExpireCrdtTombstone(tombstoneValue, meta)) {
+                return result_code;
+            }
         }
+        
     }
     dictEntry* de = dictFind(current->map, field);
     if(de == NULL) {
@@ -183,7 +235,7 @@ static int addCrdtHashFieldToReply(RedisModuleCtx *ctx, CRDT_Hash *crdtHash, Red
  * -------------------------------------------------------------------------- */
 //hset key f1 v2 f2 v2 ..
 int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    RedisModule_AutoMemory(ctx);
+    // RedisModule_AutoMemory(ctx);
     if (argc < 4) return RedisModule_WrongArity(ctx);
     if ((argc % 2) == 1) {
         return RedisModule_WrongArity(ctx);

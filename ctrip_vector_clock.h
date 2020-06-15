@@ -211,6 +211,8 @@ sdsToVectorClock(sds vcStr);
 sds
 vectorClockToSds(VectorClock vc);
 
+size_t vectorClockToString(char* buf, VectorClock vc);
+
 
 /**------------------------Vector Clock Util--------------------------------------*/
 

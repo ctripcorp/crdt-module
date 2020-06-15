@@ -391,7 +391,20 @@ sdsToVectorClock(sds vcStr) {
 
 
 
-
+size_t vectorClockToString(char* buf, VectorClock vc) {
+    if(isNullVectorClock(vc) || get_len(vc) < 1) {
+        buf[0] = "\0";
+        return 0;
+    }
+    int length = get_len(vc);
+    size_t buflen = 0;
+    buflen += sprintf(buf, "%d:%lld", (int)get_gid(*get_clock_unit_by_index(&vc, 0)), get_logic_clock(*get_clock_unit_by_index(&vc, 0)));
+    for (int i = 1; i < length; i++) {
+        clk *vc_unit = get_clock_unit_by_index(&vc, i);
+        buflen += sprintf(buf + buflen, ";%d:%lld", (int) get_gid(*vc_unit), get_logic_clock(*vc_unit));
+    }
+    return buflen;
+}
 sds
 vectorClockToSds(VectorClock vc) {
     if(isNullVectorClock(vc) || get_len(vc) < 1) {
