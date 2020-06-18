@@ -96,14 +96,14 @@ void initLWWReigster(CRDT_LWW_Register *r);
 void initRegister(CRDT_Register *r) {
     return initLWWReigster((CRDT_LWW_Register*)r);
 }
-void setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
-void setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
-    return setLWWCrdtRegister(r, meta, value);
-}
-int appendLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
-int appendCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
-    return appendLWWCrdtRegister(r, meta, value);
-}
+// void setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
+// void setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+    // return setLWWCrdtRegister(r, meta, value);
+// }
+// int appendLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
+// int appendCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value, int compare) {
+//     return appendLWWCrdtRegister(r, meta, value);
+// }
 
 void RdbSaveLWWCrdtRegisterTombstone(RedisModuleIO *rdb, void *value);
 CRDT_RegisterTombstone* filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time) ;
@@ -141,7 +141,6 @@ CRDT_LWW_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_LWW_RegisterTombstone
 CRDT_RegisterTombstone* mergeRegisterTombstone(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other, int* compare) {
     return (CRDT_RegisterTombstone*)mergeLWWRegisterTombstone((CRDT_LWW_RegisterTombstone*)target, (CRDT_LWW_RegisterTombstone*)other, compare);
 }
-void *createCrdtLWWCrdtRegister(void);
 void* createCrdtLWWCrdtRegisterTombstone(void);
 void freeCrdtLWWCrdtRegisterTombstone(void *obj);
 void freeCrdtLWWCrdtRegister(void *obj);
@@ -153,10 +152,7 @@ void crdtRegisterUpdateLastVC(void *data, VectorClock vc) {
     CRDT_Register* reg = (CRDT_Register*) data;
     updateLastVCLWWRegister(reg, vc);
 }
-//create
-void *createCrdtRegister(void) {
-    return createCrdtLWWCrdtRegister();
-}
+
 CRDT_RegisterTombstone* createCrdtRegisterTombstone() {
     return (CRDT_RegisterTombstone*)createCrdtLWWRegisterTombstone();
 }

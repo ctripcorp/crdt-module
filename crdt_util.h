@@ -15,4 +15,15 @@ CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other);
 
 VectorClock rdbLoadVectorClock(RedisModuleIO *rdb);
 int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock clock);
+
+size_t feedBuf(char* buf, char* src);
+size_t feedStr2Buf(char *buf, char* str, size_t strlen);
+size_t feedRobj2Buf(char *buf, RedisModuleString* src);
+size_t feedGid2Buf(char *buf, int gid);
+size_t feedLongLong2Buf(char *buf, long long v);
+size_t feedVectorClock2Buf(char *buf, VectorClock vc);
+size_t feedMeta2Buf(char *buf, int gid, long long time, VectorClock vc);
+size_t feedArgc(char* buf, int argc);
+size_t feedKV2Buf(char *buf,char* keystr, size_t keylen, char* valstr, size_t vallen);
+RedisModuleKey* getRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type, int mode);
 #endif //XREDIS_CRDT_CRDT_UTIL_H

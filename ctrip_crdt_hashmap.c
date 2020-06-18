@@ -110,15 +110,15 @@ int addOrUpdateItem(RedisModuleCtx* ctx, CRDT_HashTombstone* tombstone, CRDT_Has
         if(isConflict == CRDT_YES) {
             prev = crdtRegisterInfo(v);
         }
-        appendCrdtRegister(v, meta, value);
+        appendCrdtRegister(v, meta, value, result);
         if(isConflict == CRDT_YES) {
             sds income = crdtRegisterInfoFromMetaAndValue(meta, value);
             sds future = crdtRegisterInfo(v);
             if(result > COMPARE_META_EQUAL) {
-                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-HASH][replace] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
+                RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-HASH][replace] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
                             RedisModule_GetSds(key), field, prev, income, future);
             }else{
-                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-HASH][drop] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
+                RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-HASH][drop] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
                             RedisModule_GetSds(key), field, prev, income, future);
             }
             RedisModule_IncrCrdtConflict(MODIFYCONFLICT | NONTYPECONFLICT);
@@ -233,6 +233,21 @@ static int addCrdtHashFieldToReply(RedisModuleCtx *ctx, CRDT_Hash *crdtHash, Red
 /* --------------------------------------------------------------------------
  * User API for Hash type
  * -------------------------------------------------------------------------- */
+size_t replicationFeedCrdtHsetCommand(RedisModuleCtx *ctx,char* cmdbuf, char* keystr, size_t keylen, CrdtMeta* meta,int argc, char** fieldAndValStr, int* fieldAndValStrLen) {
+    size_t cmdlen = 0;
+    cmdlen +=  feedArgc(cmdbuf, argc + 6);
+    const char* crdt_hset_head = "$9\r\nCRDT.HSET\r\n";
+    cmdlen += feedBuf(cmdbuf+ cmdlen, crdt_hset_head);
+    cmdlen += feedStr2Buf(cmdbuf + cmdlen, keystr, keylen);//$%d\r\n%s\r\n
+    cmdlen += feedMeta2Buf(cmdbuf + cmdlen ,getMetaGid(meta),  getMetaTimestamp(meta), getMetaVectorClock(meta));
+    cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, (long long) (argc));
+    for(int i = 0, len = argc; i < len; i+=2) {
+        cmdlen += feedKV2Buf(cmdbuf+ cmdlen, fieldAndValStr[i], fieldAndValStrLen[i], fieldAndValStr[i+1], fieldAndValStrLen[i+1]);
+    }
+    // RedisModule_Debug(logLevel, "len:%d buf:%s", cmdlen, cmdbuf);
+    RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
+    return cmdlen;
+}
 //hset key f1 v2 f2 v2 ..
 int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // RedisModule_AutoMemory(ctx);
@@ -240,40 +255,97 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if ((argc % 2) == 1) {
         return RedisModule_WrongArity(ctx);
     }
-    CrdtMeta* meta = NULL;
-    RedisModuleKey* moduleKey =  getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
+    int result = 0;
+    CrdtMeta meta;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtHash, REDISMODULE_WRITE);
     if (moduleKey == NULL) {
         return 0;
     }
-    meta = createIncrMeta();
+    
+    initIncrMeta(&meta);
     CRDT_Hash* current = getCurrentValue(moduleKey);
     if(current != NULL) {
-        appendVCForMeta(meta, getCrdtHashLastVc(current));
+        appendVCForMeta(&meta, getCrdtHashLastVc(current));
     }
-    int result = addOrUpdateHash(ctx, argv[1], moduleKey, NULL, current,meta, argv, 2, argc);
-    if(result == CHANGE_HASH_ERR) {
-        goto end;
+    // int result = addOrUpdateHash(ctx, argv[1], moduleKey, NULL, current, &meta, argv, 2, argc);
+    if(current == NULL) {
+        current = createCrdtHash();
+        RedisModule_ModuleTypeSetValue(moduleKey, CrdtHash, current);
+    } 
+    for(int i = 2; i < argc; i += 2) {
+        sds field = RedisModule_GetSds(argv[i]);
+        dictEntry* de = dictFind(current->map, field);
+        if(de == NULL) {
+            CRDT_Register* v = createCrdtRegister();
+            setCrdtRegister(v, &meta, RedisModule_GetSds(argv[i+1]));
+            dictAdd(current->map, sdsdup(field), v);
+            result += 1;
+        } else {
+            CRDT_Register* v = dictGetVal(de);
+            appendCrdtRegister(v, &meta, RedisModule_GetSds(argv[i+1]), COMPARE_META_VECTORCLOCK_GT);
+        }
     }
+    setCrdtHashLastVc(current, getMetaVectorClock(&meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hset", argv[1]);
 end:
-    if (meta != NULL) {
+    {
         //send crdt.hset command peer and slave
-        sds vclockStr = vectorClockToSds(getMetaVectorClock(meta));
-        size_t argc_repl = (size_t) (argc - 2);
-        void *argv_repl = (void *) (argv + 2);
-        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.HSET", "sllclv", argv[1], getMetaGid(meta), getMetaTimestamp(meta), vclockStr, (long long) (argc-2), argv_repl, argc_repl);
-        sdsfree(vclockStr);
-        freeCrdtMeta(meta);
+        // sds vclockStr = vectorClockToSds(getMetaVectorClock(&meta));
+        // size_t argc_repl = (size_t) (argc - 2);
+        // void *argv_repl = (void *) (argv + 2);
+        // RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.HSET", "sllclv", argv[1], getMetaGid(&meta), getMetaTimestamp(&meta), vclockStr, (long long) (argc-2), argv_repl, argc_repl);
+        // sdsfree(vclockStr);
+
+            size_t keylen = 0;
+            char* keystr = RedisModule_StringPtrLen(argv[1], &keylen);
+            char* fieldAndValStr[argc-2];
+            int fieldAndValStrLen[argc-2];
+            size_t fieldAndValAllStrLen = 0;
+            for(int i = 2, len = argc; i < argc;i+=2) {
+                size_t fieldstrlen = 0;
+                char* fieldstr = RedisModule_StringPtrLen(argv[i], &fieldstrlen);
+                size_t valstrlen = 0;
+                char* valstr = RedisModule_StringPtrLen(argv[i+1], &valstrlen);
+                fieldAndValStr[i-2]=fieldstr;
+                fieldAndValStr[i-1] = valstr;
+                fieldAndValStrLen[i-2] = fieldstrlen;
+                fieldAndValStrLen[i-1] = valstrlen;
+                fieldAndValAllStrLen += fieldstrlen + valstrlen + 52;
+            }
+            //
+            if(fieldAndValAllStrLen > MAXSTACKSIZE) { //8192k
+                char *cmdbuf = RedisModule_Alloc(498 + keylen + fieldAndValAllStrLen);
+                size_t cmdlen = replicationFeedCrdtHsetCommand(ctx, cmdbuf,  keystr, keylen, &meta, argc - 2, fieldAndValStr, fieldAndValStrLen);
+                RedisModule_Free(cmdbuf);
+            }else {
+                char cmdbuf[498 + keylen + fieldAndValAllStrLen]; //4 + (4 + 9 + 2) + (24  + keylen + 2 ) + 26 * n +fieldlen(n) + 26 * n+ vallen(n)  + (5 + 7) + (10 + 23) + (6 + vcunitlen * 25 + 2)
+                size_t cmdlen = replicationFeedCrdtHsetCommand(ctx, cmdbuf, keystr, keylen, &meta, argc - 2, fieldAndValStr, fieldAndValStrLen);
+            }
+            
+            // //18
+            // cmdlen += feedStr2Buf(cmdbuf + cmdlen, keystr, keylen);//$%d\r\n%s\r\n
+            // cmdlen += feedStr2Buf(cmdbuf + cmdlen, valstr, vallen);//$%d\r\n%s\r\n
+            // // cmdlen += feedGid2Buf(cmdbuf + cmdlen, getMetaGid(&set_meta));//$%d\r\n%d\r\n
+            // // cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, getMetaTimestamp(&set_meta));//$%d\r\nlld\r\n
+            // // cmdlen += feedVectorClock2Buf(cmdbuf + cmdlen, getCrdtRegisterLastVc(current));//$%d\r\n%s\r\n
+            // cmdlen += feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(&set_meta), getMetaTimestamp(&set_meta), getCrdtRegisterLastVc(current));
+            // if(expire_time > -2) {
+            //     cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, expire_time);
+            // }
+            // // RedisModule_Debug(logLevel, "len:%d buf:%s", cmdlen, cmdbuf);
+            // RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
+            // freeIncrMeta(&set_meta);
+        //becase setCrdtHashLastVc move vector 
+        // freeIncrMeta(&meta);
     }
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-    if(result == CHANGE_HASH_ERR) return CRDT_ERROR;
     sds cmdname = RedisModule_GetSds(argv[0]);
     if (cmdname[1] == 's' || cmdname[1] == 'S') {
         /* HSET */
         return RedisModule_ReplyWithLongLong(ctx, result);
     } else {
         /* HMSET */
-        return RedisModule_ReplyWithSimpleString(ctx, "OK");
+        return RedisModule_ReplyWithOk(ctx);
     } 
 }
 
@@ -417,7 +489,7 @@ end:
 // "CRDT.HSET", <key>, <gid>, <timestamp>, <vclockStr>,  <length> <field> <val> <field> <val> . . .);
 //   0           1        2       3           4           5       6
 int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    RedisModule_AutoMemory(ctx);
+    // RedisModule_AutoMemory(ctx);
     if (argc < 5) return RedisModule_WrongArity(ctx);
     int status = CRDT_OK;
     CrdtMeta* meta = getMeta(ctx, argv, 2);

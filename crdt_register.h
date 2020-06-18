@@ -97,7 +97,7 @@ void *createCrdtRegister(void);
 void initRegister(CRDT_Register *crdtRegister);
 void freeCrdtRegister(void *crdtRegister);
 void setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) ;
-int appendCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
+int appendCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value, int compare);
 int delCrdtRegister(CRDT_Register* current, CrdtMeta* meta);
 int initRegisterModule(RedisModuleCtx *ctx);
 

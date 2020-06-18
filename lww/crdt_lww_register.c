@@ -29,7 +29,7 @@ CrdtMeta* getCrdtLWWRegisterMeta(CRDT_LWW_Register* r) {
     if(isNullVectorClock(r->vectorClock)) return NULL;
     return (CrdtMeta*)r;
 }
-int appendCrdtLWWRegisterMeta(CRDT_LWW_Register* r, CrdtMeta* other) {
+int appendCrdtLWWRegisterMeta(CRDT_LWW_Register* r, CrdtMeta* other, int compare) {
     if(other == NULL) return COMPARE_META_VECTORCLOCK_LT;
     CrdtMeta* target = getCrdtLWWRegisterMeta(r);
     if(target == NULL) {
@@ -38,7 +38,7 @@ int appendCrdtLWWRegisterMeta(CRDT_LWW_Register* r, CrdtMeta* other) {
         setCrdtLWWRegisterVectorClock(r, dupVectorClock(getMetaVectorClock(other)));
         return COMPARE_META_VECTORCLOCK_GT;
     } else {
-        int compare = compareCrdtMeta(target, other);
+        if(compare < COMPARE_META_GID_LT) compare = compareCrdtMeta(target, other);
         VectorClock vc = vectorClockMerge(getMetaVectorClock(target), getMetaVectorClock(other));
         setCrdtLWWRegisterVectorClock(r, vc);
         if(compare > COMPARE_META_EQUAL) {
@@ -130,13 +130,13 @@ void initLWWReigster(CRDT_LWW_Register *crdtRegister) {
     setCrdtLWWRegisterGid(crdtRegister, 0);
     crdtRegister->value = NULL;
 }
-void *createCrdtLWWCrdtRegister(void) {
+void* createCrdtRegister(void) {
     CRDT_LWW_Register *crdtRegister = RedisModule_Alloc(sizeof(CRDT_LWW_Register));
     initLWWReigster(crdtRegister);
     return crdtRegister;
 }
 CRDT_LWW_Register* dupCrdtLWWRegister(CRDT_LWW_Register *target) {
-    CRDT_LWW_Register* result = createCrdtLWWCrdtRegister();
+    CRDT_LWW_Register* result = createCrdtRegister();
     setCrdtLWWRegisterMeta(result, getCrdtLWWRegisterMeta(target));
     setCrdtLWWRegisterValue(result, sdsdup(getCrdtLWWRegisterValue(target)));
     return result;
@@ -145,7 +145,7 @@ CRDT_LWW_Register* mergeLWWRegister(CRDT_LWW_Register* target, CRDT_LWW_Register
     if(target == NULL) {return dupCrdtLWWRegister(other);}
     if(other == NULL) {return dupCrdtLWWRegister(target);}
     CRDT_LWW_Register* result = dupCrdtLWWRegister(target);
-    *compare = appendCrdtLWWRegisterMeta(result, getCrdtLWWRegisterMeta(other));
+    *compare = appendCrdtLWWRegisterMeta(result, getCrdtLWWRegisterMeta(other), COMPARE_META_GID_LT - 1);
     // setCrdtLWWRegisterMeta(result, mergeMeta(getCrdtLWWRegisterMeta(target), getCrdtLWWRegisterMeta(other), compare));
     if(*compare > COMPARE_META_EQUAL) {
         setCrdtLWWRegisterValue(result, sdsdup(getCrdtLWWRegisterValue(other)));
@@ -249,19 +249,22 @@ sds getLWWCrdtRegister(CRDT_Register* r) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
     return getCrdtLWWRegisterValue(data);
 }
-void setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+void setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+// void setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
     // int compare = 0;
     // setCrdtLWWRegisterMeta(data, mergeMeta(getCrdtLWWRegisterMeta(data), meta, &compare));
     setCrdtLWWRegisterMeta(data, meta);
     setCrdtLWWRegisterValue(data, sdsdup(value));
 }
-int appendLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+// int appendLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+int appendCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value, int compare) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
-    int compare = appendCrdtLWWRegisterMeta(data, meta);
+    compare = appendCrdtLWWRegisterMeta(data, meta, compare);
     if(compare > COMPARE_META_EQUAL) {
         setCrdtLWWRegisterValue(data, sdsdup(value));
     }
+    return compare;
 }
 CRDT_LWW_Register* filterLWWRegister(CRDT_LWW_Register* target, int gid, long long logic_time) {
     CRDT_LWW_Register* reg = retrieveCrdtLWWRegister(target);

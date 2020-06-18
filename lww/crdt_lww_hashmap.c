@@ -2,12 +2,15 @@
 /**
  *  LWW Hash Get Set Function
  */ 
-VectorClock getCrdtLWWHashLastVc(CRDT_LWW_Hash* r) {
+VectorClock getCrdtHashLastVc(CRDT_Hash* hash) {
+    CRDT_LWW_Hash* r = retrieveCrdtLWWHash(hash);
     return r->lastVc;
 }
-void setCrdtLWWHashLastVc(CRDT_LWW_Hash* r, VectorClock vc) {
-    if(!isNullVectorClock(getCrdtLWWHashLastVc(r))) {
-        freeVectorClock(getCrdtLWWHashLastVc(r));
+
+void setCrdtHashLastVc(CRDT_Hash* hash, VectorClock vc) {
+    CRDT_LWW_Hash* r = retrieveCrdtLWWHash(hash);
+    if(!isNullVectorClock(getCrdtHashLastVc(r))) {
+        freeVectorClock(getCrdtHashLastVc(r));
     } 
     r->lastVc = vc;
 }
@@ -66,14 +69,14 @@ void setCrdtLWWHashTombstoneLastVc(CRDT_LWW_HashTombstone* t, VectorClock vc) {
  */
 int changeCrdtLWWHash(CRDT_Hash* hash, CrdtMeta* meta) {
     struct CRDT_LWW_Hash* map = (struct CRDT_LWW_Hash*)hash;
-    setCrdtLWWHashLastVc(map , vectorClockMerge(getCrdtLWWHashLastVc(map), getMetaVectorClock(meta)));
-    setMetaVectorClock(meta, dupVectorClock(getCrdtLWWHashLastVc(map)));
+    setCrdtHashLastVc(map , vectorClockMerge(getCrdtHashLastVc(map), getMetaVectorClock(meta)));
+    setMetaVectorClock(meta, dupVectorClock(getCrdtHashLastVc(map)));
     return CRDT_OK;
 }
 CRDT_Hash* dupCrdtLWWHash(void* data) {
     CRDT_LWW_Hash* crdtHash = retrieveCrdtLWWHash(data);
     CRDT_LWW_Hash* result = createCrdtLWWHash();
-    setCrdtLWWHashLastVc(result, dupVectorClock(getCrdtLWWHashLastVc(crdtHash)));
+    setCrdtHashLastVc(result, dupVectorClock(getCrdtHashLastVc(crdtHash)));
     if (dictSize(crdtHash->map)) {
         dictIterator *di = dictGetIterator(crdtHash->map);
         dictEntry *de;
@@ -91,7 +94,7 @@ CRDT_Hash* dupCrdtLWWHash(void* data) {
 
 void updateLastVCLWWHash(void* data, VectorClock vc) {
     CRDT_LWW_Hash* crdtHash = retrieveCrdtLWWHash(data);
-    setCrdtLWWHashLastVc(crdtHash, vectorClockMerge(getCrdtLWWHashLastVc(crdtHash), vc));
+    setCrdtHashLastVc(crdtHash, vectorClockMerge(getCrdtHashLastVc(crdtHash), vc));
 }
 
 
@@ -186,14 +189,14 @@ void *RdbLoadCrdtLWWHash(RedisModuleIO *rdb, int encver) {
         return NULL;
     }
     CRDT_LWW_Hash *crdtHash = createCrdtLWWHash();
-    setCrdtLWWHashLastVc(crdtHash, rdbLoadVectorClock(rdb));
+    setCrdtHashLastVc(crdtHash, rdbLoadVectorClock(rdb));
     if(RdbLoadCrdtBasicHash(rdb, encver, crdtHash) == CRDT_NO) return NULL;
     return crdtHash;
 }
 void RdbSaveCrdtLWWHash(RedisModuleIO *rdb, void *value) {
     RedisModule_SaveSigned(rdb, LWW_TYPE);
     CRDT_LWW_Hash *crdtHash = retrieveCrdtLWWHash(value);
-    rdbSaveVectorClock(rdb, getCrdtLWWHashLastVc(crdtHash));
+    rdbSaveVectorClock(rdb, getCrdtHashLastVc(crdtHash));
     RdbSaveCrdtBasicHash(rdb, crdtHash);
 }
 void AofRewriteCrdtLWWHash(RedisModuleIO *aof, RedisModuleString *key, void *value) {
@@ -205,7 +208,7 @@ void freeCrdtLWWHash(void *obj) {
     }
     CRDT_LWW_Hash* crdtHash = retrieveCrdtLWWHash(obj); 
     if(crdtHash->map != NULL) {dictRelease(crdtHash->map);}
-    setCrdtLWWHashLastVc(crdtHash, newVectorClock(0));
+    setCrdtHashLastVc(crdtHash, newVectorClock(0));
     RedisModule_Free(crdtHash);
 }
 size_t crdtLWWHashMemUsageFunc(const void *value) {

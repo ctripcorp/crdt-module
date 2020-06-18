@@ -53,5 +53,5 @@ char *logLevel;
 int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 
 VectorClock getVectorClockFromString(RedisModuleString *redisModuleString);
-
+#define MAXSTACKSIZE 8388608 //8192k
 #endif //XREDIS_CRDT_CRDT_H
