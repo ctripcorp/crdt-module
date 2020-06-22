@@ -53,8 +53,15 @@ const char* gidlen2 = "$2\r\n";
 size_t feedGid2Buf(char *buf, int gid) {
     size_t len = 0;
     // len += feedValStrLen(buf + len, gid > 9 ? 2:1);
-    len += feedBuf(buf +len, gid > 9 ? gidlen2: gidlen1);
-    len += _feedLongLong(buf + len, (long long) gid);
+    if(gid > 9) {
+        len += feedBuf(buf +len, gidlen2);
+        len += ll2str(buf + len, (long long)gid, 2);
+    } else {
+        len += feedBuf(buf +len, gidlen1);
+        buf[len++] = '0' + gid;
+    }
+    buf[len++] = '\r';
+    buf[len++] = '\n';
     // len += feedBuf(buf + len, gid > 9 ? gidlen2_template: gidlen1_template);
     // len += feedLongLong(buf + len , (long long)gid);
     return len;
@@ -118,11 +125,32 @@ size_t feedMeta2Buf(char *buf, int gid, long long time, VectorClock vc) {
     // len += vectorClockToString(buf + len, vc);
     return len;
 } 
-
+size_t vcunit2buf(char* buf, int gid, long long unit) {
+    size_t buflen = 0;
+    buflen += ll2str(buf+buflen, (long long)gid, gid > 9? 2:1);
+    buf[buflen++] = ':';
+    buflen += sdsll2str(buf+buflen, unit);
+    return buflen;
+}
+size_t vc2str(char* buf, VectorClock vc) {
+    int length = get_len(vc);
+    if(isNullVectorClock(vc) || length < 1) {
+        return 0;
+    }
+    size_t buflen = 0;
+    clk *vc_unit = get_clock_unit_by_index(&vc, 0);
+    buflen += vcunit2buf(buf + buflen, get_gid(*vc_unit), get_logic_clock(*vc_unit));
+    for (int i = 1; i < length; i++) {
+        clk* vc_unit1 = get_clock_unit_by_index(&vc, i);
+        buf[buflen++]=';';
+        buflen += vcunit2buf(buf + buflen, get_gid(*vc_unit1), get_logic_clock(*vc_unit1));
+    }
+    return buflen;
+}
 size_t feedVectorClock2Buf(char *buf, VectorClock vc) {
     size_t len = 0;
     len += feedValStrLen(buf + len, vectorClockToStringLen(vc));
-    len += vectorClockToString(buf + len, vc);
+    len += vc2str(buf + len, vc);
     buf[len++]='\r';
     buf[len++]='\n';
     return len;
@@ -137,6 +165,22 @@ int redisModuleStringToGid(RedisModuleCtx *ctx, RedisModuleString *argv, long lo
         return REDISMODULE_ERR;
     }
     return REDISMODULE_OK;
+}
+int readMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index, CrdtMeta* meta) {
+    long long gid;
+    if ((redisModuleStringToGid(ctx, argv[start_index],&gid) != REDISMODULE_OK)) {
+        return 0;
+    }
+    long long timestamp;
+    if ((RedisModule_StringToLongLong(argv[start_index+1],&timestamp) != REDISMODULE_OK)) {
+        RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+        return 0;
+    }
+    VectorClock vclock = getVectorClockFromString(argv[start_index+2]);
+    meta->gid = gid;
+    meta->timestamp = timestamp;
+    meta->vectorClock = vclock;
+    return 1;
 }
 CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index) {
     long long gid;

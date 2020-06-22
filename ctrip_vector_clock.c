@@ -417,11 +417,11 @@ size_t vectorClockToStringLen(VectorClock vc) {
     return buflen;
 }
 size_t vectorClockToString(char* buf, VectorClock vc) {
-    if(isNullVectorClock(vc) || get_len(vc) < 1) {
+    int length = get_len(vc);
+    if(isNullVectorClock(vc) || length < 1) {
         buf[0] = '\0';
         return 0;
     }
-    int length = get_len(vc);
     size_t buflen = 0;
     buflen += sprintf(buf, "%d:%lld", (int)get_gid(*get_clock_unit_by_index(&vc, 0)), get_logic_clock(*get_clock_unit_by_index(&vc, 0)));
     for (int i = 1; i < length; i++) {

@@ -41,7 +41,7 @@ int appendCrdtLWWRegisterMeta(CRDT_LWW_Register* r, CrdtMeta* other, int compare
         if(compare < COMPARE_META_GID_LT) compare = compareCrdtMeta(target, other);
         VectorClock vc = vectorClockMerge(getMetaVectorClock(target), getMetaVectorClock(other));
         setCrdtLWWRegisterVectorClock(r, vc);
-        if(compare > COMPARE_META_EQUAL) {
+        if(compare >= COMPARE_META_EQUAL) {
             setCrdtLWWRegisterGid(r, getMetaGid(other));
             setCrdtLWWRegisterTimestamp(r, getMetaTimestamp(other));
         }
@@ -249,7 +249,7 @@ sds getLWWCrdtRegister(CRDT_Register* r) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
     return getCrdtLWWRegisterValue(data);
 }
-void setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+void crdtRegisterSetValue(CRDT_Register* r, CrdtMeta* meta, sds value) {
 // void setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
     // int compare = 0;
@@ -258,10 +258,10 @@ void setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
     setCrdtLWWRegisterValue(data, sdsdup(value));
 }
 // int appendLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
-int appendCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value, int compare) {
+int crdtRegisterTryUpdate(CRDT_Register* r, CrdtMeta* meta, sds value, int compare) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
     compare = appendCrdtLWWRegisterMeta(data, meta, compare);
-    if(compare > COMPARE_META_EQUAL) {
+    if(compare >= COMPARE_META_EQUAL) {
         setCrdtLWWRegisterValue(data, sdsdup(value));
     }
     return compare;

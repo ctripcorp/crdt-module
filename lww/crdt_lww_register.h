@@ -97,11 +97,11 @@ void initRegister(CRDT_Register *r) {
     return initLWWReigster((CRDT_LWW_Register*)r);
 }
 // void setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
-// void setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+// void crdtRegisterSetValue(CRDT_Register* r, CrdtMeta* meta, sds value) {
     // return setLWWCrdtRegister(r, meta, value);
 // }
 // int appendLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
-// int appendCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value, int compare) {
+// int crdtRegisterTryUpdate(CRDT_Register* r, CrdtMeta* meta, sds value, int compare) {
 //     return appendLWWCrdtRegister(r, meta, value);
 // }
 
