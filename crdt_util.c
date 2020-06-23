@@ -1,6 +1,7 @@
 #include "crdt_util.h"
 #include <stdio.h>
 #include <string.h>
+
 int ll2str(char* s, long long value, int len) {
     char *p, aux;
     unsigned long long v;

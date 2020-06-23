@@ -5,8 +5,20 @@
 #include "utils.h"
 #include "crdt.h"
 #include "ctrip_crdt_common.h"
+/*
+####
+    replication util
+####
+*/
+#define REPLICATION_ARGC_LEN (25)  //*(1) + long long(21) + \r(1) + \n(1)
+#define REPLICATION_MAX_STR_LEN (27) //$(1) + long long(21) + \r(1) + \n(1) + strlen(?) + \r(1) + \n(1)
+#define REPLICATION_MAX_GID_LEN  (9)//$(1) + gidlen(2) + \r(1) + \n(1) + gid(2) + \r(1) + \n(1)
+#define REPLICATION_MAX_LONGLONG_LEN  (28)//$(1) + long long max len 21(2) + \r(1) + \n(1) + long long(21) + \r(1) + \n(1)
+#define REPLICATION_MAX_VC_LEN (402) //$(1) + long long(21) + \r(1) + \n(1) + [;(1) + gid(2) + :(1) + long long(21)] * 15 + \r(1) +\n(1)
+
 int redisModuleStringToGid(RedisModuleCtx *ctx, RedisModuleString *argv, long long *gid);
 CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index);
+int readMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index, CrdtMeta* meta);
 RedisModuleKey* getWriteRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type);
 void* getCurrentValue(RedisModuleKey *moduleKey);
 void* getTombstone(RedisModuleKey *moduleKey);

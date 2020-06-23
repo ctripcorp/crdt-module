@@ -191,6 +191,7 @@ static int addCrdtHashFieldToReply(RedisModuleCtx *ctx, CRDT_Hash *crdtHash, Red
  * User API for Hash type
  * -------------------------------------------------------------------------- */
 const char* crdt_hset_head = "$9\r\nCRDT.HSET\r\n";
+const size_t crdt_hset_basic_str_len = 15 + REPLICATION_ARGC_LEN + REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN +  REPLICATION_MAX_LONGLONG_LEN;
 size_t replicationFeedCrdtHsetCommand(RedisModuleCtx *ctx,char* cmdbuf, char* keystr, size_t keylen, CrdtMeta* meta,int argc, char** fieldAndValStr, int* fieldAndValStrLen) {
     size_t cmdlen = 0;
     cmdlen +=  feedArgc(cmdbuf, argc + 6);
@@ -273,7 +274,7 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         fieldAndValStr[i-1] = valstr;
         fieldAndValStrLen[i-2] = fieldstrlen;
         fieldAndValStrLen[i-1] = valstrlen;
-        fieldAndValAllStrLen += fieldstrlen + valstrlen + 52;
+        fieldAndValAllStrLen += fieldstrlen + valstrlen + 2 * REPLICATION_MAX_STR_LEN;
     }
     setCrdtHashLastVc(current, getMetaVectorClock(&meta));
     #if defined(HSET_STATISTICS) 
@@ -283,26 +284,25 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     #if defined(HSET_STATISTICS) 
         send_event_end();
     #endif
-end:
-    {
-        #if defined(HSET_STATISTICS) 
-            write_bakclog_start();
-        #endif
-            //
-            if(fieldAndValAllStrLen > MAXSTACKSIZE) { //8192k
-                char *cmdbuf = RedisModule_Alloc(498 + keylen + fieldAndValAllStrLen);
-                size_t cmdlen = replicationFeedCrdtHsetCommand(ctx, cmdbuf,  keystr, keylen, &meta, argc - 2, fieldAndValStr, fieldAndValStrLen);
-                RedisModule_Free(cmdbuf);
-            }else {
-                char cmdbuf[498 + keylen + fieldAndValAllStrLen]; //4 + (4 + 9 + 2) + (24  + keylen + 2 ) + 26 * n +fieldlen(n) + 26 * n+ vallen(n)  + (5 + 7) + (10 + 23) + (6 + vcunitlen * 25 + 2)
-                size_t cmdlen = replicationFeedCrdtHsetCommand(ctx, cmdbuf, keystr, keylen, &meta, argc - 2, fieldAndValStr, fieldAndValStrLen);
-            }
-        #if defined(HSET_STATISTICS) 
-            write_backlog_end();
-        #endif
+    
+    #if defined(HSET_STATISTICS) 
+        write_bakclog_start();
+    #endif
+        size_t alllen = crdt_hset_basic_str_len + keylen + fieldAndValAllStrLen;
+        if(alllen > MAXSTACKSIZE) { 
+            char *cmdbuf = RedisModule_Alloc(alllen);
+            size_t cmdlen = replicationFeedCrdtHsetCommand(ctx, cmdbuf,  keystr, keylen, &meta, argc - 2, fieldAndValStr, fieldAndValStrLen);
+            RedisModule_Free(cmdbuf);
+        }else {
+            char cmdbuf[alllen]; 
+            size_t cmdlen = replicationFeedCrdtHsetCommand(ctx, cmdbuf, keystr, keylen, &meta, argc - 2, fieldAndValStr, fieldAndValStrLen);
+        }
+    #if defined(HSET_STATISTICS) 
+        write_backlog_end();
+    #endif
         //becase setCrdtHashLastVc move vector 
         // freeIncrMeta(&meta);
-    }
+    
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     sds cmdname = RedisModule_GetSds(argv[0]);
     if (cmdname[1] == 's' || cmdname[1] == 'S') {
@@ -445,7 +445,6 @@ end:
 // "CRDT.HSET", <key>, <gid>, <timestamp>, <vclockStr>,  <length> <field> <val> <field> <val> . . .);
 //   0           1        2       3           4           5       6
 int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    // RedisModule_AutoMemory(ctx);
     if (argc < 5) return RedisModule_WrongArity(ctx);
     int status = CRDT_OK;
     CrdtMeta* meta = getMeta(ctx, argv, 2);
