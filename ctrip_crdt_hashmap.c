@@ -238,8 +238,8 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     
 
     size_t keylen = 0;
-    char* keystr = RedisModule_StringPtrLen(argv[1], &keylen);
-    char* fieldAndValStr[argc-2];
+    const char* keystr = RedisModule_StringPtrLen(argv[1], &keylen);
+    const char* fieldAndValStr[argc-2];
     int fieldAndValStrLen[argc-2];
     size_t fieldAndValAllStrLen = 0;
     for(int i = 2; i < argc; i += 2) {
@@ -267,9 +267,9 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             #endif
         }
         size_t fieldstrlen = 0;
-        char* fieldstr = RedisModule_StringPtrLen(argv[i], &fieldstrlen);
+        const char* fieldstr = RedisModule_StringPtrLen(argv[i], &fieldstrlen);
         size_t valstrlen = 0;
-        char* valstr = RedisModule_StringPtrLen(argv[i+1], &valstrlen);
+        const char* valstr = RedisModule_StringPtrLen(argv[i+1], &valstrlen);
         fieldAndValStr[i-2] = fieldstr;
         fieldAndValStr[i-1] = valstr;
         fieldAndValStrLen[i-2] = fieldstrlen;

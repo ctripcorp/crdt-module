@@ -64,7 +64,7 @@ size_t feedStr2Buf(char *buf, char* str, size_t strlen) {
 }
 size_t feedRobj2Buf(char *buf, RedisModuleString* src) {
     size_t srclen = 0;
-    char* srcstr = RedisModule_StringPtrLen(src, &srclen);
+    const char* srcstr = RedisModule_StringPtrLen(src, &srclen);
     return feedStr2Buf(buf, srcstr, srclen);
 }
 const char* gidlen1 = "$1\r\n";

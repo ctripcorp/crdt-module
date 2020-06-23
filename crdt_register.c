@@ -40,7 +40,6 @@
 #include <strings.h>
 #include "include/rmutil/dict.h"
 #include "crdt_statistics.h"
-RedisModuleString* crdt_set_shared; //crdt.set
 /**
  * ==============================================Pre-defined functions=========================================================*/
 
@@ -135,28 +134,7 @@ CrdtObject* crdtRegisterTombstoneFilter(CrdtObject* target, int gid, long long l
     CRDT_RegisterTombstone* t = (CRDT_RegisterTombstone*) target;
     return filterRegisterTombstone(t, gid, logic_time);
 }
-uint64_t drHash(const void *key) {
-    return dictGenHashFunction((unsigned char*)key, sdslen((char*)key));
-}
-int drCompare(void *privdata, const void *key1,
-                      const void *key2) {
-    int l1,l2;
-    DICT_NOTUSED(privdata);
 
-    l1 = sdslen((sds)key1);
-    l2 = sdslen((sds)key2);
-    if (l1 != l2) return 0;
-    return memcmp(key1, key2, l1) == 0;
-}
-static dictType duplicateRemoval = {
-        drHash,                /* hash function */
-        NULL,                       /* key dup */
-        NULL,                       /* val dup */
-        drCompare,          /* key compare */
-        NULL,          /* key destructor */
-        NULL   /* val destructor */
-};
-dict *dr;
 int initRegisterModule(RedisModuleCtx *ctx) {
     RedisModuleTypeMethods tm = {
             .version = REDISMODULE_APIVER_1,
@@ -170,7 +148,6 @@ int initRegisterModule(RedisModuleCtx *ctx) {
 
     CrdtRegister = RedisModule_CreateDataType(ctx, CRDT_REGISTER_DATATYPE_NAME, 0, &tm);
     if (CrdtRegister == NULL) return REDISMODULE_ERR;
-    dr = dictCreate(&duplicateRemoval, NULL);
     RedisModuleTypeMethods tombtm = {
         .version = REDISMODULE_APIVER_1,
         .rdb_load = RdbLoadCrdtRegisterTombstone,
@@ -182,7 +159,6 @@ int initRegisterModule(RedisModuleCtx *ctx) {
     };
     CrdtRegisterTombstone = RedisModule_CreateDataType(ctx, CRDT_REGISTER_TOMBSTONE_DATATYPE_NAME, 0, &tombtm);
     if (CrdtRegisterTombstone == NULL) return REDISMODULE_ERR;
-    crdt_set_shared = RedisModule_CreateString(ctx, "CRDT.SET", 8);
     // write readonly admin deny-oom deny-script allow-loading pubsub random allow-stale no-monitor fast getkeys-api no-cluster
     if (RedisModule_CreateCommand(ctx,"SET",
                                   setCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
@@ -223,8 +199,6 @@ int initRegisterModule(RedisModuleCtx *ctx) {
 /***
  * CRDT Lifecycle functionality*/
 
-
-
 /*
  * return 0: nothing deleted
  * return 1: delete 1 crdt register
@@ -233,7 +207,6 @@ int initRegisterModule(RedisModuleCtx *ctx) {
 int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value) {
     RedisModuleKey *moduleKey = (RedisModuleKey *)key;
     CRDT_Register *current = (CRDT_Register*) value;
-    //CrdtMeta* meta = createIncrMeta();
     CrdtMeta del_meta = {.gid = 0};
     initIncrMeta(&del_meta);
     appendVCForMeta(&del_meta, getCrdtRegisterLastVc(current));
@@ -260,10 +233,8 @@ int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value) {
 int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
     if(argc < 5) return RedisModule_WrongArity(ctx);
-    // CrdtMeta* del_meta = getMeta(ctx, argv, 2);
     CrdtMeta del_meta = {.gid=0};
-    readMeta(ctx, argv, 2, &del_meta);
-    if(&del_meta == NULL) return CRDT_ERROR;
+    if (readMeta(ctx, argv, 2, &del_meta) != CRDT_OK) return CRDT_ERROR;
     int status = CRDT_OK;
     int deleted = 0;
     RedisModuleKey* moduleKey =  getWriteRedisModuleKey(ctx, argv[1], CrdtRegister);
