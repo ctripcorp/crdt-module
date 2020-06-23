@@ -214,6 +214,9 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     int result = 0;
     CrdtMeta meta = {.gid=0};
+    #if defined(HSET_STATISTICS) 
+        get_modulekey_start();
+    #endif
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtHash, REDISMODULE_WRITE);
     if (moduleKey == NULL) {
         return CRDT_ERROR;
@@ -224,11 +227,15 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(current != NULL) {
         appendVCForMeta(&meta, getCrdtHashLastVc(current));
     }
-    // int result = addOrUpdateHash(ctx, argv[1], moduleKey, NULL, current, &meta, argv, 2, argc);
+    #if defined(HSET_STATISTICS) 
+        get_modulekey_end();
+    #endif
     if(current == NULL) {
         current = createCrdtHash();
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtHash, current);
     } 
+    
+
     size_t keylen = 0;
     char* keystr = RedisModule_StringPtrLen(argv[1], &keylen);
     char* fieldAndValStr[argc-2];

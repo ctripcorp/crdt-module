@@ -1,8 +1,26 @@
 #include "crdt_util.h"
 #include <stdio.h>
 #include <string.h>
+int ll2str(char* s, long long value, int len) {
+    char *p, aux;
+    unsigned long long v;
 
-size_t feedBuf(char* buf,  char* src) {
+    /* Generate the string representation, this method produces
+     * an reversed string. */
+    v = (value < 0) ? -value : value;
+
+    p = s + len;
+    *p-- = '\0';
+    do {
+        *p-- = '0'+(v%10);
+        v /= 10;
+    } while(v);
+    if(value < 0) *p-- = '-';
+
+    return len;
+}
+
+size_t feedBuf(char* buf, const char* src) {
     strcpy(buf, src);
     return strlen(src);
 }
@@ -86,25 +104,7 @@ int llstrlen(long long v) {
     } while(v);
     return len;
 }
-int ll2str(char* s, long long value, int len) {
-    char *p, aux;
-    unsigned long long v;
 
-    /* Generate the string representation, this method produces
-     * an reversed string. */
-    v = (value < 0) ? -value : value;
-
-    p = s + len;
-    *p-- = '\0';
-    do {
-        *p-- = '0'+(v%10);
-        v /= 10;
-    } while(v);
-    if(value < 0) *p-- = '-';
-
-    return len;
-}
-const char* longlong_template = "$%d\r\n%lld\r\n";
 size_t feedLongLong2Buf(char *buf, long long v) {
     size_t len = 0;
     size_t lllen = llstrlen(v);
@@ -115,7 +115,6 @@ size_t feedLongLong2Buf(char *buf, long long v) {
     buf[len++] = '\n';
     return len;
 }
-const char* meta_template = "$%d\r\n%d\r\n$%d\r\n%lld\r\n$%d\r\n";
 size_t feedMeta2Buf(char *buf, int gid, long long time, VectorClock vc) {
     size_t len = 0;
     // len += sprintf(buf, meta_template, gid > 9? 2: 1, gid, llstrlen(time), time, vectorClockToStringLen(vc));

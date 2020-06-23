@@ -457,7 +457,7 @@ int _replicationFeedCrdtMSetCommand(RedisModuleCtx *ctx, RedisModuleString** arg
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
-int replicationFeedCrdtMSetCommand(RedisModuleCtx *ctx, RedisModuleString** argv, char *cmdbuf, CrdtMeta* mset_meta, int argc, CRDT_Register** vals, char**datas, size_t* datalens, VectorClock* vcs) {
+int replicationFeedCrdtMSetCommand(RedisModuleCtx *ctx, RedisModuleString** argv, char *cmdbuf, CrdtMeta* mset_meta, int argc, CRDT_Register** vals, char**datas, size_t* datalens) {
     size_t cmdlen = 0;
     cmdlen += feedArgc(cmdbuf + cmdlen, argc * 3  + 3);
     cmdlen += feedBuf(cmdbuf + cmdlen, crdt_mset_head);
@@ -590,11 +590,11 @@ int _msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     #endif
     if(budget_key_val_strlen > MAXSTACKSIZE) {
         char* cmdbuf = RedisModule_Alloc(523 + budget_key_val_strlen);
-        replicationFeedCrdtMSetCommand(ctx, argv, cmdbuf, &mset_meta, arraylen, vals, keyOrValStr, keyOrValStrLen, vcs);
+        _replicationFeedCrdtMSetCommand(ctx, argv, cmdbuf, &mset_meta, arraylen, vals, keyOrValStr, keyOrValStrLen, vcs);
         RedisModule_Free(cmdbuf);
     } else {
         char cmdbuf[523 + budget_key_val_strlen]; //4 + (4 + 8 + 2) + (24  + keylen + 2 ) + (24  + vallen + 2 ) + (10 + 23) + (5 + 7) + (10 + 23) + (6 + vcunitlen * 25 + 2)
-        replicationFeedCrdtMSetCommand(ctx, argv, cmdbuf, &mset_meta, arraylen, vals, keyOrValStr,keyOrValStrLen, vcs);
+        _replicationFeedCrdtMSetCommand(ctx, argv, cmdbuf, &mset_meta, arraylen, vals, keyOrValStr,keyOrValStrLen, vcs);
     }
     #if defined(MSET_STATISTICS)    
         write_backlog_end();
@@ -606,8 +606,6 @@ int _msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
 int msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // int num = RedisModule_ZmallocNum();
     int arraylen = (argc-1)/2;
-    RedisModuleKey* modulekeys[arraylen];
-    VectorClock vcs[arraylen];
     int index = 0;
     CRDT_Register* vals[arraylen];
 
@@ -642,14 +640,14 @@ int msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     #endif
     if(budget_key_val_strlen > MAXSTACKSIZE) {
         char* cmdbuf = RedisModule_Alloc(523 + budget_key_val_strlen);
-        replicationFeedCrdtMSetCommand(ctx, argv, cmdbuf, &mset_meta, arraylen, vals, keyOrValStr, keyOrValStrLen, vcs);
+        replicationFeedCrdtMSetCommand(ctx, argv, cmdbuf, &mset_meta, arraylen, vals, keyOrValStr, keyOrValStrLen);
         RedisModule_Free(cmdbuf);
     } else {
         char cmdbuf[523 + budget_key_val_strlen]; //4 + (4 + 8 + 2) + (24  + keylen + 2 ) + (24  + vallen + 2 ) + (10 + 23) + (5 + 7) + (10 + 23) + (6 + vcunitlen * 25 + 2)
-        replicationFeedCrdtMSetCommand(ctx, argv, cmdbuf, &mset_meta, arraylen, vals, keyOrValStr,keyOrValStrLen, vcs);
+        replicationFeedCrdtMSetCommand(ctx, argv, cmdbuf, &mset_meta, arraylen, vals, keyOrValStr,keyOrValStrLen);
     }
     #if defined(MSET_STATISTICS)    
-        write_bakclog_end();
+        write_backlog_end();
     #endif
     freeIncrMeta(&mset_meta);
 error:
@@ -840,7 +838,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     int j;
     int unit = UNIT_SECONDS;
     #if defined(SET_STATISTICS) 
-        unsigned long long statistics_parse_set_start = nstime(); 
+        parse_start(); 
     #endif
     for (j = 3; j < argc; j++) {
         sds a = RedisModule_GetSds(argv[j]);
@@ -881,8 +879,7 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         }
     }
     #if defined(SET_STATISTICS) 
-        statistics_parse_set_time += nstime() - statistics_parse_set_start;
-        statistics_parse_set_num++;
+        parse_end();
     #endif
     int result = setGenericCommand(ctx, NULL, flags, argv[1], argv[2], expire, unit, 1);
     if(result == CRDT_OK) {
