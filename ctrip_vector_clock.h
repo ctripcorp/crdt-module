@@ -34,6 +34,7 @@
 #define REDIS_VECTOR_CLOCK_H
 
 #include "include/rmutil/sds.h"
+#include "include/redismodule.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
@@ -46,6 +47,8 @@
 
 #define max(x, y) x > y ? x : y
 #define GIDSIZE 4
+#define vc_free RedisModule_Free
+#define vc_malloc RedisModule_Alloc
 /**
  * To shrink down mem usage, an unsigned long long will stand for [gid, clock]
  * where, higher 4 bits is allocated for gid (16 gid in total)
@@ -212,7 +215,7 @@ sds
 vectorClockToSds(VectorClock vc);
 size_t vectorClockToStringLen(VectorClock vc);
 size_t vectorClockToString(char* buf, VectorClock vc);
-
+VectorClock stringToVectorClock(char* buf); 
 
 /**------------------------Vector Clock Util--------------------------------------*/
 

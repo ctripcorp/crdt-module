@@ -230,8 +230,7 @@ void *RdbLoadLWWCrdtRegister(RedisModuleIO *rdb, int encver) {
     char* str = RedisModule_LoadStringBuffer(rdb, &sdsLength);
     sds val = sdsnewlen(str, sdsLength);
     setCrdtLWWRegisterValue(crdtRegister, val);
-    RedisModule_Free(str);
-
+    RedisModule_ZFree(str);
     return crdtRegister;
 }
 
@@ -283,11 +282,20 @@ CRDT_LWW_Register* filterLWWRegister(CRDT_LWW_Register* target, int gid, long lo
 sds crdtLWWRegisterInfo(CRDT_LWW_Register *crdtRegister) {
     sds result = sdsempty();
     sds vcStr = vectorClockToSds(getCrdtLWWRegisterVectorClock(crdtRegister));
-    result = sdscatprintf(result, "gid: %d, timestamp: %lld, vector-clock: %s, val: %s",
+    result = sdscatprintf(result, "type: lww_register, gid: %d, timestamp: %lld, vector-clock: %s, val: %s",
             getCrdtLWWRegisterGid(crdtRegister), getCrdtLWWRegisterTimestamp(crdtRegister), vcStr,getCrdtLWWRegisterValue(crdtRegister));
     sdsfree(vcStr);
     return result;
 }
+sds crdtRegisterTombstoneInfo(void *t) {
+    CRDT_LWW_RegisterTombstone* tombstone = retrieveCrdtLWWRegisterTombstone(t);
+    sds result = sdsempty();
+    sds vcStr = vectorClockToSds(getCrdtLWWRegisterTombstoneVectorClock(tombstone));
+    result = sdscatprintf(result, "type: lww_reigster_tomsbtone, gid: %d, timestamp: %lld, vector-clock: %s",
+            getCrdtLWWRegisterTombstoneGid(tombstone), getCrdtLWWRegisterTombstoneTimestamp(tombstone), vcStr);
+    sdsfree(vcStr);
+    return result;
+} 
 size_t crdtLWWRegisterTombstoneMemUsageFunc(const void *value) {
     //to do 
     return 1;

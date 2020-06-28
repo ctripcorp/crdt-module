@@ -1,5 +1,5 @@
 #include "include/redismodule.h"
-
+#include "./include/rmutil/sds.h"
 void parse_start();
 void parse_end();
 
@@ -19,3 +19,7 @@ void write_bakclog_start();
 void write_backlog_end();
 
 int statisticsCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
+
+/** about memory **/
+size_t sum_memory();
+int memoryCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);

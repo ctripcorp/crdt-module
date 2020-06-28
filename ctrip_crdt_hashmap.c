@@ -882,7 +882,7 @@ int RdbLoadDict(RedisModuleIO *rdb, int encver, dict *map, RedisModuleTypeLoadFu
         value = func(rdb, encver);
         /* Add pair to hash table */
         dictAdd(map, field, value);
-        RedisModule_Free(str);
+        RedisModule_ZFree(str);
     }
     return CRDT_OK;
 }

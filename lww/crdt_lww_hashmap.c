@@ -284,3 +284,31 @@ size_t crdtLWWHashTombstoneMemUsageFunc(const void *value) {
 void crdtLWWHashTombstoneDigestFunc(RedisModuleDigest *md, void *value) {
     //todo: currently do nothing when digest
 }
+sds crdtHashInfo(void* data) {
+    // CRDT_LWW_Hash* hash = retrieveCrdtLWWHash(data);
+    sds result = sdsempty();
+    sds vcStr = vectorClockToSds(getCrdtHashLastVc((CRDT_Hash*)data));
+    result = sdscatprintf(result, "type: lww_hash,  last-vc: %s",
+            vcStr);
+    sdsfree(vcStr);
+    return result;
+}
+sds crdtHashTombstoneInfo(void* data) {
+    CRDT_LWW_HashTombstone* tombstone = retrieveCrdtLWWHashTombstone(data);
+    sds result = sdsempty();
+    sds vcStr = vectorClockToSds(getCrdtHashTombstoneLastVc((CRDT_HashTombstone*)tombstone));
+    VectorClock maxVc = getCrdtLWWHashTombstoneMaxDelVectorClock(tombstone);
+    if(isNullVectorClock(maxVc)) {
+        result = sdscatprintf(result, "type: lww_hash_tombstone,  last-vc: %s",
+            vcStr);
+    }else{
+        sds maxDelVcStr = vectorClockToSds(maxVc);
+        result = sdscatprintf(result, "type: lww_hash_tombstone,  last-vc: %s, max-del-gid: %d, max-del-time: %lld, max-del-vc: %s",
+            vcStr, getCrdtLWWHashTombstoneMaxDelGid(tombstone), 
+            getCrdtLWWHashTombstoneMaxDelTimestamp(tombstone),
+            maxDelVcStr);
+        sdsfree(maxDelVcStr);
+    }
+    sdsfree(vcStr);
+    return result;
+}

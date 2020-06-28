@@ -227,15 +227,20 @@ void* getTombstone(RedisModuleKey *moduleKey) {
 VectorClock rdbLoadVectorClock(RedisModuleIO *rdb) {
     size_t vcLength;
     char* vcStr = RedisModule_LoadStringBuffer(rdb, &vcLength);
-    sds vclockSds = sdsnewlen(vcStr, vcLength);
-    VectorClock result = sdsToVectorClock(vclockSds);
-    sdsfree(vclockSds);
-    RedisModule_Free(vcStr);
+    // sds vclockSds = sdsnewlen(vcStr, vcLength);
+    // VectorClock result = sdsToVectorClock(vclockSds);
+    // sdsfree(vclockSds);
+    vcStr[vcLength] = '\0';
+    VectorClock result = stringToVectorClock(vcStr);
+    zfree(vcStr);
     return result;
 }
 int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock vectorClock) {
-    sds vclockStr = vectorClockToSds(vectorClock);
-    RedisModule_SaveStringBuffer(rdb, vclockStr, sdslen(vclockStr));
-    sdsfree(vclockStr);
+    // sds vclockStr = vectorClockToSds(vectorClock);
+    size_t len = vectorClockToStringLen(vectorClock);
+    char buf[len];
+    vectorClockToString(&buf, vectorClock);
+    RedisModule_SaveStringBuffer(rdb, buf, len);
+    // sdsfree(vclockStr);
     return CRDT_OK;
 }

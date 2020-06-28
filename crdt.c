@@ -44,6 +44,7 @@
 #define CRDT_API_VERSION 1
 
 
+
 int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
 
@@ -223,13 +224,49 @@ CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
     } 
     return NULL;
 }
-
+int dataCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 2) return RedisModule_WrongArity(ctx);
+    RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+    void *tombstoneObj = RedisModule_ModuleTypeGetTombstone(moduleKey); 
+    if (RedisModule_KeyType(moduleKey) == REDISMODULE_KEYTYPE_EMPTY && tombstoneObj == NULL) {
+        RedisModule_CloseKey(moduleKey);
+        return RedisModule_ReplyWithNull(ctx);
+    }
+    void *crdtObj = RedisModule_ModuleTypeGetValue(moduleKey);
+    if(crdtObj == NULL && tombstoneObj == NULL) {
+        RedisModule_CloseKey(moduleKey);
+        return RedisModule_ReplyWithError(ctx, "code error");
+    }
+    sds objInfo = NULL;
+    sds tombstoneInfo = NULL;
+    int num = 0;
+    if (crdtObj != NULL) {
+        CrdtDataMethod* omethod = getCrdtDataMethod(crdtObj);
+        objInfo = omethod->info(crdtObj);
+        num += 1;
+    }
+    if (tombstoneObj != NULL) {
+        CrdtTombstoneMethod* tmethod = getCrdtTombstoneMethod(tombstoneObj);
+        tombstoneInfo = tmethod->info(tombstoneObj);
+        num += 1;
+    }
+    RedisModule_ReplyWithArray(ctx, num);
+    if(objInfo != NULL) {
+        RedisModule_ReplyWithStringBuffer(ctx, objInfo, sdslen(objInfo));
+        sdsfree(objInfo);
+    }
+    if(tombstoneInfo != NULL) {
+        RedisModule_ReplyWithStringBuffer(ctx, tombstoneInfo, sdslen(tombstoneInfo));
+        sdsfree(tombstoneInfo);
+    }
+    RedisModule_CloseKey(moduleKey);
+}
 /* This function must be present on each Redis module. It is used in order to
  * register the commands into the Redis server. */
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     REDISMODULE_NOT_USED(argv);
     REDISMODULE_NOT_USED(argc);
-    logLevel = sdsnew(CRDT_DEFAULT_LOG_LEVEL);
+    logLevel = CRDT_DEFAULT_LOG_LEVEL;
     if (RedisModule_Init(ctx, MODULE_NAME, CRDT_API_VERSION, REDISMODULE_APIVER_1)
         == REDISMODULE_ERR) return REDISMODULE_ERR;
 
@@ -263,5 +300,11 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     if (RedisModule_CreateCommand(ctx,"crdt.statistics",
                                   statisticsCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "crdt.memory", 
+                                    memoryCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "crdt.dataInfo", 
+                                dataCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;                        
     return REDISMODULE_OK;
 }

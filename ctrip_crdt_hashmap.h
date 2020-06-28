@@ -66,10 +66,12 @@ static CrdtObjectMethod HashCommonMethod = {
     .merge = crdtHashMerge,
     .filter = crdtHashFilter,
 };
+sds crdtHashInfo(void* data);
 static CrdtDataMethod HashDataMethod = {
     .propagateDel = crdtHashDelete,
     .getLastVC = crdtHashGetLastVC,
     .updateLastVC = crdtHashUpdateLastVC,
+    .info = crdtHashInfo,
 };
 
 //common methods
@@ -77,11 +79,13 @@ CrdtTombstone *crdtHashTombstoneMerge(CrdtTombstone *currentVal, CrdtTombstone *
 CrdtTombstone* crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time);
 int crdtHashTombstoneGc(CrdtObject* target, VectorClock clock);
 int crdtHashTombstonePurage(CrdtObject* obj, CrdtObject* tombstone);
+sds crdtHashTombstoneInfo(void* data);
 static CrdtTombstoneMethod HashTombstoneCommonMethod = {
     .merge = crdtHashTombstoneMerge,
     .filter = crdtHashTombstoneFilter,
     .gc = crdtHashTombstoneGc,
     .purage = crdtHashTombstonePurage,
+    .info = crdtHashTombstoneInfo,
 };
 typedef struct CRDT_Hash {
     unsigned char type;

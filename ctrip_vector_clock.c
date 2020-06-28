@@ -33,7 +33,6 @@
 #include "ctrip_vector_clock.h"
 #include "include/rmutil/sds.h"
 #include "util.h"
-#include "include/rmutil/zmalloc.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -63,13 +62,13 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
     VectorClock
     newVectorClock(int numVcUnits) {
         if(numVcUnits == 0) return NULL;
-        VectorClock result = zmalloc(sizeof(VectorClockUnit) * numVcUnits + 1);
+        VectorClock result = vc_malloc(sizeof(VectorClockUnit) * numVcUnits + 1);
         result->len = numVcUnits;
         return result;
     }
     void
     freeVectorClock(VectorClock vc) {
-        zfree(vc);
+        vc_free(vc);
     }
     clk* clocks_address(VectorClock value) {
         return (clk*)(&value->vcu);
@@ -83,7 +82,7 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
             return result;
         }
         if(numVcUnits > 1) {
-            clk *clocks = zmalloc(sizeof(clk) * numVcUnits);
+            clk *clocks = vc_malloc(sizeof(clk) * numVcUnits);
             result.pvc.pvc = ULL(clocks);
         }
         set_len(&result, (char)numVcUnits);
@@ -94,7 +93,7 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
         if (isNullVectorClock(vc) || (get_len(vc) < 2)) {
             return;
         }
-        zfree(clocks_address(vc));
+        vc_free(clocks_address(vc));
     }
     clk* clocks_address(VectorClock value) {
         if(get_len(value) == 1) {
@@ -244,7 +243,7 @@ static void commonMergeFunction(VectorClock *dst, VectorClock *src, int gid, int
         VectorClock* v = dst;
         freeVectorClock(*dst);
         *v = result;
-        // clk *new_clocks = zmalloc(sizeof(clk) * (dst_length + 1));
+        // clk *new_clocks = vc_malloc(sizeof(clk) * (dst_length + 1));
         // if (dst_length == 1) {
         //     new_clocks[0] = init_clock(get_gid(get_frist_unit(dst)), get_logic_clock(get_frist_unit(dst)));
         // } else {
@@ -388,6 +387,73 @@ sdsToVectorClock(sds vcStr) {
     sdsfreesplitres(vcUnits, numVcUnits);
     return result;
 }
+void split(char *src,const char *separator,char **dest,int *num) {
+      char *pNext;
+      int count = 0;
+      if (src == NULL || strlen(src) == 0)
+         return;
+      if (separator == NULL || strlen(separator) == 0)
+         return;    
+      pNext = strtok(src,separator);
+      while(pNext != NULL) {
+           *dest++ = pNext;
+           ++count;
+          pNext = strtok(NULL,separator);  
+     }  
+     *num = count;
+}
+char *trim(char *str)
+{
+        char *p = str;
+        char *p1;
+        if(p)
+        {
+                p1 = p + strlen(str) - 1;
+                while(*p && isspace(*p)) p++;
+                while(p1 > p && isspace(*p1)) *p1-- = '/0';
+        }
+        return p;
+}
+clk
+stringToVectorClockUnit(char* vcUnitStr) {
+    int numElements = 0;
+    long long result = 0;
+    char* vcUnits[2];
+    split(vcUnitStr,VECTOR_CLOCK_UNIT_SEPARATOR,vcUnits,&numElements);
+    if(numElements != 2) {
+        return VCU(result);
+    }
+    long long ll_gid, ll_time;
+    string2ll(vcUnits[0], strlen(vcUnits[0]), &ll_gid);
+    string2ll(vcUnits[1], strlen(vcUnits[1]), &ll_time);
+    return init_clock((char)ll_gid, ll_time);
+}
+
+VectorClock 
+stringToVectorClock(char* buf) {
+    char* vcUnits[15];
+    int clockNum = 0;
+    split(buf,VECTOR_CLOCK_SEPARATOR,vcUnits,&clockNum);
+    if(clockNum == 0) {
+        return newVectorClock(0);
+    }
+    vcUnits[clockNum-1] = trim(vcUnits[clockNum-1]);
+    if(strlen(vcUnits[clockNum-1]) < 1) {
+        clockNum = clockNum - 1;
+    }
+    VectorClock result = newVectorClock(clockNum);
+    if (clockNum == 1) {
+        clk clock_unit = stringToVectorClockUnit(vcUnits[0]);
+        set_clock_unit_by_index(&result, 0, clock_unit);
+    } else {
+        for (int i = 0; i < clockNum; i++) {
+            clk clock_unit = stringToVectorClockUnit(vcUnits[i]);
+            set_clock_unit_by_index(&result, (char) i, clock_unit);
+        }
+    }
+    return result;
+}
+
 
 int lllen(long long v) {
     int len = 0;

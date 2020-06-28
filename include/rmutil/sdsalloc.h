@@ -36,12 +36,16 @@
  * the include of your alternate allocator if needed (not needed in order
  * to use the default libc allocator). */
 
-#if defined(__MACH__)
-#include <stdlib.h>
-#else
-#include <malloc.h>
-#endif
-#include "zmalloc.h"
-#define s_malloc malloc
-#define s_realloc realloc
-#define s_free free
+// #if defined(__MACH__)
+// #include <stdlib.h>
+// #else
+// #include <malloc.h>
+// #endif
+// #include "zmalloc.h"
+
+#include <redismodule.h>
+#define s_malloc(size) RedisModule_Alloc(size)
+#define s_calloc(count, size) RedisModule_Calloc(count, size)
+#define s_realloc(ptr, size) RedisModule_Realloc(ptr, size)
+#define s_free(ptr) RedisModule_Free(ptr)
+
