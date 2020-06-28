@@ -15,6 +15,11 @@ void setCrdtHashLastVc(CRDT_Hash* hash, VectorClock vc) {
     } 
     r->lastVc = vc;
 }
+void mergeCrdtHashLastVc(CRDT_Hash* hash, VectorClock vc) {
+    VectorClock old = getCrdtHashLastVc(hash);
+    VectorClock now = vectorClockMerge(old, vc);
+    setCrdtHashLastVc(hash, now);
+}
 /**
  *  LWW Hash TOMBSTONE Get Set  Function
  */ 
