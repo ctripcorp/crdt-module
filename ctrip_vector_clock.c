@@ -389,9 +389,47 @@ sdsToVectorClock(sds vcStr) {
     return result;
 }
 
-
-
-
+int lllen(long long v) {
+    int len = 0;
+    if(v < 0) {
+        v = -v;
+        len = 1;
+    }
+    do {
+        len += 1;
+        v /= 10;
+    } while(v);
+    return len;
+}
+size_t vectorClockToStringLen(VectorClock vc) {
+    if(isNullVectorClock(vc) || get_len(vc) < 1) {
+        return 0;
+    }
+    int length = get_len(vc);
+    size_t buflen = 0;
+    buflen += (int)get_gid(*get_clock_unit_by_index(&vc, 0)) >= 10? 3: 2;
+    buflen += lllen(get_logic_clock(*get_clock_unit_by_index(&vc, 0)));
+    for (int i = 1; i < length; i++) {
+        clk *vc_unit = get_clock_unit_by_index(&vc, i);
+        buflen += (int) get_gid(*vc_unit) >= 10? 4:3;
+        buflen += lllen(get_logic_clock(*vc_unit));
+    }
+    return buflen;
+}
+size_t vectorClockToString(char* buf, VectorClock vc) {
+    int length = get_len(vc);
+    if(isNullVectorClock(vc) || length < 1) {
+        buf[0] = '\0';
+        return 0;
+    }
+    size_t buflen = 0;
+    buflen += sprintf(buf, "%d:%lld", (int)get_gid(*get_clock_unit_by_index(&vc, 0)), get_logic_clock(*get_clock_unit_by_index(&vc, 0)));
+    for (int i = 1; i < length; i++) {
+        clk *vc_unit = get_clock_unit_by_index(&vc, i);
+        buflen += sprintf(buf + buflen, ";%d:%lld", (int) get_gid(*vc_unit), get_logic_clock(*vc_unit));
+    }
+    return buflen;
+}
 sds
 vectorClockToSds(VectorClock vc) {
     if(isNullVectorClock(vc) || get_len(vc) < 1) {

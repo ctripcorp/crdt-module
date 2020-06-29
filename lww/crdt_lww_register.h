@@ -63,6 +63,7 @@ sds crdtRegisterInfo(CRDT_Register *crdtRegister) {
 }
 
 
+
 typedef struct  CRDT_LWW_RegisterTombstone {//20
     unsigned long long type:8;
     unsigned long long gid:4;
@@ -91,10 +92,18 @@ CRDT_LWW_RegisterTombstone* dupLWWCrdtRegisterTombstone(CRDT_LWW_RegisterTombsto
 CRDT_RegisterTombstone* dupCrdtRegisterTombstone(CRDT_RegisterTombstone *target) {
     return (CRDT_RegisterTombstone*)dupLWWCrdtRegisterTombstone((CRDT_LWW_RegisterTombstone*)target);
 }
-int setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
-int setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
-    return setLWWCrdtRegister(r, meta, value);
+void initLWWReigster(CRDT_LWW_Register *r);
+void initRegister(CRDT_Register *r) {
+    return initLWWReigster((CRDT_LWW_Register*)r);
 }
+// void setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
+// void crdtRegisterSetValue(CRDT_Register* r, CrdtMeta* meta, sds value) {
+    // return setLWWCrdtRegister(r, meta, value);
+// }
+// int appendLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
+// int crdtRegisterTryUpdate(CRDT_Register* r, CrdtMeta* meta, sds value, int compare) {
+//     return appendLWWCrdtRegister(r, meta, value);
+// }
 
 void RdbSaveLWWCrdtRegisterTombstone(RedisModuleIO *rdb, void *value);
 CRDT_RegisterTombstone* filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time) ;
@@ -113,6 +122,10 @@ sds getLWWCrdtRegister(CRDT_Register* r);
 sds getCrdtRegisterSds(CRDT_Register* r) {
     return getLWWCrdtRegister(r);
 }
+CrdtMeta* getCrdtLWWRegisterMeta(CRDT_LWW_Register* r);
+CrdtMeta* getCrdtRegisterLastMeta(CRDT_Register* r) {
+    return getCrdtLWWRegisterMeta((CRDT_LWW_Register*)r);
+}
 CRDT_LWW_Register* dupCrdtLWWRegister(CRDT_LWW_Register *val);
 CRDT_Register* dupCrdtRegister(CRDT_Register *val) {
     return (CRDT_Register*)dupCrdtLWWRegister((CRDT_LWW_Register*)val);
@@ -128,7 +141,6 @@ CRDT_LWW_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_LWW_RegisterTombstone
 CRDT_RegisterTombstone* mergeRegisterTombstone(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other, int* compare) {
     return (CRDT_RegisterTombstone*)mergeLWWRegisterTombstone((CRDT_LWW_RegisterTombstone*)target, (CRDT_LWW_RegisterTombstone*)other, compare);
 }
-void *createCrdtLWWCrdtRegister(void);
 void* createCrdtLWWCrdtRegisterTombstone(void);
 void freeCrdtLWWCrdtRegisterTombstone(void *obj);
 void freeCrdtLWWCrdtRegister(void *obj);
@@ -140,10 +152,7 @@ void crdtRegisterUpdateLastVC(void *data, VectorClock vc) {
     CRDT_Register* reg = (CRDT_Register*) data;
     updateLastVCLWWRegister(reg, vc);
 }
-//create
-void *createCrdtRegister(void) {
-    return createCrdtLWWCrdtRegister();
-}
+
 CRDT_RegisterTombstone* createCrdtRegisterTombstone() {
     return (CRDT_RegisterTombstone*)createCrdtLWWRegisterTombstone();
 }
@@ -213,6 +222,15 @@ int crdtRegisterTombstoneGc(CrdtTombstone* target, VectorClock clock) {
 int isExpireLWWTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);
 int isExpireCrdtTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
     return isExpireLWWTombstone(tombstone, meta);
+}
+sds crdtRegisterInfoFromMetaAndValue(CrdtMeta* meta, sds value) {
+    CRDT_LWW_Register c;
+    initLWWReigster(&c);
+    c.gid = getMetaGid(meta);
+    c.timestamp = getMetaTimestamp(meta);
+    c.vectorClock = getMetaVectorClock(meta);
+    c.value = value;
+    return crdtLWWRegisterInfo(&c);
 }
 
 #endif //XREDIS_CRDT_CRDT_LWW_REGISTER_H

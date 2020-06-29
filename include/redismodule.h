@@ -157,6 +157,7 @@ typedef struct RedisModuleTypeMethods {
 #define REDISMODULE_API_FUNC(x) (*x)
 
 size_t REDISMODULE_API_FUNC(RedisModule_UsedMemory)();
+size_t REDISMODULE_API_FUNC(RedisModule_ZmallocNum)();
 void *REDISMODULE_API_FUNC(RedisModule_Alloc)(size_t bytes);
 void *REDISMODULE_API_FUNC(RedisModule_Realloc)(void *ptr, size_t bytes);
 void REDISMODULE_API_FUNC(RedisModule_Free)(void *ptr);
@@ -171,6 +172,13 @@ int REDISMODULE_API_FUNC(RedisModule_ReplyWithLongLong)(RedisModuleCtx *ctx, lon
 int REDISMODULE_API_FUNC(RedisModule_GetSelectedDb)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_SelectDb)(RedisModuleCtx *ctx, int newid);
 void *REDISMODULE_API_FUNC(RedisModule_OpenKey)(RedisModuleCtx *ctx, RedisModuleString *keyname, int mode);
+void *REDISMODULE_API_FUNC(RedisModule_DbAddOrFind)(RedisModuleCtx *ctx, RedisModuleString *keyname, RedisModuleType* type);
+void *REDISMODULE_API_FUNC(RedisModule_DbEntryGetVal)(RedisModuleCtx *ctx, void* de);
+void *REDISMODULE_API_FUNC(RedisModule_DbDelete)(RedisModuleCtx *ctx, void* keyname);
+void *REDISMODULE_API_FUNC(RedisModule_DbEntrySetVal)(RedisModuleCtx *ctx, RedisModuleString* keyname, void* de, RedisModuleType* type, void* val);
+
+void *REDISMODULE_API_FUNC(RedisModule_DbGetValue)(RedisModuleCtx *ctx, RedisModuleString *keyname, RedisModuleType* type,int* error);
+int REDISMODULE_API_FUNC(RedisModule_DbSetValue)(RedisModuleCtx *ctx, RedisModuleString *keyname, RedisModuleType* type,void* val);
 void *REDISMODULE_API_FUNC(RedisModule_GetKey)(void *db, RedisModuleString *keyname, int mode);
 uint64_t REDISMODULE_API_FUNC(RedisModule_GetModuleTypeId)(RedisModuleType* moduletype);
 int REDISMODULE_API_FUNC(RedisModule_SaveModuleValue)(void* rio, RedisModuleType* moduletype, void* data);
@@ -196,6 +204,7 @@ RedisModuleString *REDISMODULE_API_FUNC(RedisModule_CreateStringFromString)(Redi
 RedisModuleString *REDISMODULE_API_FUNC(RedisModule_CreateStringPrintf)(RedisModuleCtx *ctx, const char *fmt, ...);
 void REDISMODULE_API_FUNC(RedisModule_FreeString)(RedisModuleCtx *ctx, RedisModuleString *str);
 const char *REDISMODULE_API_FUNC(RedisModule_StringPtrLen)(const RedisModuleString *str, size_t *len);
+int REDISMODULE_API_FUNC(RedisModule_ReplyWithOk)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithError)(RedisModuleCtx *ctx, const char *err);
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithSimpleString)(RedisModuleCtx *ctx, const char *msg);
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithArray)(RedisModuleCtx *ctx, long len);
@@ -217,6 +226,8 @@ int REDISMODULE_API_FUNC(RedisModule_ReplicateStraightForward)(RedisModuleCtx *c
 int REDISMODULE_API_FUNC(RedisModule_CrdtReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_CrdtReplicateAlsoNormReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_ReplicationFeedAllSlaves)(int dbId, const char *cmdname, const char *fmt, ...);
+int REDISMODULE_API_FUNC(RedisModule_ReplicationFeedStringToAllSlaves)(int dbId, void* cmd, size_t cmdlen);
+int REDISMODULE_API_FUNC(RedisModule_ReplicationFeedRobjToAllSlaves)(int dbId, RedisModuleString* cmd);
 int REDISMODULE_API_FUNC(RedisModule_IncrCrdtConflict)(int type);
 int REDISMODULE_API_FUNC(RedisModule_CrdtMultiWrappedReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 const char *REDISMODULE_API_FUNC(RedisModule_CallReplyStringPtr)(RedisModuleCallReply *reply, size_t *len);
@@ -310,6 +321,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     RedisModule_GetApi = (int (*)(const char *, void *)) (unsigned long)getapifuncptr;
     REDISMODULE_GET_API(Alloc);
     REDISMODULE_GET_API(UsedMemory);
+    REDISMODULE_GET_API(ZmallocNum);
     REDISMODULE_GET_API(Calloc);
     REDISMODULE_GET_API(Free);
     REDISMODULE_GET_API(Realloc);
@@ -326,12 +338,19 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(ReplyWithStringBuffer);
     REDISMODULE_GET_API(ReplyWithString);
     REDISMODULE_GET_API(ReplyWithNull);
+    REDISMODULE_GET_API(ReplyWithOk);
     REDISMODULE_GET_API(ReplyWithCallReply);
     REDISMODULE_GET_API(ReplyWithDouble);
     REDISMODULE_GET_API(ReplySetArrayLength);
     REDISMODULE_GET_API(GetSelectedDb);
     REDISMODULE_GET_API(SelectDb);
     REDISMODULE_GET_API(OpenKey);
+    REDISMODULE_GET_API(DbAddOrFind);
+    REDISMODULE_GET_API(DbDelete);
+    REDISMODULE_GET_API(DbEntryGetVal);
+    REDISMODULE_GET_API(DbEntrySetVal);
+    REDISMODULE_GET_API(DbGetValue);
+    REDISMODULE_GET_API(DbSetValue);
     REDISMODULE_GET_API(GetKey);
     REDISMODULE_GET_API(SaveModuleValue);
     REDISMODULE_GET_API(GetModuleTypeId);
@@ -370,6 +389,8 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(CrdtReplicate);
     REDISMODULE_GET_API(CrdtReplicateAlsoNormReplicate);
     REDISMODULE_GET_API(ReplicationFeedAllSlaves);
+    REDISMODULE_GET_API(ReplicationFeedStringToAllSlaves);
+    REDISMODULE_GET_API(ReplicationFeedRobjToAllSlaves);
     REDISMODULE_GET_API(IncrCrdtConflict);
     REDISMODULE_GET_API(CrdtMultiWrappedReplicate);
     REDISMODULE_GET_API(DeleteKey);

@@ -110,10 +110,11 @@ CRDT_Hash* dupCrdtLWWHash(void* data);
 CRDT_Hash* dupCrdtHash(CRDT_Hash* data) {
     return dupCrdtLWWHash(data);
 }
-VectorClock getCrdtLWWHashLastVc(CRDT_LWW_Hash* r);
-VectorClock getCrdtHashLastVc(CRDT_Hash* data) {
-    return getCrdtLWWHashLastVc((CRDT_LWW_Hash*)data);
-}
+// VectorClock getCrdtLWWHashLastVc(CRDT_LWW_Hash* r);
+// VectorClock getCrdtHashLastVc(CRDT_Hash* data) {
+//     return getCrdtLWWHashLastVc((CRDT_LWW_Hash*)data);
+// }
+
 
 void updateLastVCLWWHash(void* data, VectorClock vc);
 void updateLastVCHash(CRDT_Hash* data, VectorClock vc) {

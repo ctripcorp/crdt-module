@@ -29,6 +29,26 @@ CrdtMeta* getCrdtLWWRegisterMeta(CRDT_LWW_Register* r) {
     if(isNullVectorClock(r->vectorClock)) return NULL;
     return (CrdtMeta*)r;
 }
+int appendCrdtLWWRegisterMeta(CRDT_LWW_Register* r, CrdtMeta* other, int compare) {
+    if(other == NULL) return COMPARE_META_VECTORCLOCK_LT;
+    CrdtMeta* target = getCrdtLWWRegisterMeta(r);
+    if(target == NULL) {
+        setCrdtLWWRegisterGid(r, getMetaGid(other));
+        setCrdtLWWRegisterTimestamp(r, getMetaTimestamp(other));
+        setCrdtLWWRegisterVectorClock(r, dupVectorClock(getMetaVectorClock(other)));
+        return COMPARE_META_VECTORCLOCK_GT;
+    } else {
+        if(compare < COMPARE_META_GID_LT) compare = compareCrdtMeta(target, other);
+        VectorClock vc = vectorClockMerge(getMetaVectorClock(target), getMetaVectorClock(other));
+        setCrdtLWWRegisterVectorClock(r, vc);
+        if(compare >= COMPARE_META_EQUAL) {
+            setCrdtLWWRegisterGid(r, getMetaGid(other));
+            setCrdtLWWRegisterTimestamp(r, getMetaTimestamp(other));
+        }
+        return compare;
+    }
+    
+}
 void setCrdtLWWRegisterMeta(CRDT_LWW_Register* r, CrdtMeta* meta) {
     if(meta == NULL) {
         setCrdtLWWRegisterGid(r, -1);
@@ -39,7 +59,7 @@ void setCrdtLWWRegisterMeta(CRDT_LWW_Register* r, CrdtMeta* meta) {
         setCrdtLWWRegisterTimestamp(r, getMetaTimestamp(meta));
         setCrdtLWWRegisterVectorClock(r, dupVectorClock(getMetaVectorClock(meta)));
     }
-    freeCrdtMeta(meta);
+    // freeCrdtMeta(meta);
 }
 sds getCrdtLWWRegisterValue(CRDT_LWW_Register* r) {
     return r->value;
@@ -101,8 +121,7 @@ void setCrdtLWWRegisterTombstoneMeta(CRDT_LWW_RegisterTombstone* t, CrdtMeta* me
     }
     freeCrdtMeta(meta);
 }
-void *createCrdtLWWCrdtRegister(void) {
-    CRDT_LWW_Register *crdtRegister = RedisModule_Alloc(sizeof(CRDT_LWW_Register));
+void initLWWReigster(CRDT_LWW_Register *crdtRegister) {
     crdtRegister->type = 0;
     setType((CrdtObject*)crdtRegister, CRDT_DATA);
     setDataType((CrdtObject*)crdtRegister, CRDT_REGISTER_TYPE);
@@ -110,11 +129,15 @@ void *createCrdtLWWCrdtRegister(void) {
     setCrdtLWWRegisterTimestamp(crdtRegister, 0);
     setCrdtLWWRegisterGid(crdtRegister, 0);
     crdtRegister->value = NULL;
+}
+void* createCrdtRegister(void) {
+    CRDT_LWW_Register *crdtRegister = RedisModule_Alloc(sizeof(CRDT_LWW_Register));
+    initLWWReigster(crdtRegister);
     return crdtRegister;
 }
 CRDT_LWW_Register* dupCrdtLWWRegister(CRDT_LWW_Register *target) {
-    CRDT_LWW_Register* result = createCrdtLWWCrdtRegister();
-    setCrdtLWWRegisterMeta(result, dupMeta(getCrdtLWWRegisterMeta(target)));
+    CRDT_LWW_Register* result = createCrdtRegister();
+    setCrdtLWWRegisterMeta(result, getCrdtLWWRegisterMeta(target));
     setCrdtLWWRegisterValue(result, sdsdup(getCrdtLWWRegisterValue(target)));
     return result;
 }
@@ -122,7 +145,8 @@ CRDT_LWW_Register* mergeLWWRegister(CRDT_LWW_Register* target, CRDT_LWW_Register
     if(target == NULL) {return dupCrdtLWWRegister(other);}
     if(other == NULL) {return dupCrdtLWWRegister(target);}
     CRDT_LWW_Register* result = dupCrdtLWWRegister(target);
-    setCrdtLWWRegisterMeta(result, mergeMeta(getCrdtLWWRegisterMeta(target), getCrdtLWWRegisterMeta(other), compare));
+    *compare = appendCrdtLWWRegisterMeta(result, getCrdtLWWRegisterMeta(other), COMPARE_META_GID_LT - 1);
+    // setCrdtLWWRegisterMeta(result, mergeMeta(getCrdtLWWRegisterMeta(target), getCrdtLWWRegisterMeta(other), compare));
     if(*compare > COMPARE_META_EQUAL) {
         setCrdtLWWRegisterValue(result, sdsdup(getCrdtLWWRegisterValue(other)));
     }
@@ -225,12 +249,19 @@ sds getLWWCrdtRegister(CRDT_Register* r) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
     return getCrdtLWWRegisterValue(data);
 }
-
-int setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+void crdtRegisterSetValue(CRDT_Register* r, CrdtMeta* meta, sds value) {
+// void setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
-    int compare = 0;
-    setCrdtLWWRegisterMeta(data, mergeMeta(getCrdtLWWRegisterMeta(data), meta, &compare));
-    if(compare > COMPARE_META_EQUAL) {
+    // int compare = 0;
+    // setCrdtLWWRegisterMeta(data, mergeMeta(getCrdtLWWRegisterMeta(data), meta, &compare));
+    setCrdtLWWRegisterMeta(data, meta);
+    setCrdtLWWRegisterValue(data, sdsdup(value));
+}
+// int appendLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) {
+int crdtRegisterTryUpdate(CRDT_Register* r, CrdtMeta* meta, sds value, int compare) {
+    CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
+    compare = appendCrdtLWWRegisterMeta(data, meta, compare);
+    if(compare >= COMPARE_META_EQUAL) {
         setCrdtLWWRegisterValue(data, sdsdup(value));
     }
     return compare;

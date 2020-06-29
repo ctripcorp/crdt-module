@@ -57,8 +57,8 @@ typedef CrdtObject CRDT_RegisterTombstone ;
 typedef struct CRDT_Register* (*dupCrdtRegisterFunc)(CRDT_Register*);
 typedef int (*delCrdtRegisterFunc)(CRDT_Register*, CrdtMeta*);
 typedef sds (*getCrdtRegisterFunc)(CRDT_Register*);
-typedef struct CrdtRegisterValue* (*getValueCrdtRegisterFunc)(CRDT_Register*);
-typedef int (*setCrdtRegisterFunc)(CRDT_Register* target, CrdtMeta* meta, sds value);
+typedef struct crdtRegisterSetValue* (*getValueCrdtRegisterFunc)(CRDT_Register*);
+typedef int (*crdtRegisterSetValueFunc)(CRDT_Register* target, CrdtMeta* meta, sds value);
 typedef sds (*getInfoCrdtRegisterFunc)(CRDT_Register* target);
 typedef struct CRDT_Register* (*filterCrdtRegisterFunc)(CRDT_Register* target,int gid, long long logic_time);
 typedef int (*cleanCrdtRegisterFunc)(CRDT_Register* target, CRDT_RegisterTombstone* tombstone);
@@ -69,7 +69,7 @@ typedef struct CrdtRegisterMethod {
     delCrdtRegisterFunc del;
     getCrdtRegisterFunc get;
     getValueCrdtRegisterFunc getValue;
-    setCrdtRegisterFunc set;
+    crdtRegisterSetValueFunc set;
     getInfoCrdtRegisterFunc getInfo;
     filterCrdtRegisterFunc filter;
     mergeCrdtRegisterFunc merge;
@@ -94,9 +94,10 @@ typedef struct CrdtRegisterTombstoneMethod {
 
 
 void *createCrdtRegister(void);
-
+void initRegister(CRDT_Register *crdtRegister);
 void freeCrdtRegister(void *crdtRegister);
-int setCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value) ;
+void crdtRegisterSetValue(CRDT_Register* r, CrdtMeta* meta, sds value) ;
+int crdtRegisterTryUpdate(CRDT_Register* r, CrdtMeta* meta, sds value, int compare);
 int delCrdtRegister(CRDT_Register* current, CrdtMeta* meta);
 int initRegisterModule(RedisModuleCtx *ctx);
 
@@ -134,12 +135,12 @@ void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
 
 sds crdtRegisterInfo(CRDT_Register *crdtRegister);
+sds crdtRegisterInfoFromMetaAndValue(CrdtMeta* meta, sds value);
 CRDT_Register* mergeRegister(CRDT_Register* target, CRDT_Register* other, int* conflict);
 sds getCrdtRegisterSds(CRDT_Register* r);
 CRDT_Register* addRegister(void *tombstone, CrdtMeta* meta, sds value);
-int tryUpdateRegister(void* data, CrdtMeta* meta, CRDT_Register* reg, sds value);
 int delCrdtRegister(CRDT_Register* current, CrdtMeta* meta);
-
+CrdtMeta* getCrdtRegisterLastMeta(CRDT_Register* target);
 void crdtRegisterTombstoneDigestFunc(RedisModuleDigest *md, void *value);
 size_t crdtRegisterTombstoneMemUsageFunc(const void *value);
 void freeCrdtRegisterTombstone(void *obj);

@@ -202,4 +202,6 @@ int gcCrdtHashTombstone(void* data, VectorClock clock);
 CrdtMeta* getMaxDelCrdtHashTombstone(void* data);
 int changeCrdtHashTombstone(void* data, CrdtMeta* meta);
 
+void setCrdtHashLastVc(CRDT_Hash* data, VectorClock vc);
+void mergeCrdtHashLastVc(CRDT_Hash* data, VectorClock vc);
 #endif //XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H

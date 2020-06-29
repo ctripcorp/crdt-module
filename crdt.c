@@ -38,6 +38,7 @@
 #include "crdt_pubsub.h"
 #include "crdt_expire.h"
 #include "ctrip_crdt_common.h"
+#include "crdt_statistics.h"
 #include <stdlib.h>
 #include <stdio.h>
 #define CRDT_API_VERSION 1
@@ -258,6 +259,9 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
     if (RedisModule_CreateCommand(ctx,"crdt.debug",
                                   crdtDebugCommand,"write",1,-1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"crdt.statistics",
+                                  statisticsCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
