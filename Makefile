@@ -21,8 +21,8 @@ else
 	SHOBJ_CFLAGS ?= -dynamic -fno-common -g -ggdb
 	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup
 endif
-CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -O0 -g -fPIC -lc -lm -std=gnu99  -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API
-ifeq ($(TEST),tcl)
+CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -O0 -g -fPIC -lc -lm -std=gnu99  -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API $(REDIS_CFLAGS)
+ifeq ($(uname_S),Darwin)
 	CFLAGS+= -DTCL_TEST
 endif
 all: rmutil crdt.so
@@ -51,10 +51,10 @@ crdt_statistics.o: crdt_statistics.c
 # crdt.so: rmutil crdt.o crdt_register.o ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o
 	# $(LD) -o $@ crdt.o crdt_register.o ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
 crdt.so: rmutil crdt_statistics.o crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o 
-	$(LD) -o $@ crdt_statistics.o crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
+	$(CC) -o $@ crdt_statistics.o crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc $(REDIS_CFLAGS)
 
 clean:
-	rm -rf *.xo crdt.so *.o *.pyc *.so
+	rm -rf *.xo crdt.so *.o *.pyc *.so *.gcno *.gcda
 
 
 # tests
@@ -79,3 +79,6 @@ integration_test:
 # all tests
 test: test_crdt integration_test
 .PHONY: test
+
+gcov:
+	$(MAKE) REDIS_CFLAGS="-fprofile-arcs -ftest-coverage -DCOVERAGE_TEST" REDIS_LDFLAGS="-fprofile-arcs -ftest-coverage"
