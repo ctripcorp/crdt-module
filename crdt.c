@@ -260,6 +260,7 @@ int dataCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         sdsfree(tombstoneInfo);
     }
     RedisModule_CloseKey(moduleKey);
+    return CRDT_OK;
 }
 /* This function must be present on each Redis module. It is used in order to
  * register the commands into the Redis server. */

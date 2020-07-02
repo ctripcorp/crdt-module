@@ -52,9 +52,10 @@ VectorClock getMetaVectorClock(CrdtMeta* meta) {
     if(meta == NULL) return newVectorClock(0);
     return meta->vectorClock;
 }
+#define VC2LL(a) *(long long*)((void*)&a)
 long long getMetaVectorClockToLongLong(CrdtMeta* meta) {
     if(meta == NULL) return 0;
-    return *(long long*)(&meta->vectorClock);
+    return VC2LL(meta->vectorClock);
 }
 int isConflictCommon(int result) {
     if(result > COMPARE_META_VECTORCLOCK_GT || result < COMPARE_META_VECTORCLOCK_LT) {

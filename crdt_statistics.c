@@ -103,10 +103,10 @@ size_t sum_memory() {
 int memoryCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
    char infobuf[999]; 
     size_t infolen = sprintf(infobuf, 
-        "module-memory: %lld\r\n"
-        "key-memory: %lld\r\n"
-        "crdt-key-size: %d\r\n"
-        "moduleValue-memory: %lld\r\n",
+        "module-memory: %zu\r\n"
+        "key-memory: %zu\r\n"
+        "crdt-key-size: %zu\r\n"
+        "moduleValue-memory: %zu\r\n",
         RedisModule_ModuleMemory(),
         RedisModule_ModuleAllKeyMemory(),
         RedisModule_ModuleAllKeySize(),

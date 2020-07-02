@@ -3,7 +3,7 @@
 #include <string.h>
 
 int ll2str(char* s, long long value, int len) {
-    char *p, aux;
+    char *p;
     unsigned long long v;
 
     /* Generate the string representation, this method produces
@@ -45,7 +45,7 @@ size_t feedValStrLen(char *buf, int num) {
     len += _feedLongLong(buf + len, (long long)num);
     return len;
 }
-size_t feedValFromString(char *buf, char* str) {
+size_t feedValFromString(char *buf, const char* str) {
     // return sprintf(buf, "%s\r\n",str);
     size_t len = 0;
     len += feedBuf(buf + len, str);
@@ -55,7 +55,7 @@ size_t feedValFromString(char *buf, char* str) {
     // return strlen(src) + 2;
 }
 
-size_t feedStr2Buf(char *buf, char* str, size_t strlen) {
+size_t feedStr2Buf(char *buf, const char* str, size_t strlen) {
     size_t len = 0;
     len += feedValStrLen(buf + len, strlen);
     len += feedValFromString(buf + len , str);
@@ -86,7 +86,7 @@ size_t feedGid2Buf(char *buf, int gid) {
     return len;
 }
 // const char* kv_template = "$%d\r\n%s\r\n$%d\r\n%s\r\n";
-size_t feedKV2Buf(char *buf,char* keystr, size_t keylen, char* valstr, size_t vallen) {
+size_t feedKV2Buf(char *buf,const char* keystr, size_t keylen,const char* valstr, size_t vallen) {
     size_t len = 0;
     len += feedStr2Buf(buf + len, keystr, keylen);
     len += feedStr2Buf(buf + len, valstr, vallen);
@@ -232,14 +232,14 @@ VectorClock rdbLoadVectorClock(RedisModuleIO *rdb) {
     // sdsfree(vclockSds);
     vcStr[vcLength] = '\0';
     VectorClock result = stringToVectorClock(vcStr);
-    zfree(vcStr);
+    RedisModule_ZFree(vcStr);
     return result;
 }
 int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock vectorClock) {
     // sds vclockStr = vectorClockToSds(vectorClock);
     size_t len = vectorClockToStringLen(vectorClock);
     char buf[len];
-    vectorClockToString(&buf, vectorClock);
+    vectorClockToString(buf, vectorClock);
     RedisModule_SaveStringBuffer(rdb, buf, len);
     // sdsfree(vclockStr);
     return CRDT_OK;

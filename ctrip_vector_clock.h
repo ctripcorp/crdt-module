@@ -34,7 +34,9 @@
 #define REDIS_VECTOR_CLOCK_H
 
 #include "include/rmutil/sds.h"
+#include "include/rmutil/util.h"
 #include "include/redismodule.h"
+#include "util.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
