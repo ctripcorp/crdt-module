@@ -34,7 +34,7 @@
  */
 
 #include <stdint.h>
-
+#include <redismodule.h>
 #ifndef __DICT_H
 #define __DICT_H
 
@@ -43,7 +43,10 @@
 
 /* Unused arguments generate annoying warnings... */
 #define DICT_NOTUSED(V) ((void) V)
-
+#define dict_malloc(size) RedisModule_Alloc(size)
+#define dict_calloc(count) RedisModule_Calloc(count, 1)
+#define dict_realloc(ptr, size) RedisModule_Realloc(ptr, size)
+#define dict_free(ptr) RedisModule_Free(ptr)
 typedef struct dictEntry {
     void *key;
     union {
