@@ -227,10 +227,8 @@ void *RdbLoadLWWCrdtRegister(RedisModuleIO *rdb, int encver) {
     setCrdtLWWRegisterVectorClock(crdtRegister, rdbLoadVectorClock(rdb));
 
     size_t sdsLength;
-    char* str = RedisModule_LoadStringBuffer(rdb, &sdsLength);
-    sds val = sdsnewlen(str, sdsLength);
+    sds val = RedisModule_LoadSds(rdb, &sdsLength);
     setCrdtLWWRegisterValue(crdtRegister, val);
-    RedisModule_ZFree(str);
     return crdtRegister;
 }
 
