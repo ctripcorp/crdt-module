@@ -76,8 +76,6 @@ CrdtObject *crdtRegisterMerge(CrdtObject *currentVal, CrdtObject *value) {
     if(currentVal == NULL && value == NULL) {
         return NULL;
     }
-    CRDT_Register *current = (CRDT_Register*) currentVal;
-    CRDT_Register *v = (CRDT_Register*) value;
     int compare = 0;
     CrdtObject* result = mergeRegister(currentVal, value, &compare);
     if(isConflictCommon(compare)) {
@@ -359,7 +357,7 @@ const char* crdt_set_head = "*7\r\n$8\r\nCRDT.SET\r\n";
 const char* crdt_set_no_expire_head = "*6\r\n$8\r\nCRDT.SET\r\n";
 //CRDT.SET key value gid time vc expire
 const size_t crdt_set_basic_str_len = 18 + 2 *REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + REPLICATION_MAX_LONGLONG_LEN;
-size_t replicationFeedCrdtSetCommand(RedisModuleCtx *ctx,char* cmdbuf, char* keystr, size_t keylen, char* valstr, size_t vallen, CrdtMeta* meta, VectorClock vc, long long expire_time) {
+size_t replicationFeedCrdtSetCommand(RedisModuleCtx *ctx,char* cmdbuf, const char* keystr, size_t keylen,const char* valstr, size_t vallen, CrdtMeta* meta, VectorClock vc, long long expire_time) {
     size_t cmdlen = 0;
     if(expire_time > -2) {
         cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_set_head);
@@ -372,11 +370,12 @@ size_t replicationFeedCrdtSetCommand(RedisModuleCtx *ctx,char* cmdbuf, char* key
         cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, expire_time);
     }
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
+    return cmdlen;
 }
 
 const char* crdt_mset_head = "$9\r\nCRDT.MSET\r\n";
 const size_t crdt_mset_basic_str_len = REPLICATION_ARGC_LEN + 15 + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN;
-int replicationFeedCrdtMSetCommand(RedisModuleCtx *ctx, RedisModuleString** argv, char *cmdbuf, CrdtMeta* mset_meta, int argc, CRDT_Register** vals, char**datas, size_t* datalens) {
+int replicationFeedCrdtMSetCommand(RedisModuleCtx *ctx, RedisModuleString** argv, char *cmdbuf, CrdtMeta* mset_meta, int argc, CRDT_Register** vals, const char**datas, size_t* datalens) {
     size_t cmdlen = 0;
     cmdlen += feedArgc(cmdbuf + cmdlen, argc * 3  + 3);
     cmdlen += feedBuf(cmdbuf + cmdlen, crdt_mset_head);
@@ -423,12 +422,12 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc % 3 != 0) return RedisModule_WrongArity(ctx);
     long long gid;
     if ((redisModuleStringToGid(ctx, argv[1],&gid) != REDISMODULE_OK)) {
-        return NULL;
+        return CRDT_ERROR;
     }
     long long timestamp;
     if ((RedisModule_StringToLongLong(argv[2],&timestamp) != REDISMODULE_OK)) {
         RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
-        return NULL;
+        return CRDT_ERROR;
     }
     int result = 0;
     for(int i = 3; i< argc; i+=3) {
@@ -469,7 +468,7 @@ int msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     int index = 0;
     CRDT_Register* vals[arraylen];
 
-    char* keyOrValStr[arraylen*2];
+    const char* keyOrValStr[arraylen*2];
     size_t keyOrValStrLen[arraylen*2];
     int budget_key_val_strlen = 0;
     for (int i = 1; i < argc; i+=2) {
@@ -511,7 +510,6 @@ int msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         write_backlog_end();
     #endif
     freeIncrMeta(&mset_meta);
-error:
     return CRDT_OK;
 }
 int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags, RedisModuleString* key, RedisModuleString* val, RedisModuleString* expire, int unit, int sendtype) {
@@ -589,7 +587,6 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         send_event_end();
     #endif
     result = CRDT_OK;
-end:
         {
             #if defined(SET_STATISTICS) 
                 write_bakclog_start();

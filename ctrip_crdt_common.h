@@ -105,10 +105,12 @@ typedef struct CrdtObjectMethod {
 
 typedef VectorClock (*crdtGetLastVCFunc)(void* value);
 typedef void (*crdtUpdateLastVCFunc)(void* value,VectorClock data);
+typedef sds (*crdtInfoFunc)(void* value);
 typedef struct CrdtDataMethod {
     crdtGetLastVCFunc getLastVC;
     crdtUpdateLastVCFunc updateLastVC;
     crdtPropagateDelFunc propagateDel;
+    crdtInfoFunc info;
 } CrdtDataMethod;
 
 typedef struct CrdtTombstoneMethod {
@@ -116,6 +118,7 @@ typedef struct CrdtTombstoneMethod {
     crdtFilterFunc filter;
     crdtGcFunc gc;
     crdtPurageFunc purage;
+    crdtInfoFunc info;
 } CrdtTombstoneMethod;
 
 

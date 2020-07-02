@@ -193,7 +193,7 @@ static int addCrdtHashFieldToReply(RedisModuleCtx *ctx, CRDT_Hash *crdtHash, Red
  * -------------------------------------------------------------------------- */
 const char* crdt_hset_head = "$9\r\nCRDT.HSET\r\n";
 const size_t crdt_hset_basic_str_len = 15 + REPLICATION_ARGC_LEN + REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN +  REPLICATION_MAX_LONGLONG_LEN;
-size_t replicationFeedCrdtHsetCommand(RedisModuleCtx *ctx,char* cmdbuf, char* keystr, size_t keylen, CrdtMeta* meta, VectorClock vc,int argc, char** fieldAndValStr, int* fieldAndValStrLen) {
+size_t replicationFeedCrdtHsetCommand(RedisModuleCtx *ctx,char* cmdbuf,const char* keystr, size_t keylen, CrdtMeta* meta, VectorClock vc,int argc, const char** fieldAndValStr, int* fieldAndValStrLen) {
     size_t cmdlen = 0;
     cmdlen +=  feedArgc(cmdbuf, argc + 6);
     cmdlen += feedBuf(cmdbuf+ cmdlen, crdt_hset_head);
@@ -292,11 +292,11 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         size_t alllen = crdt_hset_basic_str_len + keylen + fieldAndValAllStrLen;
         if(alllen > MAXSTACKSIZE) { 
             char *cmdbuf = RedisModule_Alloc(alllen);
-            size_t cmdlen = replicationFeedCrdtHsetCommand(ctx, cmdbuf,  keystr, keylen, &meta, getCrdtHashLastVc(current),argc - 2, fieldAndValStr, fieldAndValStrLen);
+            replicationFeedCrdtHsetCommand(ctx, cmdbuf,  keystr, keylen, &meta, getCrdtHashLastVc(current),argc - 2, fieldAndValStr, fieldAndValStrLen);
             RedisModule_Free(cmdbuf);
         }else {
             char cmdbuf[alllen]; 
-            size_t cmdlen = replicationFeedCrdtHsetCommand(ctx, cmdbuf, keystr, keylen, &meta, getCrdtHashLastVc(current),argc - 2, fieldAndValStr, fieldAndValStrLen);
+            replicationFeedCrdtHsetCommand(ctx, cmdbuf, keystr, keylen, &meta, getCrdtHashLastVc(current),argc - 2, fieldAndValStr, fieldAndValStrLen);
         }
     #if defined(HSET_STATISTICS) 
         write_backlog_end();
@@ -882,7 +882,7 @@ int RdbLoadDict(RedisModuleIO *rdb, int encver, dict *map, RedisModuleTypeLoadFu
         value = func(rdb, encver);
         /* Add pair to hash table */
         dictAdd(map, field, value);
-        RedisModule_Free(str);
+        RedisModule_ZFree(str);
     }
     return CRDT_OK;
 }

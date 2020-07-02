@@ -93,3 +93,26 @@ int statisticsCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_ReplyWithStringBuffer(ctx, infobuf, infolen);
     return REDISMODULE_OK;
 }
+/**
+ * 
+ *       about memory 
+ **/
+size_t sum_memory() {
+   return RedisModule_ModuleMemory() + RedisModule_ModuleAllKeyMemory() + RedisModule_ModuleAllKeySize() * RedisModule_GetModuleValueMemorySize();
+}
+int memoryCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+   char infobuf[999]; 
+    size_t infolen = sprintf(infobuf, 
+        "module-memory: %zu\r\n"
+        "key-memory: %zu\r\n"
+        "crdt-key-size: %zu\r\n"
+        "moduleValue-memory: %zu\r\n",
+        RedisModule_ModuleMemory(),
+        RedisModule_ModuleAllKeyMemory(),
+        RedisModule_ModuleAllKeySize(),
+        RedisModule_ModuleAllKeySize() * RedisModule_GetModuleValueMemorySize()
+    );
+    infobuf[infolen] = '\0';
+    RedisModule_ReplyWithStringBuffer(ctx, infobuf, infolen);
+    return REDISMODULE_OK;
+}

@@ -114,27 +114,31 @@ static CrdtObjectMethod RegisterCommonMethod = {
     .merge = crdtRegisterMerge,
     .filter = crdtRegisterFilter,
 };
+sds crdtRegisterInfo(void *crdtRegister);
 static CrdtDataMethod RegisterDataMethod = {
     .propagateDel = crdtRegisterDelete,
     .getLastVC = getCrdtRegisterLastVc,
     .updateLastVC = crdtRegisterUpdateLastVC,
+    .info = crdtRegisterInfo,
 };
 //register tombstone command methods
 CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other);
 CrdtTombstone* crdtRegisterTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time) ;
 int crdtRegisterTombstoneGc(CrdtTombstone* target, VectorClock clock);
+sds crdtRegisterTombstoneInfo(void *t);
 static CrdtTombstoneMethod RegisterTombstoneMethod = {
     .merge = crdtRegisterTombstoneMerge,
     .filter =  crdtRegisterTombstoneFilter,
     .gc = crdtRegisterTombstoneGc,
     .purage = crdtRegisterTombstonePurage,
+    .info = crdtRegisterTombstoneInfo,
 };
 
 
 void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
 
-sds crdtRegisterInfo(CRDT_Register *crdtRegister);
+
 sds crdtRegisterInfoFromMetaAndValue(CrdtMeta* meta, sds value);
 CRDT_Register* mergeRegister(CRDT_Register* target, CRDT_Register* other, int* conflict);
 sds getCrdtRegisterSds(CRDT_Register* r);

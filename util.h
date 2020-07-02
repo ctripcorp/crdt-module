@@ -48,7 +48,6 @@ int ld2string(char *buf, size_t len, long double value, int humanfriendly);
 sds getAbsolutePath(char *filename);
 int pathIsBaseName(char *path);
 sds moduleString2Sds(RedisModuleString *argv);
-
 #ifdef REDIS_TEST
 int utilTest(int argc, char **argv);
 #endif

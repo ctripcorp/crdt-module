@@ -58,9 +58,10 @@ CRDT_Register* mergeRegister(CRDT_Register* target, CRDT_Register* other, int* c
 /**
  * CRDT_Register Functions implementation code
 */
-sds crdtRegisterInfo(CRDT_Register *crdtRegister) {
+sds crdtRegisterInfo(void *crdtRegister) {
     return crdtLWWRegisterInfo((CRDT_LWW_Register*)crdtRegister);
 }
+
 
 
 
