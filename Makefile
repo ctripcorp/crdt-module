@@ -55,7 +55,7 @@ crdt.so: rmutil crdt_statistics.o crdt_expire.o crdt_pubsub.o crdt.o crdt_regist
 
 clean:
 	rm -rf *.xo crdt.so *.o *.pyc *.so *.gcno *.gcda
-
+	@(cd ./include && $(MAKE) clean)
 
 # tests
 
