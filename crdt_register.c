@@ -325,7 +325,7 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
                 RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][replace] key:{%s} prev: {%s}, income: {%s}, future: {%s}",
                             RedisModule_GetSds(key), prev, income, future);
             }else{
-                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][drop] prev: {%s}, income: {%s}, future: {%s}",
+                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][drop] key:{%s} prev: {%s}, income: {%s}, future: {%s}",
                             RedisModule_GetSds(key), prev, income, future);
             }
             RedisModule_IncrCrdtConflict(MODIFYCONFLICT | NONTYPECONFLICT);
