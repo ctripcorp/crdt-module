@@ -100,6 +100,7 @@ int crdtExpireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
         if (gid == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
         } else {
+            RedisModule_SlaveUpdateMasterInterOffset(ctx, gid);
             RedisModule_ReplicateVerbatim(ctx);
         }
     }
