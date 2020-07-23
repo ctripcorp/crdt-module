@@ -8,6 +8,20 @@ int setExpire(RedisModuleKey *key, long long expiteTime) {
     }
     return CRDT_OK;
 }
+const char* crdt_expireat_head = "*6\r\n$11\r\nCRDT.EXPIRE\r\n";
+//CRDT.EXPIRE key gid time  expireTime type
+const size_t crdt_expireat_basic_str_len = 23 + REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN * 3; 
+size_t replicationFeedCrdtExpireAtCommand(RedisModuleCtx* ctx, char* cmdbuf, const char* keystr, size_t keylen, int gid, long long nowTime, long long expireTime, int dataType) {
+    size_t cmdlen = 0;
+    cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_expireat_head);
+    cmdlen += feedStr2Buf(cmdbuf + cmdlen, keystr, keylen);
+    cmdlen += feedGid2Buf(cmdbuf + cmdlen, gid);
+    cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, nowTime);
+    cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, expireTime);
+    cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, dataType);
+    RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
+    return cmdlen;
+}
 int expireAt(RedisModuleCtx* ctx, RedisModuleString *key, long long expireTime) {
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, key, REDISMODULE_WRITE);
     CrdtData *data = NULL;
@@ -24,7 +38,20 @@ int expireAt(RedisModuleCtx* ctx, RedisModuleString *key, long long expireTime) 
     result = setExpire(moduleKey, expireTime);
 end:
     if(data != NULL) {
-        RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllll", key, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
+        size_t keylen = 0;
+        const char* keystr = RedisModule_StringPtrLen(key, &keylen);
+        size_t alllen = keylen  + crdt_expireat_basic_str_len;
+        if(keylen > MAXSTACKSIZE) {
+            char* cmdbuf = RedisModule_Alloc(alllen);
+            replicationFeedCrdtExpireAtCommand(ctx, cmdbuf, keystr, keylen, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
+            RedisModule_Free(cmdbuf);
+        } else {
+            char cmdbuf[alllen]; 
+            replicationFeedCrdtExpireAtCommand(ctx, cmdbuf, keystr, keylen, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
+        }
+
+
+        // RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllll", key, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
     }
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     return RedisModule_ReplyWithLongLong(ctx, result);
@@ -100,7 +127,7 @@ int crdtExpireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
         if (gid == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
         } else {
-            RedisModule_SlaveUpdateMasterInterOffset(ctx, gid);
+            RedisModule_UpdatePeerReplOffset(ctx, gid);
             RedisModule_ReplicateVerbatim(ctx);
         }
     }

@@ -68,7 +68,7 @@ int crdtSelectCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (gid == RedisModule_CurrentGid()) {
         RedisModule_CrdtReplicateVerbatim(ctx);
     } else {
-        RedisModule_SlaveUpdateMasterInterOffset(ctx, gid);
+        RedisModule_UpdatePeerReplOffset(ctx, gid);
         RedisModule_ReplicateVerbatim(ctx);
     }
     return RedisModule_ReplyWithOk(ctx);
@@ -130,7 +130,8 @@ VectorClock getVectorClockFromString(RedisModuleString *vectorClockStr) {
     size_t vcStrLength;
     const char *vcStr = RedisModule_StringPtrLen(vectorClockStr, &vcStrLength);
     sds vclockSds = sdsnewlen(vcStr, vcStrLength);
-    VectorClock vclock = sdsToVectorClock(vclockSds);
+    VectorClock vclock = stringToVectorClock(vclockSds);
+    // VectorClock vclock = sdsToVectorClock(vclockSds);
     sdsfree(vclockSds);
     return vclock;
 }

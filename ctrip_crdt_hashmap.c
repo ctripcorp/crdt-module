@@ -478,7 +478,7 @@ end:
         if (getMetaGid(meta) == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
         } else {
-            RedisModule_SlaveUpdateMasterInterOffset(ctx, getMetaGid(meta));
+            RedisModule_UpdatePeerReplOffset(ctx, getMetaGid(meta));
             RedisModule_ReplicateVerbatim(ctx);
         }
         freeCrdtMeta(meta);
@@ -608,7 +608,7 @@ end:
         if (getMetaGid(meta) == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
         } else {
-            RedisModule_SlaveUpdateMasterInterOffset(ctx, getMetaGid(meta));
+            RedisModule_UpdatePeerReplOffset(ctx, getMetaGid(meta));
             RedisModule_ReplicateVerbatim(ctx);
         }
         freeCrdtMeta(meta);
@@ -704,7 +704,7 @@ end:
         if (getMetaGid(meta) == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
         } else {
-            RedisModule_SlaveUpdateMasterInterOffset(ctx, getMetaGid(meta));
+            RedisModule_UpdatePeerReplOffset(ctx, getMetaGid(meta));
             RedisModule_ReplicateVerbatim(ctx);
         }
         freeCrdtMeta(meta);
