@@ -43,7 +43,36 @@
 #include <stdio.h>
 #define CRDT_API_VERSION 1
 
+//crdt.select <gid> <dbid>
+int crdtSelectCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    long id;
+    long long gid;
+    if ((RedisModule_StringToLongLong(argv[1],&gid) != REDISMODULE_OK)) {
+        RedisModule_ReplyWithError(ctx,"ERR invalid gid: must be a signed 64 bit integer");
+        return CRDT_ERROR;
+    }
+    if(RedisModule_CheckGid(gid) != REDISMODULE_OK) {
+        RedisModule_ReplyWithError(ctx,"gid must < 15");
+        return CRDT_ERROR;
+    }
 
+    if ((RedisModule_StringToLongLong(argv[2],&id) != REDISMODULE_OK)) {
+        RedisModule_ReplyWithError(ctx,"ERR invalid id: must be a signed 64 bit integer");
+        return CRDT_ERROR;
+    }
+    
+    if (RedisModule_SelectDb(ctx, id) != REDISMODULE_OK) {
+        RedisModule_ReplyWithError(ctx,"DB index is out of range");
+        return CRDT_ERROR;
+    } 
+    if (gid == RedisModule_CurrentGid()) {
+        RedisModule_CrdtReplicateVerbatim(ctx);
+    } else {
+        RedisModule_UpdatePeerReplOffset(ctx, gid);
+        RedisModule_ReplicateVerbatim(ctx);
+    }
+    return RedisModule_ReplyWithOk(ctx);
+}
 
 int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
@@ -101,7 +130,8 @@ VectorClock getVectorClockFromString(RedisModuleString *vectorClockStr) {
     size_t vcStrLength;
     const char *vcStr = RedisModule_StringPtrLen(vectorClockStr, &vcStrLength);
     sds vclockSds = sdsnewlen(vcStr, vcStrLength);
-    VectorClock vclock = sdsToVectorClock(vclockSds);
+    VectorClock vclock = stringToVectorClock(vclockSds);
+    // VectorClock vclock = sdsToVectorClock(vclockSds);
     sdsfree(vclockSds);
     return vclock;
 }
@@ -306,6 +336,9 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.dataInfo", 
                                 dataCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;                        
+        return REDISMODULE_ERR; 
+    if (RedisModule_CreateCommand(ctx, "crdt.select", 
+                                crdtSelectCommand, "write",  1, 2,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;                       
     return REDISMODULE_OK;
 }

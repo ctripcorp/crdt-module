@@ -281,6 +281,7 @@ end:
         if (getMetaGid(&del_meta) == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
         } else {
+            RedisModule_UpdatePeerReplOffset(ctx, getMetaGid(&del_meta));
             RedisModule_ReplicateVerbatim(ctx);
         }
         freeIncrMeta(&del_meta);
@@ -457,6 +458,7 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (gid == RedisModule_CurrentGid()) {
         RedisModule_CrdtReplicateVerbatim(ctx);
     } else {
+        RedisModule_UpdatePeerReplOffset(ctx, gid);
         RedisModule_ReplicateVerbatim(ctx);
     }
     return RedisModule_ReplyWithLongLong(ctx, result); 
@@ -734,6 +736,7 @@ end:
         if (getMetaGid(&meta) == RedisModule_CurrentGid()) {
             RedisModule_CrdtReplicateVerbatim(ctx);
         } else {
+            RedisModule_UpdatePeerReplOffset(ctx, getMetaGid(&meta));
             RedisModule_ReplicateVerbatim(ctx);
         }
         freeVectorClock(meta.vectorClock);
