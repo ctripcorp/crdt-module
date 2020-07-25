@@ -55,22 +55,22 @@ int crdtSelectCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         RedisModule_ReplyWithError(ctx,"gid must < 15");
         return CRDT_ERROR;
     }
-
     if ((RedisModule_StringToLongLong(argv[2],&id) != REDISMODULE_OK)) {
         RedisModule_ReplyWithError(ctx,"ERR invalid id: must be a signed 64 bit integer");
         return CRDT_ERROR;
     }
-    
-    if (RedisModule_SelectDb(ctx, id) != REDISMODULE_OK) {
-        RedisModule_ReplyWithError(ctx,"DB index is out of range");
-        return CRDT_ERROR;
-    } 
+    RedisModule_Debug(logLevel, "crdt.select %d", id);
     if (gid == RedisModule_CurrentGid()) {
         RedisModule_CrdtReplicateVerbatim(ctx);
     } else {
         RedisModule_UpdatePeerReplOffset(ctx, gid);
         RedisModule_ReplicateVerbatim(ctx);
     }
+    if (RedisModule_SelectDb(ctx, id) != REDISMODULE_OK) {
+        RedisModule_ReplyWithError(ctx,"DB index is out of range");
+        return CRDT_ERROR;
+    } 
+    
     return RedisModule_ReplyWithOk(ctx);
 }
 
