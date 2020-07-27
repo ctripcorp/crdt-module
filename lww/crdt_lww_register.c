@@ -156,18 +156,19 @@ void updateLastVCLWWRegister(CRDT_Register* r, VectorClock vc) {
     CRDT_LWW_Register* data = retrieveCrdtLWWRegister(r);
     setCrdtLWWRegisterVectorClock(data, vectorClockMerge(getCrdtLWWRegisterVectorClock(data), vc));
 }
-int purageLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
+int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
     CRDT_LWW_Register* current = retrieveCrdtLWWRegister(target);
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
-    if(compareCrdtMeta(getCrdtLWWRegisterMeta(current), getCrdtLWWRegisterTombstoneMeta(t)) > 0) {
-        return 1;
-    }
-    return 0;
+    return compareCrdtMeta(getCrdtLWWRegisterMeta(current), getCrdtLWWRegisterTombstoneMeta(t));
+}
+int purageLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
+    return compareTombstoneAndRegister(tombstone, target) > COMPARE_META_EQUAL;
 }
 int isExpireLWWTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
-    return compareCrdtMeta(meta, getCrdtLWWRegisterTombstoneMeta(t)) > COMPARE_META_EQUAL? CRDT_OK: CRDT_NO;
+    return compareCrdtMeta(meta, getCrdtLWWRegisterTombstoneMeta(t));
 }
+
 
 
 
@@ -192,15 +193,10 @@ CRDT_LWW_RegisterTombstone* retrieveCrdtLWWRegisterTombstone(void *data) {
     assert(result->parent.parent.dataType == CRDT_REGISTER_TYPE);
     return result;
 }
-int delLWWCrdtRegister(CRDT_Register* current, CrdtMeta* meta) {
+int compareLWWCrdtRegisterAndDelMeta(CRDT_Register* current, CrdtMeta* meta) {
     CRDT_LWW_Register* target = retrieveCrdtLWWRegister(current);
     int result = compareCrdtMeta(getCrdtLWWRegisterMeta(target), meta);
-    if(result > COMPARE_META_EQUAL) {
-        
-        return 1;
-    }
-    return 0;
-    
+    return result;
 }
 CRDT_LWW_RegisterTombstone* createCrdtLWWRegisterTombstone() {
     CRDT_LWW_RegisterTombstone *tombstone = RedisModule_Alloc(sizeof(CRDT_LWW_RegisterTombstone));
