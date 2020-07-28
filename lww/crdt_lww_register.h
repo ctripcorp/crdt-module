@@ -83,8 +83,8 @@ CRDT_Register* filterRegister(CRDT_Register* target, int gid, long long logic_ti
     return (CRDT_Register*)filterLWWRegister((CRDT_LWW_Register*)target, gid, logic_time);
 }
 int delLWWCrdtRegister(CRDT_Register* current, CrdtMeta* meta);
-int delCrdtRegister(CRDT_Register* current, CrdtMeta* meta) {
-    return delLWWCrdtRegister(current, meta);
+int compareCrdtRegisterAndDelMeta(CRDT_Register* current, CrdtMeta* meta) {
+    return compareLWWCrdtRegisterAndDelMeta(current, meta);
 }
 void RdbSaveLWWCrdtRegister(RedisModuleIO *rdb, void *value);
 void *RdbLoadLWWCrdtRegister(RedisModuleIO *rdb, int encver);
