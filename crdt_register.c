@@ -79,7 +79,7 @@ CrdtObject *crdtRegisterMerge(CrdtObject *currentVal, CrdtObject *value) {
     int compare = 0;
     CrdtObject* result = mergeRegister(currentVal, value, &compare);
     if(isConflictCommon(compare)) {
-        RedisModule_IncrCrdtConflict(MERGECONFLICT | DATA_ISOMORPHIC_CONFLICT);
+        RedisModule_IncrCrdtConflict(MERGECONFLICT | DATA_CONFLICT);
     }
     return result;
 }
@@ -119,7 +119,7 @@ CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* 
     CRDT_RegisterTombstone* t = (CRDT_RegisterTombstone*) target;
     int compare = 0;
     CrdtTombstone* result = mergeRegisterTombstone(t, (CRDT_RegisterTombstone*) other, &compare);
-    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(MERGECONFLICT | TOMBSTONE_ISOMORPHIC_CONFLICT);
+    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(MERGECONFLICT | TOMBSTONE_CONFLICT);
     return result;
 }
 
@@ -215,7 +215,7 @@ int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value) {
     }
     int compare = 0;
     addRegisterTombstone(tombstone, &del_meta, &compare);
-    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(TOMBSTONE_ISOMORPHIC_CONFLICT | MODIFYCONFLICT);
+    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(TOMBSTONE_CONFLICT | MODIFYCONFLICT);
     sds vcSds = vectorClockToSds(getMetaVectorClock(&del_meta));
     RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_REG", "sllc", keyRobj, getMetaGid(&del_meta), getMetaTimestamp(&del_meta), vcSds);
     sdsfree(vcSds);
@@ -256,7 +256,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     }
     int compare = 0;
     addRegisterTombstone(tombstone, &del_meta, &compare);
-    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(TOMBSTONE_ISOMORPHIC_CONFLICT | MODIFYCONFLICT);
+    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(TOMBSTONE_CONFLICT | MODIFYCONFLICT);
     CRDT_Register* current = getCurrentValue(moduleKey);
     
     if(current != NULL) {
@@ -337,7 +337,7 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
                 RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][drop] key:{%s} prev: {%s}, income: {%s}, future: {%s}",
                             RedisModule_GetSds(key), prev, income, future);
             }
-            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | DATA_ISOMORPHIC_CONFLICT);
+            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | DATA_CONFLICT);
             sdsfree(income);
             sdsfree(future);
             sdsfree(prev);
