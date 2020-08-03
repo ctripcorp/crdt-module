@@ -59,7 +59,6 @@ int crdtSelectCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         RedisModule_ReplyWithError(ctx,"ERR invalid id: must be a signed 64 bit integer");
         return CRDT_ERROR;
     }
-    RedisModule_Debug(logLevel, "crdt.select %d", id);
     if (gid == RedisModule_CurrentGid()) {
         RedisModule_CrdtReplicateVerbatim(ctx);
     } else {
@@ -143,8 +142,7 @@ int saveValue(void *rio, RedisModuleType* type, void* data) {
     if(RedisModule_SaveLen(rio, id) == C_ERR) return C_ERR;
     return RedisModule_SaveModuleValue(rio,type,data);
 }
-void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key) {
-    RedisModuleKey* moduleKey = RedisModule_GetKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key, RedisModuleKey* moduleKey) {
     CrdtObject* data = RedisModule_ModuleTypeGetValue(moduleKey);
     if(data != NULL) {
         switch (getDataType(data))
@@ -171,11 +169,9 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key) {
     }
     
     RedisModule_SaveLen(rio, RDB_VALUE_EOF);
-    if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
 }
 
-int RdbLoadCrdtValue(void* db, RedisModuleString* key, void* rio) {
-    RedisModuleKey* moduleKey = RedisModule_GetKey(db, key, REDISMODULE_WRITE| REDISMODULE_TOMBSTONE);
+int RdbLoadCrdtValue(void* db, RedisModuleString* key, void* rio, RedisModuleKey* moduleKey) {
     int result = C_OK;
     while(1) {
         uint64_t typeId = RedisModule_LoadLen(rio);
@@ -203,7 +199,6 @@ int RdbLoadCrdtValue(void* db, RedisModuleString* key, void* rio) {
         }
     }
 error:
-    if(moduleKey != NULL) {RedisModule_CloseKey(moduleKey);}
     return result;
 }
 int isTombstone(CrdtObject* data) {
