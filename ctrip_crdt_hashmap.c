@@ -486,12 +486,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hset", argv[1]);
 end:
     if (meta != NULL) {
-        if (getMetaGid(meta) == RedisModule_CurrentGid()) {
-            RedisModule_CrdtReplicateVerbatim(ctx);
-        } else {
-            RedisModule_UpdatePeerReplOffset(ctx, getMetaGid(meta));
-            RedisModule_ReplicateVerbatim(ctx);
-        }
+        RedisModule_CrdtReplicateVerbatim(getMetaGid(meta), ctx);
         freeCrdtMeta(meta);
     }
     if (moduleKey != NULL) RedisModule_CloseKey(moduleKey);
@@ -626,12 +621,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
 end:
     if(meta) {
-        if (getMetaGid(meta) == RedisModule_CurrentGid()) {
-            RedisModule_CrdtReplicateVerbatim(ctx);
-        } else {
-            RedisModule_UpdatePeerReplOffset(ctx, getMetaGid(meta));
-            RedisModule_ReplicateVerbatim(ctx);
-        }
+        RedisModule_CrdtReplicateVerbatim(getMetaGid(meta), ctx);
         freeCrdtMeta(meta);
     }
     if(moduleKey) RedisModule_CloseKey(moduleKey);
@@ -730,12 +720,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     }
 end:
     if(meta) {
-        if (getMetaGid(meta) == RedisModule_CurrentGid()) {
-            RedisModule_CrdtReplicateVerbatim(ctx);
-        } else {
-            RedisModule_UpdatePeerReplOffset(ctx, getMetaGid(meta));
-            RedisModule_ReplicateVerbatim(ctx);
-        }
+        RedisModule_CrdtReplicateVerbatim(getMetaGid(meta), ctx);
         freeCrdtMeta(meta);
     }  
     if(moduleKey) RedisModule_CloseKey(moduleKey);

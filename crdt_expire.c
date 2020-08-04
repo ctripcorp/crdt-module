@@ -124,12 +124,7 @@ int crdtExpireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE);
     trySetExpire(moduleKey, argv[1], time, type, expireTime);
     if(moduleKey != NULL) {
-        if (gid == RedisModule_CurrentGid()) {
-            RedisModule_CrdtReplicateVerbatim(ctx);
-        } else {
-            RedisModule_UpdatePeerReplOffset(ctx, gid);
-            RedisModule_ReplicateVerbatim(ctx);
-        }
+        RedisModule_CrdtReplicateVerbatim(gid, ctx);
     }
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     return RedisModule_ReplyWithLongLong(ctx, 0);
@@ -190,11 +185,7 @@ int crdtPersistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     }
     RedisModule_SetExpire(moduleKey, REDISMODULE_NO_EXPIRE);
 end: 
-    if (gid == RedisModule_CurrentGid()) {
-        RedisModule_CrdtReplicateVerbatim(ctx);
-    } else {
-        RedisModule_ReplicateVerbatim(ctx);
-    }
+    RedisModule_CrdtReplicateVerbatim(gid, ctx);
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     return RedisModule_ReplyWithLongLong(ctx, 0);
 }

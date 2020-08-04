@@ -15,11 +15,7 @@ int crdtPublishCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
         return 0;
     }
     int receivers = RedisModule_CrdtPubsubPublishMessage(argv[1], argv[2]);
-    if(gid == RedisModule_CurrentGid()) {
-        RedisModule_CrdtReplicateVerbatim(ctx);
-    } else {
-        RedisModule_ReplicateVerbatim(ctx);
-    }
+    RedisModule_CrdtReplicateVerbatim(gid, ctx);
     return RedisModule_ReplyWithLongLong(ctx, receivers);
 }
 int initPubsubModule(RedisModuleCtx* ctx) {
