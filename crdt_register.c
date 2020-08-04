@@ -281,13 +281,8 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     RedisModule_MergeVectorClock(getMetaGid(&del_meta), getMetaVectorClockToLongLong(&del_meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
 end: 
-    if(del_meta.gid != 0) {
-        if (getMetaGid(&del_meta) == RedisModule_CurrentGid()) {
-            RedisModule_CrdtReplicateVerbatim(ctx);
-        } else {
-            RedisModule_UpdatePeerReplOffset(ctx, getMetaGid(&del_meta));
-            RedisModule_ReplicateVerbatim(ctx);
-        }
+    if(getMetaGid(&del_meta) != 0) {
+        RedisModule_CrdtReplicateVerbatim(getMetaGid(&del_meta), ctx);
         freeIncrMeta(&del_meta);
     }
     if(moduleKey) RedisModule_CloseKey(moduleKey);
@@ -463,12 +458,7 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         result++;
     }
     
-    if (gid == RedisModule_CurrentGid()) {
-        RedisModule_CrdtReplicateVerbatim(ctx);
-    } else {
-        RedisModule_UpdatePeerReplOffset(ctx, gid);
-        RedisModule_ReplicateVerbatim(ctx);
-    }
+    RedisModule_CrdtReplicateVerbatim(gid, ctx);
     return RedisModule_ReplyWithLongLong(ctx, result); 
 }
 
@@ -741,12 +731,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
 end:
     if (meta.gid != 0) {
-        if (getMetaGid(&meta) == RedisModule_CurrentGid()) {
-            RedisModule_CrdtReplicateVerbatim(ctx);
-        } else {
-            RedisModule_UpdatePeerReplOffset(ctx, getMetaGid(&meta));
-            RedisModule_ReplicateVerbatim(ctx);
-        }
+        RedisModule_CrdtReplicateVerbatim(getMetaGid(&meta), ctx);
         freeVectorClock(meta.vectorClock);
     }
     if (moduleKey != NULL) RedisModule_CloseKey(moduleKey);
