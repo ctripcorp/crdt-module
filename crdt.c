@@ -60,11 +60,11 @@ int crdtSelectCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         return CRDT_ERROR;
     }
     RedisModule_CrdtReplicateVerbatim(gid, ctx);
-    if (RedisModule_SelectDb(ctx, id) != REDISMODULE_OK) {
+    if (RedisModule_CrdtSelectDb(ctx, gid, id) != REDISMODULE_OK) {
         RedisModule_ReplyWithError(ctx,"DB index is out of range");
         return CRDT_ERROR;
-    } 
     
+    }
     return RedisModule_ReplyWithOk(ctx);
 }
 

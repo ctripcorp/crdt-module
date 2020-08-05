@@ -179,6 +179,7 @@ int REDISMODULE_API_FUNC(RedisModule_WrongArity)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithLongLong)(RedisModuleCtx *ctx, long long ll);
 int REDISMODULE_API_FUNC(RedisModule_GetSelectedDb)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_SelectDb)(RedisModuleCtx *ctx, int newid);
+int REDISMODULE_API_FUNC(RedisModule_CrdtSelectDb)(RedisModuleCtx *ctx, int gid,int newid);
 void *REDISMODULE_API_FUNC(RedisModule_OpenKey)(RedisModuleCtx *ctx, RedisModuleString *keyname, int mode);
 void *REDISMODULE_API_FUNC(RedisModule_DbAddOrFind)(RedisModuleCtx *ctx, RedisModuleString *keyname, RedisModuleType* type);
 void *REDISMODULE_API_FUNC(RedisModule_DbEntryGetVal)(RedisModuleCtx *ctx, void* de);
@@ -358,6 +359,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(ReplySetArrayLength);
     REDISMODULE_GET_API(GetSelectedDb);
     REDISMODULE_GET_API(SelectDb);
+    REDISMODULE_GET_API(CrdtSelectDb);
     REDISMODULE_GET_API(OpenKey);
     REDISMODULE_GET_API(DbAddOrFind);
     REDISMODULE_GET_API(DbDelete);
