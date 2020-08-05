@@ -181,13 +181,13 @@ int RdbLoadCrdtValue(void* db, RedisModuleString* key, void* rio, RedisModuleKey
             goto error;
         }
         if(type == getCrdtRegister()) {
-            RedisModule_ModuleTypeSetValue(moduleKey, type, data);
+            RedisModule_ModuleTypeLoadRdbAddValue(moduleKey, type, data);
         } else if(type == getCrdtHash()) {
-            RedisModule_ModuleTypeSetValue(moduleKey, type, data);
+            RedisModule_ModuleTypeLoadRdbAddValue(moduleKey, type, data);
         } else if(type == getCrdtRegisterTombstone()) {
-            RedisModule_ModuleTombstoneSetValue(moduleKey, type, data);
+            RedisModule_ModuleTombstoneLoadRdbAddValue(moduleKey, type, data);
         } else if(type == getCrdtHashTombstone()) {
-            RedisModule_ModuleTombstoneSetValue(moduleKey, type, data);
+            RedisModule_ModuleTombstoneLoadRdbAddValue(moduleKey, type, data);
         } else{
             result = C_ERR;
             goto error;
