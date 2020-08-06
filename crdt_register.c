@@ -79,7 +79,7 @@ CrdtObject *crdtRegisterMerge(CrdtObject *currentVal, CrdtObject *value) {
     int compare = 0;
     CrdtObject* result = mergeRegister(currentVal, value, &compare);
     if(isConflictCommon(compare)) {
-        RedisModule_IncrCrdtConflict(MERGECONFLICT | DATA_CONFLICT);
+        RedisModule_IncrCrdtConflict(MERGECONFLICT | SET_CONFLICT);
     }
     return result;
 }
@@ -119,7 +119,7 @@ CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* 
     CRDT_RegisterTombstone* t = (CRDT_RegisterTombstone*) target;
     int compare = 0;
     CrdtTombstone* result = mergeRegisterTombstone(t, (CRDT_RegisterTombstone*) other, &compare);
-    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(MERGECONFLICT | TOMBSTONE_CONFLICT);
+    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(MERGECONFLICT | DEL_CONFLICT);
     return result;
 }
 
@@ -215,7 +215,7 @@ int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value) {
     }
     int compare = 0;
     addRegisterTombstone(tombstone, &del_meta, &compare);
-    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(TOMBSTONE_CONFLICT | MODIFYCONFLICT);
+    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(DEL_CONFLICT | MODIFYCONFLICT);
     sds vcSds = vectorClockToSds(getMetaVectorClock(&del_meta));
     RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_REG", "sllc", keyRobj, getMetaGid(&del_meta), getMetaTimestamp(&del_meta), vcSds);
     sdsfree(vcSds);
@@ -256,7 +256,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     }
     int compare = 0;
     addRegisterTombstone(tombstone, &del_meta, &compare);
-    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(TOMBSTONE_CONFLICT | MODIFYCONFLICT);
+    if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(DEL_CONFLICT | MODIFYCONFLICT);
     CRDT_Register* current = getCurrentValue(moduleKey);
     
     if(current != NULL) {
@@ -271,7 +271,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         }
         int result = compareTombstoneAndRegister(tombstone, current);
         if(isConflictCommon(result)) {
-            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | DATA_TOMBSTONE_CONFLICT); 
+            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | SET_DEL_CONFLICT); 
         }
         if(result > COMPARE_META_EQUAL) {
             RedisModule_DeleteKey(moduleKey);
@@ -297,7 +297,7 @@ end:
 CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_RegisterTombstone* tombstone, CRDT_Register* current, CrdtMeta* meta, RedisModuleString* key,sds value) {
     int result = isExpireCrdtTombstone(tombstone, meta);
     if(isConflictCommon(result)) {
-        RedisModule_IncrCrdtConflict(DATA_TOMBSTONE_CONFLICT | MODIFYCONFLICT);
+        RedisModule_IncrCrdtConflict(SET_DEL_CONFLICT | MODIFYCONFLICT);
     }
     if(result > COMPARE_META_EQUAL) {
         return current;
@@ -332,7 +332,7 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
                 RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][drop] key:{%s} prev: {%s}, income: {%s}, future: {%s}",
                             RedisModule_GetSds(key), prev, income, future);
             }
-            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | DATA_CONFLICT);
+            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | SET_CONFLICT);
             sdsfree(income);
             sdsfree(future);
             sdsfree(prev);

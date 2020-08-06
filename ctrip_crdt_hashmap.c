@@ -92,7 +92,7 @@ int addOrUpdateItem(RedisModuleCtx* ctx, CRDT_HashTombstone* tombstone, CRDT_Has
             CRDT_RegisterTombstone* tombstoneValue = dictGetVal(tomDe);
             int result = isExpireCrdtTombstone(tombstoneValue, meta);
             if(isConflictCommon(result)) {
-                RedisModule_IncrCrdtConflict(DATA_TOMBSTONE_CONFLICT | MODIFYCONFLICT);
+                RedisModule_IncrCrdtConflict(SET_DEL_CONFLICT | MODIFYCONFLICT);
             }
             if(result > COMPARE_META_EQUAL) {
                 return result_code;
@@ -125,7 +125,7 @@ int addOrUpdateItem(RedisModuleCtx* ctx, CRDT_HashTombstone* tombstone, CRDT_Has
                 RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-HASH][drop] {key: %s, field: %s} [prev] {%s} [income] {%s} [future] {%s}",
                             RedisModule_GetSds(key), field, prev, income, future);
             }
-            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | DATA_CONFLICT);
+            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | SET_CONFLICT);
             sdsfree(income);
             sdsfree(future);
             sdsfree(prev);
@@ -411,7 +411,7 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             int compare = 0;
             addTombstone(tombstone, field, &hdel_meta, &compare);
             if(isConflictCommon(compare)) {
-                RedisModule_IncrCrdtConflict(TOMBSTONE_CONFLICT | MODIFYCONFLICT);
+                RedisModule_IncrCrdtConflict(DEL_CONFLICT | MODIFYCONFLICT);
             }
             deleted_objs[deleted] = argv[j];
             deleted++;  
@@ -471,7 +471,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         tombstone = retrieveCrdtHashTombstone(t);
         int result = isExpireCrdtHashTombstone(tombstone, meta);
         if(isConflictCommon(result)) {
-            RedisModule_IncrCrdtConflict(DATA_TOMBSTONE_CONFLICT | MODIFYCONFLICT);
+            RedisModule_IncrCrdtConflict(SET_DEL_CONFLICT | MODIFYCONFLICT);
         }
         if(result > COMPARE_META_EQUAL) {
             goto end;
@@ -576,7 +576,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
     int compare = 0;
     updateMaxDelCrdtHashTombstone(tombstone, meta, &compare);
     if(isConflictCommon(compare)) {
-        RedisModule_IncrCrdtConflict(TOMBSTONE_CONFLICT | MODIFYCONFLICT);
+        RedisModule_IncrCrdtConflict(DEL_CONFLICT | MODIFYCONFLICT);
     }
     changeCrdtHashTombstone(tombstone, meta);
     CRDT_Hash* current =  getCurrentValue(moduleKey);
@@ -609,7 +609,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
         }
     }
     if(hasDataTombstoneConflict) {
-        RedisModule_IncrCrdtConflict(MODIFYCONFLICT | DATA_TOMBSTONE_CONFLICT);    
+        RedisModule_IncrCrdtConflict(MODIFYCONFLICT | SET_DEL_CONFLICT);    
     }
     dictReleaseIterator(di);
     /* Always check if the dictionary needs a resize after a delete. */
@@ -653,7 +653,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         tombstone = retrieveCrdtHashTombstone(t);
         int result = isExpireCrdtHashTombstone(tombstone, meta);
         if(isConflictCommon(result)) {
-            RedisModule_IncrCrdtConflict(TOMBSTONE_CONFLICT | MODIFYCONFLICT);
+            RedisModule_IncrCrdtConflict(DEL_CONFLICT | MODIFYCONFLICT);
         }
         if(result > COMPARE_META_EQUAL) {
             goto end;
@@ -686,7 +686,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
                 CRDT_Register* value = dictGetVal(de);
                 int result = compareCrdtRegisterAndDelMeta(value, meta);
                 if(isConflictCommon(result)) {
-                    RedisModule_IncrCrdtConflict(DATA_TOMBSTONE_CONFLICT | MODIFYCONFLICT);
+                    RedisModule_IncrCrdtConflict(SET_DEL_CONFLICT | MODIFYCONFLICT);
                 }
                 if(result > COMPARE_META_EQUAL) {
                     dictDelete(current->map, field);
@@ -699,7 +699,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         if(isConflictCommon(compare)) conflict++;
     }
     if(conflict > 0) {
-        RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TOMBSTONE_CONFLICT);
+        RedisModule_IncrCrdtConflict(MODIFYCONFLICT | DEL_CONFLICT);
     }
     changeCrdtHashTombstone(tombstone, meta);
     if(current != NULL) {
@@ -960,7 +960,7 @@ CrdtMeta* appendBasicHash(CRDT_Hash* target, CRDT_Hash* other) {
     }
     if(conflict > 0) {
         //only when merge hash
-        RedisModule_IncrCrdtConflict(DATA_CONFLICT | MERGECONFLICT);
+        RedisModule_IncrCrdtConflict(SET_CONFLICT | MERGECONFLICT);
     }
     dictReleaseIterator(di);
     return result;
@@ -1147,7 +1147,7 @@ CrdtTombstone *crdtHashTombstoneMerge(CrdtTombstone *currentVal, CrdtTombstone *
     updateMaxDelCrdtHashTombstone(result,getMaxDelCrdtHashTombstone(other), &compare);
     if(isConflictCommon(compare)) conflict++;
     mergeCrdtHashTombstoneLastVc(result, getCrdtHashTombstoneLastVc(other));
-    if(conflict > 0) RedisModule_IncrCrdtConflict(TOMBSTONE_CONFLICT | MERGECONFLICT);
+    if(conflict > 0) RedisModule_IncrCrdtConflict(DEL_CONFLICT | MERGECONFLICT);
     return (CrdtTombstone*)result;
 }
 
