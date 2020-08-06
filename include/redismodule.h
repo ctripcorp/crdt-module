@@ -115,9 +115,9 @@
 #ifndef REDISMODULE_CORE
 
 #define TYPECONFLICT (1<<0)
-#define DATA_CONFLICT (1<<1)
-#define TOMBSTONE_CONFLICT (1<<2)
-#define DATA_TOMBSTONE_CONFLICT (1<<3)
+#define SET_CONFLICT (1<<1)
+#define DEL_CONFLICT (1<<2)
+#define SET_DEL_CONFLICT (1<<3) 
 // #define NONTYPECONFLICT (1<<1)
 #define MODIFYCONFLICT (1<<4)
 #define MERGECONFLICT (1<<5)
