@@ -43,6 +43,34 @@
 #include <stdio.h>
 #define CRDT_API_VERSION 1
 
+//crdt.ovc gid vc
+int crdtOvcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 3) {
+        return RedisModule_WrongArity(ctx);
+    }
+    long long gid;
+    if ((RedisModule_StringToLongLong(argv[1],&gid) != REDISMODULE_OK)) {
+        RedisModule_ReplyWithError(ctx,"ERR invalid gid: must be a signed 64 bit integer");
+        return CRDT_ERROR;
+    }
+    if(RedisModule_CheckGid(gid) != REDISMODULE_OK) {
+        RedisModule_ReplyWithError(ctx,"gid must < 15");
+        return CRDT_ERROR;
+    }
+    RedisModule_CrdtReplicateVerbatim(gid, ctx);
+    if(gid != RedisModule_CurrentGid()) {
+        VectorClock vclock = getVectorClockFromString(argv[2]);
+        VectorClock vc = RedisModule_GetOvc(ctx);
+        VectorClock newVectorClock = vectorClockMerge(vc, vclock);
+        if (!isNullVectorClock(vc)) {
+            freeVectorClock(vc);
+        }
+        freeVectorClock(vclock);
+        RedisModule_SetOvc(ctx, newVectorClock);
+    }
+    
+    return RedisModule_ReplyWithOk(ctx); 
+}
 //crdt.select <gid> <dbid>
 int crdtSelectCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     long id;
@@ -329,6 +357,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         return REDISMODULE_ERR; 
     if (RedisModule_CreateCommand(ctx, "crdt.select", 
                                 crdtSelectCommand, "write",  1, 2,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;                       
+        return REDISMODULE_ERR;   
+    if (RedisModule_CreateCommand(ctx, "crdt.ovc", 
+                                crdtOvcCommand, "write",  1, 2,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;                      
     return REDISMODULE_OK;
 }
+
