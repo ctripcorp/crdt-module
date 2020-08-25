@@ -52,7 +52,7 @@ VectorClock getMetaVectorClock(CrdtMeta* meta) {
     if(meta == NULL) return newVectorClock(0);
     return meta->vectorClock;
 }
-#define VC2LL(a) *(long long*)((void*)&a)
+
 long long getMetaVectorClockToLongLong(CrdtMeta* meta) {
     if(meta == NULL) return 0;
     return VC2LL(meta->vectorClock);
@@ -132,7 +132,7 @@ void initIncrMeta(CrdtMeta* meta) {
     long long gid = RedisModule_CurrentGid();
     RedisModule_IncrLocalVectorClock(1);
     long long cvc = RedisModule_CurrentVectorClock();
-    VectorClock currentVectorClock = VC(cvc);
+    VectorClock currentVectorClock = LL2VC(cvc);
     VectorClock result = getMonoVectorClock(currentVectorClock, gid);
     meta->vectorClock = result;
     meta->gid = gid;
@@ -146,7 +146,7 @@ CrdtMeta* createIncrMeta() {
     long long gid = RedisModule_CurrentGid();
     RedisModule_IncrLocalVectorClock(1);
     long long cvc = RedisModule_CurrentVectorClock();
-    VectorClock currentVectorClock = VC(cvc);
+    VectorClock currentVectorClock = LL2VC(cvc);
     VectorClock result = getMonoVectorClock(currentVectorClock, gid);
     long long timestamp = RedisModule_Milliseconds();
     return createMeta(gid, timestamp, result);
