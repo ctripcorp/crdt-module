@@ -60,13 +60,14 @@ int crdtOvcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_CrdtReplicateVerbatim(gid, ctx);
     if(gid != RedisModule_CurrentGid()) {
         VectorClock vclock = getVectorClockFromString(argv[2]);
-        VectorClock vc = RedisModule_GetOvc(ctx);
+        long long  v = RedisModule_GetOvc(ctx);
+        VectorClock vc = LL2VC(v);
         VectorClock newVectorClock = vectorClockMerge(vc, vclock);
         if (!isNullVectorClock(vc)) {
             freeVectorClock(vc);
         }
         freeVectorClock(vclock);
-        RedisModule_SetOvc(ctx, newVectorClock);
+        RedisModule_SetOvc(ctx,  VC2LL(newVectorClock));
     }
     
     return RedisModule_ReplyWithOk(ctx); 
