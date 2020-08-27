@@ -116,9 +116,9 @@ CrdtMeta* addCrdtLWWRegisterTombstone(CRDT_LWW_RegisterTombstone* target, CrdtMe
 CrdtMeta* addRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta, int* compare) {
     return addCrdtLWWRegisterTombstone((CRDT_LWW_RegisterTombstone*)target, meta, compare);
 }
-int purageLWWRegisterTombstone( CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
-int purageRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
-    return purageLWWRegisterTombstone(tombstone, target);
+int purgeLWWRegisterTombstone( CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
+int purgeRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
+    return purgeLWWRegisterTombstone(tombstone, target);
 }
 sds getLWWCrdtRegister(CRDT_Register* r);
 sds getCrdtRegisterSds(CRDT_Register* r) {

@@ -122,9 +122,9 @@ CrdtTombstone* Crdt_LWW_ExpireTombstoneFilter(CrdtTombstone* target, int gid, lo
 CrdtTombstone* crdtExpireTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time) {
     return Crdt_LWW_ExpireTombstoneFilter(target, gid, logic_time);
 }
-int Crdt_LWW_ExpireTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current); 
-int crdtExpireTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current) {
-    return Crdt_LWW_ExpireTombstonePurage(tombstone, current);
+int Crdt_LWW_ExpireTombstonePurge(CrdtTombstone* tombstone, CrdtObject* current); 
+int crdtExpireTombstonePurge(CrdtTombstone* tombstone, CrdtObject* current) {
+    return Crdt_LWW_ExpireTombstonePurge(tombstone, current);
 }
 
 int Crdt_LWW_ExpireTombstoneGc(void* target, VectorClock* clock);
