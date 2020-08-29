@@ -1,5 +1,5 @@
 APP=crdt-module
-Version=1.0.5
+Version=1.0.6
 Package=$APP-$Version
 
 if [ -f $package ]; then
