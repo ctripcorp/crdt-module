@@ -78,13 +78,13 @@ static CrdtDataMethod HashDataMethod = {
 CrdtTombstone *crdtHashTombstoneMerge(CrdtTombstone *currentVal, CrdtTombstone *value);
 CrdtTombstone* crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time);
 int crdtHashTombstoneGc(CrdtObject* target, VectorClock clock);
-int crdtHashTombstonePurage(CrdtObject* obj, CrdtObject* tombstone);
+int crdtHashTombstonePurge(CrdtObject* obj, CrdtObject* tombstone);
 sds crdtHashTombstoneInfo(void* data);
 static CrdtTombstoneMethod HashTombstoneCommonMethod = {
     .merge = crdtHashTombstoneMerge,
     .filter = crdtHashTombstoneFilter,
     .gc = crdtHashTombstoneGc,
-    .purage = crdtHashTombstonePurage,
+    .purge = crdtHashTombstonePurge,
     .info = crdtHashTombstoneInfo,
 };
 typedef struct CRDT_Hash {
@@ -119,7 +119,7 @@ typedef void* (*dupFunc)(void* target);
 typedef int (*gcCrdtHashTombstoneFunc)(void* target, VectorClock clock);
 typedef CrdtMeta* (*getMaxDelCrdtHashTombstoneFunc)(void* target);
 typedef int (*changeHashTombstoneFunc)(void* target, CrdtMeta* meta);
-typedef int (*purageHashTombstoneFunc)(void* tombstone, void* obj);
+typedef int (*purgeHashTombstoneFunc)(void* tombstone, void* obj);
 typedef struct CrdtHashTombstoneMethod {
     updateMaxDelCrdtHashTombstoneFunc updateMaxDel;
     isExpireFunc isExpire;
@@ -127,7 +127,7 @@ typedef struct CrdtHashTombstoneMethod {
     gcCrdtHashTombstoneFunc gc;
     getMaxDelCrdtHashTombstoneFunc getMaxDel;
     changeHashTombstoneFunc change;
-    purageHashTombstoneFunc purage;
+    purgeHashTombstoneFunc purge;
 } CrdtHashTombstoneMethod;
 typedef struct CRDT_HashTombstone {
     unsigned long long type:8;

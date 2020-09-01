@@ -82,7 +82,7 @@ typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *c
 typedef CrdtObject* (*crdtFilterFunc)(CrdtObject* common, int gid, long long logic_time);
 typedef int (*crdtCleanFunc)( CrdtObject* value, CrdtTombstone* tombstone);
 typedef int (*crdtGcFunc)( CrdtTombstone* value, VectorClock clock);
-typedef int (*crdtPurageFunc)(CrdtTombstone* tombstone,  CrdtObject* obj);
+typedef int (*crdtPurgeFunc)(CrdtTombstone* tombstone,  CrdtObject* obj);
 
 typedef struct CrdtMeta {
     unsigned long long type:8;
@@ -117,7 +117,7 @@ typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterFunc filter;
     crdtGcFunc gc;
-    crdtPurageFunc purage;
+    crdtPurgeFunc purge;
     crdtInfoFunc info;
 } CrdtTombstoneMethod;
 

@@ -100,7 +100,7 @@ int isRegisterTombstone(void *data) {
     } 
     return CRDT_NO;
 }
-int crdtRegisterTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current) {
+int crdtRegisterTombstonePurge(CrdtTombstone* tombstone, CrdtObject* current) {
     if(!isRegister((void*)current)) {
         return 0;
     }
@@ -109,7 +109,7 @@ int crdtRegisterTombstonePurage(CrdtTombstone* tombstone, CrdtObject* current) {
     }
     CRDT_Register* reg = (CRDT_Register*) current;
     CRDT_RegisterTombstone* t = (CRDT_RegisterTombstone*)tombstone;
-    return purageRegisterTombstone(t, reg);
+    return purgeRegisterTombstone(t, reg);
 }
 
 CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other) {

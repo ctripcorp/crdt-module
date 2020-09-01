@@ -1085,7 +1085,13 @@ CrdtObject* crdtHashFilter(CrdtObject* common, int gid, long long logic_time) {
     }
     return (CrdtObject*)result;
 }
-int crdtHashTombstonePurage( CrdtObject* tombstone, CrdtObject* current) {
+int crdtHashTombstonePurge( CrdtObject* tombstone, CrdtObject* current) {
+    if(!isCrdtHash((void*)current)) {
+        return 0;
+    }
+    if(!isCrdtHashTombstone((void*)tombstone)) {
+        return 0;
+    }
     CRDT_Hash* crdtHash = retrieveCrdtHash(current);
     CRDT_HashTombstone* crdtHashTombstone = retrieveCrdtHashTombstone(tombstone);
     dictIterator *di = dictGetSafeIterator(crdtHashTombstone->map);
@@ -1098,7 +1104,7 @@ int crdtHashTombstonePurage( CrdtObject* tombstone, CrdtObject* current) {
             CRDT_Register *crdtRegister = dictGetVal(existDe);
             CrdtMeta* lastMeta = createCrdtRegisterLastMeta(crdtRegister);
             if(isExpireCrdtHashTombstone(crdtHashTombstone, lastMeta) > COMPARE_META_EQUAL
-               || purageRegisterTombstone(crdtRegisterTombstone, crdtRegister) == CRDT_OK) {
+               || purgeRegisterTombstone(crdtRegisterTombstone, crdtRegister) == CRDT_OK) {
                 dictDelete(crdtHash->map, field);
             }
             freeCrdtMeta(lastMeta);
@@ -1153,6 +1159,10 @@ CrdtTombstone *crdtHashTombstoneMerge(CrdtTombstone *currentVal, CrdtTombstone *
 
 CrdtTombstone* crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time) {
     CRDT_HashTombstone* target = retrieveCrdtHashTombstone(common);
+    VectorClockUnit unit = getVectorClockUnit(getCrdtHashTombstoneLastVc(target), gid);
+    if(isNullVectorClockUnit(unit)) return NULL;
+    long long vcu = get_logic_clock(unit);
+    if(vcu < logic_time) return NULL;
     CRDT_HashTombstone* result = dupCrdtHashTombstone(target);
     dictEmpty(result->map, NULL);
     dictIterator *di = dictGetIterator(target->map);
@@ -1166,10 +1176,6 @@ CrdtTombstone* crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long
         }
     }
     dictReleaseIterator(di);
-    if(dictSize(result->map) == 0) {
-        freeCrdtHashTombstone(result);
-        return NULL;
-    }
     return (CrdtTombstone*)result;
 }
 
