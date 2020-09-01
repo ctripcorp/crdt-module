@@ -261,9 +261,7 @@ int crdtRegisterTryUpdate(CRDT_Register* r, CrdtMeta* meta, sds value, int compa
 }
 CRDT_LWW_Register* filterLWWRegister(CRDT_LWW_Register* target, int gid, long long logic_time) {
     CRDT_LWW_Register* reg = retrieveCrdtLWWRegister(target);
-    if(getCrdtLWWRegisterGid(reg) != gid) {
-        return NULL;
-    }
+
     VectorClockUnit unit = getVectorClockUnit(getCrdtLWWRegisterVectorClock(reg), gid);
     if(isNullVectorClockUnit(unit)) return NULL;
     
