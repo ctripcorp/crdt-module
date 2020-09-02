@@ -213,11 +213,11 @@ void *RdbLoadLWWCrdtRegister(RedisModuleIO *rdb, int encver) {
     if (encver != 0) {
         return NULL;
     }
-    CRDT_LWW_Register *crdtRegister = createCrdtRegister();
     int gid = RedisModule_LoadSigned(rdb);
     if(RedisModule_CheckGid(gid) == REDISMODULE_ERR) {
         return NULL;
-    } 
+    }
+    CRDT_LWW_Register *crdtRegister = createCrdtRegister();
     setCrdtLWWRegisterGid(crdtRegister, gid);
     setCrdtLWWRegisterTimestamp(crdtRegister, RedisModule_LoadSigned(rdb));
     setCrdtLWWRegisterVectorClock(crdtRegister, rdbLoadVectorClock(rdb));
