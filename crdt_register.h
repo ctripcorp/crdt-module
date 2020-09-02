@@ -104,15 +104,17 @@ int initRegisterModule(RedisModuleCtx *ctx);
 //register command methods
 CrdtObject *crdtRegisterMerge(CrdtObject *currentVal, CrdtObject *value);
 int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value);
-CrdtObject* crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time);
+CrdtObject** crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
 int crdtRegisterTombstonePurge(CrdtTombstone* tombstone, CrdtObject* current);
 CRDT_Register* dupCrdtRegister(CRDT_Register *val);
 
 void crdtRegisterUpdateLastVC(void *data, VectorClock vc);
-CRDT_Register* filterRegister(CRDT_Register*  common, int gid, long long logic_time);
+CRDT_Register** filterRegister(CRDT_Register*  common, int gid, long long logic_time, long long maxsize, int* length);
+void freeRegisterFilter(CrdtObject** filters, int num);
 static CrdtObjectMethod RegisterCommonMethod = {
     .merge = crdtRegisterMerge,
-    .filter = crdtRegisterFilter,
+    .filterAndSplit = crdtRegisterFilter,
+    .freefilter = freeRegisterFilter,
 };
 sds crdtRegisterInfo(void *crdtRegister);
 static CrdtDataMethod RegisterDataMethod = {
@@ -123,12 +125,14 @@ static CrdtDataMethod RegisterDataMethod = {
 };
 //register tombstone command methods
 CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other);
-CrdtTombstone* crdtRegisterTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time) ;
+CrdtTombstone** crdtRegisterTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) ;
 int crdtRegisterTombstoneGc(CrdtTombstone* target, VectorClock clock);
 sds crdtRegisterTombstoneInfo(void *t);
+void freeRegisterTombstoneFilter(CrdtObject** filters, int num);
 static CrdtTombstoneMethod RegisterTombstoneMethod = {
     .merge = crdtRegisterTombstoneMerge,
-    .filter =  crdtRegisterTombstoneFilter,
+    .filterAndSplit =  crdtRegisterTombstoneFilter,
+    .freefilter = freeRegisterTombstoneFilter,
     .gc = crdtRegisterTombstoneGc,
     .purge = crdtRegisterTombstonePurge,
     .info = crdtRegisterTombstoneInfo,
@@ -154,7 +158,7 @@ void AofRewriteCrdtRegisterTombstone(RedisModuleIO *aof, RedisModuleString *key,
 CRDT_RegisterTombstone* createCrdtRegisterTombstone();
 CRDT_RegisterTombstone* dupCrdtRegisterTombstone(CRDT_RegisterTombstone* target);
 CRDT_RegisterTombstone* mergeRegisterTombstone(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other, int* comapre);
-CRDT_RegisterTombstone* filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time);
+CRDT_RegisterTombstone** filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time,long long maxsize, int* length);
 int purgeRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
 CrdtMeta* addRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta, int* compare);
 int isExpireCrdtTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);

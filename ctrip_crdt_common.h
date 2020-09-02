@@ -79,7 +79,8 @@ typedef CrdtObject CrdtData;
 typedef CrdtObject CrdtTombstone;
 typedef CrdtObject *(*crdtMergeFunc)(CrdtObject *curVal, CrdtObject *value);
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
-typedef CrdtObject* (*crdtFilterFunc)(CrdtObject* common, int gid, long long logic_time);
+typedef CrdtObject** (*crdtFilterSplitFunc)(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
+typedef void (*crdtFreeFilterResultFunc)(CrdtObject** common, int num);
 typedef int (*crdtCleanFunc)( CrdtObject* value, CrdtTombstone* tombstone);
 typedef int (*crdtGcFunc)( CrdtTombstone* value, VectorClock clock);
 typedef int (*crdtPurgeFunc)(CrdtTombstone* tombstone,  CrdtObject* obj);
@@ -98,7 +99,8 @@ int isNullVectorClock(VectorClock vc);
 long long getMetaVectorClockToLongLong(CrdtMeta* meta);
 typedef struct CrdtObjectMethod {
     crdtMergeFunc merge;
-    crdtFilterFunc filter;
+    crdtFilterSplitFunc filterAndSplit;
+    crdtFreeFilterResultFunc freefilter;
 } CrdtObjectMethod;
 
 
@@ -115,7 +117,8 @@ typedef struct CrdtDataMethod {
 
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
-    crdtFilterFunc filter;
+    crdtFilterSplitFunc filterAndSplit;
+    crdtFreeFilterResultFunc freefilter;
     crdtGcFunc gc;
     crdtPurgeFunc purge;
     crdtInfoFunc info;
