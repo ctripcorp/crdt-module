@@ -261,9 +261,7 @@ int crdtRegisterTryUpdate(CRDT_Register* r, CrdtMeta* meta, sds value, int compa
 }
 CRDT_LWW_Register* filterLWWRegister(CRDT_LWW_Register* target, int gid, long long logic_time) {
     CRDT_LWW_Register* reg = retrieveCrdtLWWRegister(target);
-    if(getCrdtLWWRegisterGid(reg) != gid) {
-        return NULL;
-    }
+
     VectorClockUnit unit = getVectorClockUnit(getCrdtLWWRegisterVectorClock(reg), gid);
     if(isNullVectorClockUnit(unit)) return NULL;
     
@@ -338,7 +336,7 @@ CRDT_LWW_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_LWW_RegisterTombstone
 }
 CRDT_RegisterTombstone* filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
-    if(getCrdtLWWRegisterTombstoneGid(t) != gid) return NULL;
+
     VectorClockUnit unit = getVectorClockUnit(getCrdtLWWRegisterTombstoneVectorClock(t), gid);
     if(isNullVectorClockUnit(unit)) return NULL;
     long long vcu = get_logic_clock(unit);
