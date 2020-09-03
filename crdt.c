@@ -74,7 +74,7 @@ int crdtOvcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 //crdt.select <gid> <dbid>
 int crdtSelectCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    long id;
+    long long id;
     long long gid;
     if ((RedisModule_StringToLongLong(argv[1],&gid) != REDISMODULE_OK)) {
         RedisModule_ReplyWithError(ctx,"ERR invalid gid: must be a signed 64 bit integer");
