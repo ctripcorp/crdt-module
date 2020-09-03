@@ -302,6 +302,7 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
     if(result > COMPARE_META_EQUAL) {
         return current;
     }
+    RedisModule_DeleteTombstone(moduleKey);
     if(current == NULL) {
         current = createCrdtRegister();
         crdtRegisterSetValue(current, meta, value);
@@ -568,6 +569,7 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
             update_val_end();
         #endif
     }
+    RedisModule_DeleteTombstone(moduleKey);
     long long expire_time = -2;
     if(expire) {
         expire_time = getMetaTimestamp(&set_meta) + milliseconds;

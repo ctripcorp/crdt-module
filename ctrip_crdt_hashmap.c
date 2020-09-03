@@ -97,6 +97,7 @@ int addOrUpdateItem(RedisModuleCtx* ctx, CRDT_HashTombstone* tombstone, CRDT_Has
             if(result > COMPARE_META_EQUAL) {
                 return result_code;
             }
+            dictDelete(tombstone->map, field);
         }
     }
     dictEntry* de = dictFind(current->map, field);
@@ -247,9 +248,15 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     const char* fieldAndValStr[argc-2];
     int fieldAndValStrLen[argc-2];
     size_t fieldAndValAllStrLen = 0;
+    CrdtTombstone* t = getTombstone(moduleKey);
+    CRDT_HashTombstone* tombstone = NULL;
+    if(t != NULL && isCrdtHashTombstone(t)) {
+        tombstone = retrieveCrdtHashTombstone(t);
+    }
     for(int i = 2; i < argc; i += 2) {
         sds field = RedisModule_GetSds(argv[i]);
         dictEntry* de = dictFind(current->map, field);
+        
         if(de == NULL) {
             #if defined(HSET_STATISTICS) 
                 add_val_start();
@@ -271,6 +278,9 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
                 update_val_end();
             #endif
         }
+        if(tombstone) {
+            dictDelete(tombstone->map, field);
+        }
         size_t fieldstrlen = 0;
         const char* fieldstr = RedisModule_StringPtrLen(argv[i], &fieldstrlen);
         size_t valstrlen = 0;
@@ -281,6 +291,7 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         fieldAndValStrLen[i-1] = valstrlen;
         fieldAndValAllStrLen += fieldstrlen + valstrlen + 2 * REPLICATION_MAX_STR_LEN;
     }
+
     setCrdtHashLastVc(current, getMetaVectorClock(&meta));
     #if defined(HSET_STATISTICS) 
         send_event_start();
