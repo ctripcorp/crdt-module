@@ -78,7 +78,7 @@ static CrdtDataMethod HashDataMethod = {
 
 //common methods
 CrdtTombstone *crdtHashTombstoneMerge(CrdtTombstone *currentVal, CrdtTombstone *value);
-CrdtTombstone** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time,long long maxsize,int* length);
+CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time,long long maxsize,int* length);
 int crdtHashTombstoneGc(CrdtObject* target, VectorClock clock);
 int crdtHashTombstonePurge(CrdtObject* obj, CrdtObject* tombstone);
 sds crdtHashTombstoneInfo(void* data);

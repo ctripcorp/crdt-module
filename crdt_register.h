@@ -125,7 +125,7 @@ static CrdtDataMethod RegisterDataMethod = {
 };
 //register tombstone command methods
 CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other);
-CrdtTombstone** crdtRegisterTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) ;
+CrdtObject** crdtRegisterTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) ;
 int crdtRegisterTombstoneGc(CrdtTombstone* target, VectorClock clock);
 sds crdtRegisterTombstoneInfo(void *t);
 void freeRegisterTombstoneFilter(CrdtObject** filters, int num);
@@ -168,3 +168,5 @@ static RedisModuleType *CrdtRegisterTombstone;
 RedisModuleType* getCrdtRegister();
 RedisModuleType* getCrdtRegisterTombstone();
 int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
+size_t crdtRegisterMemUsageFunc(const void *value);
+
