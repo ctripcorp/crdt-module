@@ -25,8 +25,8 @@ void* getTombstone(RedisModuleKey *moduleKey);
 CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other, int* compare);
 CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other);
 
-VectorClock rdbLoadVectorClock(RedisModuleIO *rdb);
-int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock clock);
+VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version);
+int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock clock, int version);
 
 size_t feedBuf(char* buf,const char* src);
 size_t feedStr2Buf(char *buf, const char* str, size_t strlen);

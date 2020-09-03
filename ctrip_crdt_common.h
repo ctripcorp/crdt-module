@@ -48,9 +48,21 @@
 #define CRDT_REGISTER_TYPE 0
 #define CRDT_HASH_TYPE 1
 
+/**
+ *
+ * |  version  |   opt    |  crdt type |
+ * |--16 bits--|  40 bits |  8 bits    |
+ *
+ * LWW_TYEP   0
+ * ORSET_TYPE 1
+ * FUTURE     2
+ * OTHERS     3
+ * */
+#define LWW_TYPE  0
+#define ORSET_TYPE 1
 
-#define LWW_TYPE  (0 << 1)
-#define ORSET_TYPE (1 << 1) 
+
+#define CRDT_RDB_VERSION 1ll
 
 
 
@@ -144,6 +156,10 @@ int appendCrdtMeta(CrdtMeta *target , CrdtMeta* other);
 int isConflictCommon(int result);
 void initIncrMeta(CrdtMeta* meta);
 void freeIncrMeta(CrdtMeta* meta);
+void saveCrdtRdbHeader(RedisModuleIO *rdb, int type);
+long long loadCrdtRdbHeader(RedisModuleIO *rdb);
+int getCrdtRdbVersion(long long crdtRdbHeader);
+int getCrdtRdbType(long long crdtRdbHeader);
 // int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 
 
