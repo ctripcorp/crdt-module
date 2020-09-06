@@ -58,13 +58,15 @@ static RedisModuleType *CrdtHashTombstone;
 //common methods
 CrdtObject *crdtHashMerge(CrdtObject *currentVal, CrdtObject *value);
 int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value);
-CrdtObject* crdtHashFilter(CrdtObject* common, int gid, long long logic_time);
+CrdtObject** crdtHashFilter(CrdtObject* common, int gid, long long logic_time,long long maxsize,int* length);
 int crdtHashGc(CrdtObject* target, VectorClock clock);
 VectorClock crdtHashGetLastVC(void* data);
 void crdtHashUpdateLastVC(void* r, VectorClock vc);
+void freeHashFilter(CrdtObject** filters, int num);
 static CrdtObjectMethod HashCommonMethod = {
     .merge = crdtHashMerge,
-    .filter = crdtHashFilter,
+    .filterAndSplit = crdtHashFilter,
+    .freefilter = freeHashFilter
 };
 sds crdtHashInfo(void* data);
 static CrdtDataMethod HashDataMethod = {
@@ -76,13 +78,16 @@ static CrdtDataMethod HashDataMethod = {
 
 //common methods
 CrdtTombstone *crdtHashTombstoneMerge(CrdtTombstone *currentVal, CrdtTombstone *value);
-CrdtTombstone* crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time);
+CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time,long long maxsize,int* length);
 int crdtHashTombstoneGc(CrdtObject* target, VectorClock clock);
 int crdtHashTombstonePurge(CrdtObject* obj, CrdtObject* tombstone);
 sds crdtHashTombstoneInfo(void* data);
+void freeHashTombstoneFilter(CrdtObject** filters, int num);
+
 static CrdtTombstoneMethod HashTombstoneCommonMethod = {
     .merge = crdtHashTombstoneMerge,
-    .filter = crdtHashTombstoneFilter,
+    .filterAndSplit = crdtHashTombstoneFilter,
+    .freefilter = freeHashTombstoneFilter,
     .gc = crdtHashTombstoneGc,
     .purge = crdtHashTombstonePurge,
     .info = crdtHashTombstoneInfo,
@@ -188,6 +193,14 @@ static dictType crdtHashDictType = {
         dictSdsDestructor,          /* key destructor */
         dictCrdtRegisterDestructor   /* val destructor */
 };
+static dictType crdtHashFileterDictType = {
+        dictSdsHash,                /* hash function */
+        NULL,                       /* key dup */
+        NULL,                       /* val dup */
+        dictSdsKeyCompare,          /* key compare */
+        NULL,          /* key destructor */
+        NULL   /* val destructor */
+};
 static dictType crdtHashTombstoneDictType = {
         dictSdsHash,                /* hash function */
         NULL,                       /* key dup */
@@ -208,4 +221,6 @@ int changeCrdtHashTombstone(void* data, CrdtMeta* meta);
 
 void setCrdtHashLastVc(CRDT_Hash* data, VectorClock vc);
 void mergeCrdtHashLastVc(CRDT_Hash* data, VectorClock vc);
+
+CRDT_HashTombstone* createCrdtHashFilterTombstone(CRDT_HashTombstone* target);
 #endif //XREDIS_CRDT_CTRIP_CRDT_HASHMAP_H

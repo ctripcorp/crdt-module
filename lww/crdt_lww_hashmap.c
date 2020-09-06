@@ -103,7 +103,6 @@ void updateLastVCLWWHash(void* data, VectorClock vc) {
     setCrdtHashLastVc((CRDT_Hash*)crdtHash, vectorClockMerge(getCrdtHashLastVc((CRDT_Hash*)crdtHash), vc));
 }
 
-
 void* createCrdtLWWHash() {
     CRDT_LWW_Hash *crdtHash = RedisModule_Alloc(sizeof(CRDT_LWW_Hash));
     crdtHash->type = 0;
@@ -311,4 +310,14 @@ sds crdtHashTombstoneInfo(void* data) {
     }
     sdsfree(vcStr);
     return result;
+}
+
+CRDT_HashTombstone* createCrdtHashFilterTombstone(CRDT_HashTombstone* common) {
+    CRDT_LWW_HashTombstone* target = retrieveCrdtLWWHashTombstone(common);
+    CRDT_LWW_HashTombstone* result = createCrdtLWWHashTombstone();
+    result->map->type = &crdtHashFileterDictType;
+    result->maxDelGid = target->maxDelGid;
+    result->maxDelTimestamp = target->maxDelTimestamp;
+    result->maxDelvectorClock = target->maxDelvectorClock;
+    return (CRDT_HashTombstone*)result;
 }

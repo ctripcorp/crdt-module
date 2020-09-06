@@ -78,9 +78,9 @@ CRDT_LWW_RegisterTombstone* retrieveCrdtLWWRegisterTombstone(void *data);
 
 
 
-CRDT_LWW_Register* filterLWWRegister(CRDT_LWW_Register* target, int gid, long long logic_time);
-CRDT_Register* filterRegister(CRDT_Register* target, int gid, long long logic_time) {
-    return (CRDT_Register*)filterLWWRegister((CRDT_LWW_Register*)target, gid, logic_time);
+CRDT_LWW_Register** filterLWWRegister(CRDT_LWW_Register* target, int gid, long long logic_time, long long maxsize, int* length);
+CRDT_Register** filterRegister(CRDT_Register* target, int gid, long long logic_time, long long maxsize, int* length) {
+    return (CRDT_Register**)filterLWWRegister((CRDT_LWW_Register*)target, gid, logic_time, maxsize, length);
 }
 int delLWWCrdtRegister(CRDT_Register* current, CrdtMeta* meta);
 int compareLWWCrdtRegisterAndDelMeta(CRDT_Register* current, CrdtMeta* meta);
@@ -108,9 +108,9 @@ void initRegister(CRDT_Register *r) {
 // }
 
 void RdbSaveLWWCrdtRegisterTombstone(RedisModuleIO *rdb, void *value);
-CRDT_RegisterTombstone* filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time) ;
-CRDT_RegisterTombstone* filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time) {
-    return filterLWWRegisterTombstone(target, gid, logic_time);
+CRDT_RegisterTombstone** filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time, long long maxsize, int* length);
+CRDT_RegisterTombstone** filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time, long long maxsize, int* length) {
+    return filterLWWRegisterTombstone(target, gid, logic_time, maxsize, length);
 }
 CrdtMeta* addCrdtLWWRegisterTombstone(CRDT_LWW_RegisterTombstone* target, CrdtMeta* meta, int* compare);
 CrdtMeta* addRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta, int* compare) {

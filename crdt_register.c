@@ -54,7 +54,7 @@ int msetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 size_t crdtRegisterMemUsageFunc(const void *value);
 
-CrdtObject* crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time);
+CrdtObject** crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
 
 void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value);
 
@@ -83,8 +83,8 @@ CrdtObject *crdtRegisterMerge(CrdtObject *currentVal, CrdtObject *value) {
     }
     return result;
 }
-CrdtObject* crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time) {
-    return filterRegister(common, gid, logic_time);
+CrdtObject** crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time,long long maxsize, int* length) {
+    return filterRegister(common, gid, logic_time, maxsize, length);
 }
 int isRegister(void *data) {
     CRDT_Register* reg = (CRDT_Register*) data;
@@ -125,12 +125,12 @@ CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* 
 
 
 
-CrdtObject* crdtRegisterTombstoneFilter(CrdtObject* target, int gid, long long logic_time) {
+CrdtObject** crdtRegisterTombstoneFilter(CrdtObject* target, int gid, long long logic_time, long long maxsize, int* length) {
     if(!isRegisterTombstone(target)) {
         return NULL;
     }
     CRDT_RegisterTombstone* t = (CRDT_RegisterTombstone*) target;
-    return filterRegisterTombstone(t, gid, logic_time);
+    return filterRegisterTombstone(t, gid, logic_time, maxsize, length);
 }
 
 int initRegisterModule(RedisModuleCtx *ctx) {
@@ -847,3 +847,9 @@ CRDT_Register* addRegister(void *data, CrdtMeta* meta, sds value) {
     return r;
 }
 
+void freeRegisterFilter(CrdtObject** filters, int num) {
+    RedisModule_ZFree(filters);
+}
+void freeRegisterTombstoneFilter(CrdtObject** filters, int num) {
+    RedisModule_ZFree(filters);
+}
