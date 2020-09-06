@@ -227,13 +227,6 @@ void* getTombstone(RedisModuleKey *moduleKey) {
 //update in rdb version 1: optimize rdb save/load vector clock by saving/load it as long long
 // insteadof a string 09/03/2020
 VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version) {
-#if defined(TCL_TEST)
-    size_t vcLength;
-    sds vcStr = RedisModule_LoadSds(rdb, &vcLength);
-    VectorClock result = stringToVectorClock(vcStr);
-    sdsfree(vcStr);
-    return result;
-#endif
     if(version == 0) {
         size_t vcLength;
         sds vcStr = RedisModule_LoadSds(rdb, &vcLength);
@@ -243,8 +236,16 @@ VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version) {
     } else if(version == 1) {
         int length = RedisModule_LoadSigned(rdb);
         if (length == 1) {
+#if defined(TCL_TEST)
+            VectorClock result = newVectorClock(length);
+            uint64_t clock = RedisModule_LoadUnsigned(rdb);
+            clk clock_unit = VCU(clock);
+            set_clock_unit_by_index(&result, (char) 0, clock_unit);
+            return result;
+#else
             uint64_t vclock = RedisModule_LoadUnsigned(rdb);
             return LL2VC(vclock);
+#endif
         } else {
             VectorClock result = newVectorClock(length);
             for (int i = 0; i < length; i++) {
@@ -260,25 +261,24 @@ VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version) {
 //update in rdb version 1: optimize rdb save/load vector clock by saving/load it as long long
 // insteadof a string. but saving is not need for compatibility 09/03/2020
 int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock vectorClock, int version) {
-#if defined(TCL_TEST)
-    size_t len = vectorClockToStringLen(vectorClock);
-    char buf[len];
-    vectorClockToString(buf, vectorClock);
-    RedisModule_SaveStringBuffer(rdb, buf, len);
-    return CRDT_OK;
-#endif
-    if(version != 1) {
+    if(version < 1) {
+        RedisModule_Debug(CRDT_DEFAULT_LOG_LEVEL, "[rdbSaveVectorClock]end early");
         return CRDT_OK;
     }
     int length = (int) get_len(vectorClock);
     RedisModule_SaveSigned(rdb, length);
     if(length == 1) {
+#if defined(TCL_TEST)
+        clk *vc_unit = get_clock_unit_by_index(&vectorClock, 0);
+        RedisModule_SaveUnsigned(rdb, VC2LL((*vc_unit)));
+#else
         uint64_t vclock = VC2LL(vectorClock);
         RedisModule_SaveUnsigned(rdb, vclock);
+#endif
     } else {
         for (int i = 0; i < length; i++) {
             clk *vc_unit = get_clock_unit_by_index(&vectorClock, (char)i);
-            RedisModule_SaveUnsigned(rdb, VC2LL(*vc_unit));
+            RedisModule_SaveUnsigned(rdb, VC2LL((*vc_unit)));
         }
     }
     return CRDT_OK;
