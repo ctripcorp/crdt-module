@@ -222,6 +222,28 @@ CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other) {
     // clone(&target->vectorClock ,vectorClockMerge(vc, getMetaVectorClock(other)));
     return target;
 }
+
+/**
+ *
+ * |  version  |   opt    |  crdt type |
+ * |--16 bits--|  40 bits |  8 bits    |
+ */
+void saveCrdtRdbHeader(RedisModuleIO *rdb, int type) {
+    long long header = CRDT_RDB_VERSION << 48 | type;
+    RedisModule_SaveSigned(rdb, header);
+}
+long long loadCrdtRdbHeader(RedisModuleIO *rdb) {
+    return RedisModule_LoadSigned(rdb);
+}
+
+int getCrdtRdbVersion(long long crdtRdbHeader) {
+    return (int) ((crdtRdbHeader >> 48) & ((1 << 16) - 1));
+}
+
+int getCrdtRdbType(long long crdtRdbHeader) {
+    return (int) (crdtRdbHeader & ((1 << 8) - 1));
+}
+
 #if defined(CRDT_COMMON_TEST_MAIN)
 #include <stdio.h>
 #include "testhelp.h"

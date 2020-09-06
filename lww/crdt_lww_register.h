@@ -88,8 +88,8 @@ int compareCrdtRegisterAndDelMeta(CRDT_Register* current, CrdtMeta* meta) {
     return compareLWWCrdtRegisterAndDelMeta(current, meta);
 }
 void RdbSaveLWWCrdtRegister(RedisModuleIO *rdb, void *value);
-void *RdbLoadLWWCrdtRegister(RedisModuleIO *rdb, int encver);
-void *RdbLoadLWWCrdtRegisterTombstone(RedisModuleIO *rdb, int encver);
+void *RdbLoadLWWCrdtRegister(RedisModuleIO *rdb, int version, int encver);
+void *RdbLoadLWWCrdtRegisterTombstone(RedisModuleIO *rdb, int version, int encver);
 CRDT_LWW_RegisterTombstone* dupLWWCrdtRegisterTombstone(CRDT_LWW_RegisterTombstone *target);
 CRDT_RegisterTombstone* dupCrdtRegisterTombstone(CRDT_RegisterTombstone *target) {
     return (CRDT_RegisterTombstone*)dupLWWCrdtRegisterTombstone((CRDT_LWW_RegisterTombstone*)target);
@@ -161,9 +161,11 @@ CRDT_RegisterTombstone* createCrdtRegisterTombstone() {
 
 //CrdtRegister
 void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver) {
-    int type = RedisModule_LoadSigned(rdb);
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
     if( type == LWW_TYPE) {
-        return RdbLoadLWWCrdtRegister(rdb, encver);
+        return RdbLoadLWWCrdtRegister(rdb, version, encver);
     }
     return NULL;
 }
@@ -185,9 +187,11 @@ void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value) {
 
 //CrdtRegisterTombstone
 void *RdbLoadCrdtRegisterTombstone(RedisModuleIO *rdb, int encver) {
-    int type = RedisModule_LoadSigned(rdb);
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
     if( type == LWW_TYPE) {
-        return RdbLoadLWWCrdtRegisterTombstone(rdb, encver);
+        return RdbLoadLWWCrdtRegisterTombstone(rdb, version, encver);
     }
     return NULL;
 }

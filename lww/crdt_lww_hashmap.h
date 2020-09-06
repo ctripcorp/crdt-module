@@ -32,14 +32,14 @@ CRDT_LWW_HashTombstone* retrieveCrdtLWWHashTombstone(void* data);
 CrdtObject* crdtLWWHashFilter(CrdtObject* common, int gid, long long logic_time);
 int crdtLWWHashClean(CrdtObject* current, CrdtTombstone* tombstone);
 //private hash module functions 
-void *RdbLoadCrdtLWWHash(RedisModuleIO *rdb, int encver);
+void *RdbLoadCrdtLWWHash(RedisModuleIO *rdb, int version, int encver);
 void RdbSaveCrdtLWWHash(RedisModuleIO *rdb, void *value);
 void AofRewriteCrdtLWWHash(RedisModuleIO *aof, RedisModuleString *key, void *value);
 void freeCrdtLWWHash(void *crdtHash);
 size_t crdtLWWHashMemUsageFunc(const void *value);
 void crdtLWWHashDigestFunc(RedisModuleDigest *md, void *value);
 //private hash tombstone functions
-void *RdbLoadCrdtLWWHashTombstone(RedisModuleIO *rdb, int encver);
+void *RdbLoadCrdtLWWHashTombstone(RedisModuleIO *rdb, int version, int encver);
 void RdbSaveCrdtLWWHashTombstone(RedisModuleIO *rdb, void *value);
 void AofRewriteCrdtLWWHashTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
 void freeCrdtLWWHashTombstone(void *crdtHash);
@@ -62,9 +62,11 @@ void freeCrdtHashTombstone(void *data) {
 }
 //basic hash module functions
 void *RdbLoadCrdtHash(RedisModuleIO *rdb, int encver) {
-    int type = RedisModule_LoadSigned(rdb);
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
     if( type == LWW_TYPE) {
-        return RdbLoadCrdtLWWHash(rdb, encver);
+        return RdbLoadCrdtLWWHash(rdb, version, encver);
     }
     return NULL;
 }
@@ -83,9 +85,11 @@ void crdtHashDigestFunc(RedisModuleDigest *md, void *value) {
 }
 //basic hash tombstone module functions
 void *RdbLoadCrdtHashTombstone(RedisModuleIO *rdb, int encver) {
-    int type = RedisModule_LoadSigned(rdb);
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
     if( type == LWW_TYPE) {
-        return RdbLoadCrdtLWWHashTombstone(rdb, encver);
+        return RdbLoadCrdtLWWHashTombstone(rdb, version, encver);
     }
     return NULL;
 }
