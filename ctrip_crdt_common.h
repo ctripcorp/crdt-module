@@ -159,10 +159,14 @@ int appendCrdtMeta(CrdtMeta *target , CrdtMeta* other);
 int isConflictCommon(int result);
 void initIncrMeta(CrdtMeta* meta);
 void freeIncrMeta(CrdtMeta* meta);
+
 void saveCrdtRdbHeader(RedisModuleIO *rdb, int type);
 long long loadCrdtRdbHeader(RedisModuleIO *rdb);
 int getCrdtRdbVersion(long long crdtRdbHeader);
 int getCrdtRdbType(long long crdtRdbHeader);
+
+sds getMetaInfo(CrdtMeta *data);
+
 // int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 
 

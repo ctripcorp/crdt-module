@@ -244,21 +244,23 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
     CrdtTombstone* t = getTombstone(moduleKey);
     CRDT_RegisterTombstone* tombstone = NULL;
-    if(t != NULL && isRegisterTombstone(t)) {    
+    int compare = 0;
+    if(t != NULL && isRegisterTombstone(t)) {
         tombstone = (CRDT_RegisterTombstone*)t;
-        if(isExpireCrdtTombstone(tombstone, &del_meta) > COMPARE_META_EQUAL) {
+        int compare = isExpireCrdtTombstone(tombstone, &del_meta);
+        if(compare > COMPARE_META_EQUAL) {
+            addRegisterTombstone(tombstone, &del_meta, &compare);
             goto end;
-        }
+        } 
     }
     if(tombstone == NULL) {
         tombstone = createCrdtRegisterTombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRegisterTombstone, tombstone);
     }
-    int compare = 0;
+    
     addRegisterTombstone(tombstone, &del_meta, &compare);
     if(isConflictCommon(compare)) RedisModule_IncrCrdtConflict(DEL_CONFLICT | MODIFYCONFLICT);
     CRDT_Register* current = getCurrentValue(moduleKey);
-    
     if(current != NULL) {
         if(isRegister(current) != CRDT_OK) {
             const char* keyStr = RedisModule_StringPtrLen(argv[1], NULL);
@@ -274,10 +276,14 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
             RedisModule_IncrCrdtConflict(MODIFYCONFLICT | SET_DEL_CONFLICT); 
         }
         if(result > COMPARE_META_EQUAL) {
+            addRegisterTombstone(tombstone, getCrdtRegisterLastMeta(current), &result);
             RedisModule_DeleteKey(moduleKey);
             deleted = 1;
+        } else {
+            appendCrdtMeta(getCrdtRegisterLastMeta(current), &del_meta);
+            RedisModule_DeleteTombstone(moduleKey);
         }
-    }
+    } 
     RedisModule_MergeVectorClock(getMetaGid(&del_meta), getMetaVectorClockToLongLong(&del_meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
 end: 
@@ -295,18 +301,26 @@ end:
 
 
 CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_RegisterTombstone* tombstone, CRDT_Register* current, CrdtMeta* meta, RedisModuleString* key,sds value) {
-    int result = isExpireCrdtTombstone(tombstone, meta);
-    if(isConflictCommon(result)) {
-        RedisModule_IncrCrdtConflict(SET_DEL_CONFLICT | MODIFYCONFLICT);
+    if(tombstone) {
+        int result = isExpireCrdtTombstone(tombstone, meta);
+        if(isConflictCommon(result)) {
+            RedisModule_IncrCrdtConflict(SET_DEL_CONFLICT | MODIFYCONFLICT);
+        }
+        if(result > COMPARE_META_EQUAL) {
+            addRegisterTombstone(tombstone, meta, &result);
+            return current;
+        } else {
+            appendCrdtMeta(meta, getCrdtRegisterTombstoneMeta(tombstone));
+            RedisModule_DeleteTombstone(moduleKey);  
+            tombstone = NULL;
+        }
     }
-    if(result > COMPARE_META_EQUAL) {
-        return current;
-    }
-    RedisModule_DeleteTombstone(moduleKey);
     if(current == NULL) {
         current = createCrdtRegister();
         crdtRegisterSetValue(current, meta, value);
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
+        //delete different tombstone
+        RedisModule_DeleteTombstone(moduleKey);
     }else{
         if(!isRegister(current)) {
             RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
@@ -452,13 +466,13 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         meta.timestamp = timestamp;
         meta.vectorClock = vclock;
         current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, &meta, argv[1], RedisModule_GetSds(argv[i+1]));
-        RedisModule_MergeVectorClock(gid, *(long long*)(&vclock));
+        RedisModule_MergeVectorClock(gid, *(long long*)(&(meta.vectorClock)));
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
         RedisModule_CloseKey(moduleKey);
-        freeVectorClock(vclock);
+        freeVectorClock(meta.vectorClock);
         result++;
     }
-    
+    RedisModule_Debug(logLevel, "mset command");
     RedisModule_CrdtReplicateVerbatim(gid, ctx);
     return RedisModule_ReplyWithLongLong(ctx, result); 
 }
@@ -550,6 +564,12 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         if (unit == UNIT_SECONDS) milliseconds *= 1000;
     }
     initIncrMeta(&set_meta);
+    CrdtTombstone* tombstone = getTombstone(moduleKey);
+    if (tombstone != NULL && !isRegisterTombstone(tombstone)) {
+        tombstone = NULL;
+    }
+    if(tombstone) appendVCForMeta(&set_meta, getCrdtRegisterTombstoneLastVc(tombstone));
+
     if(current == NULL) {
         #if defined(SET_STATISTICS) 
             add_val_start();

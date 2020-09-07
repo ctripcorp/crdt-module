@@ -417,3 +417,12 @@ int crdtLWWRegisterTombstoneGc(void* target, VectorClock clock) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
     return isVectorClockMonoIncr(getCrdtLWWRegisterTombstoneVectorClock(t), clock);
 }
+
+VectorClock getCrdtRegisterTombstoneLastVc(CRDT_RegisterTombstone* target) {
+    CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
+    return getCrdtLWWRegisterTombstoneVectorClock(t);
+}
+
+CrdtMeta* getCrdtRegisterTombstoneMeta(CRDT_RegisterTombstone* t) {
+    return getCrdtLWWRegisterTombstoneMeta((CRDT_LWW_RegisterTombstone*)t);
+}
