@@ -409,7 +409,7 @@ void *RdbLoadLWWCrdtRegisterTombstone(RedisModuleIO *rdb, int version, int encve
     CRDT_LWW_RegisterTombstone *tombstone = createCrdtLWWRegisterTombstone();
     setCrdtLWWRegisterTombstoneGid(tombstone, RedisModule_LoadSigned(rdb));
     setCrdtLWWRegisterTombstoneTimestamp(tombstone, RedisModule_LoadSigned(rdb));
-    setCrdtLWWRegisterTombstoneVectorClock(tombstone, rdbLoadVectorClock(rdb, CRDT_RDB_VERSION));
+    setCrdtLWWRegisterTombstoneVectorClock(tombstone, rdbLoadVectorClock(rdb, version));
     return tombstone;
 }
 
