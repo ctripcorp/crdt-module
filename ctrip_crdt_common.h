@@ -135,6 +135,8 @@ typedef struct CrdtTombstoneMethod {
     crdtPurgeFunc purge;
     crdtInfoFunc info;
 } CrdtTombstoneMethod;
+#define PURGE_VAL 1
+#define PURGE_TOMBSTONE -1
 
 
 typedef int (*crdtIsExpireFunc)(void* target, CrdtMeta* meta);

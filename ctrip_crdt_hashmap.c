@@ -264,12 +264,10 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     } 
     appendVCForMeta(&meta, getCrdtHashLastVc(current));
     for(int i = 2; i < argc; i += 2) {
-        RedisModule_Debug(logLevel, "hset start");
         sds field = RedisModule_GetSds(argv[i]);
         dictEntry* de = dictFind(current->map, field);
         
         if(de == NULL) {
-            RedisModule_Debug(logLevel, "hset add");
             #if defined(HSET_STATISTICS) 
                 add_val_start();
             #endif
@@ -281,7 +279,6 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
                 add_val_end();
             #endif
         } else {
-            RedisModule_Debug(logLevel, "hset set");
             #if defined(HSET_STATISTICS) 
                 update_val_start();
             #endif
@@ -303,7 +300,6 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         fieldAndValStrLen[i-2] = fieldstrlen;
         fieldAndValStrLen[i-1] = valstrlen;
         fieldAndValAllStrLen += fieldstrlen + valstrlen + 2 * REPLICATION_MAX_STR_LEN;
-         RedisModule_Debug(logLevel, "hset end");
     }
 
     setCrdtHashLastVc(current, getMetaVectorClock(&meta));
@@ -335,7 +331,6 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     sds cmdname = RedisModule_GetSds(argv[0]);
-     RedisModule_Debug(logLevel, "hset all end");
     if (cmdname[1] == 's' || cmdname[1] == 'S') {
         /* HSET */
         return RedisModule_ReplyWithLongLong(ctx, result);
@@ -1209,26 +1204,52 @@ int crdtHashTombstonePurge( CrdtObject* tombstone, CrdtObject* current) {
     }
     CRDT_Hash* crdtHash = retrieveCrdtHash(current);
     CRDT_HashTombstone* crdtHashTombstone = retrieveCrdtHashTombstone(tombstone);
-    dictIterator *di = dictGetSafeIterator(crdtHashTombstone->map);
+    // dictIterator *di = dictGetSafeIterator(crdtHashTombstone->map);
+    // dictEntry *de;
+    // while((de = dictNext(di)) != NULL) {
+    //     sds field = dictGetKey(de);
+    //     dictEntry *existDe = dictFind(crdtHash->map, field);
+    //     if(existDe != NULL) {
+    //         CRDT_RegisterTombstone *crdtRegisterTombstone = dictGetVal(de);
+    //         CRDT_Register *crdtRegister = dictGetVal(existDe);
+    //         CrdtMeta* lastMeta = createCrdtRegisterLastMeta(crdtRegister);
+    //         if(isExpireCrdtHashTombstone(crdtHashTombstone, lastMeta) > COMPARE_META_EQUAL
+    //            || purgeRegisterTombstone(crdtRegisterTombstone, crdtRegister) == CRDT_OK) {
+    //             dictDelete(crdtHash->map, field);
+    //         }
+    //         freeCrdtMeta(lastMeta);
+            
+    //     }
+    // }
+    // dictReleaseIterator(di);
+    dictIterator *di = dictGetSafeIterator(crdtHash->map);
     dictEntry *de;
     while((de = dictNext(di)) != NULL) {
-        sds field = dictGetKey(de);
-        dictEntry *existDe = dictFind(crdtHash->map, field);
-        if(existDe != NULL) {
-            CRDT_RegisterTombstone *crdtRegisterTombstone = dictGetVal(de);
-            CRDT_Register *crdtRegister = dictGetVal(existDe);
-            CrdtMeta* lastMeta = createCrdtRegisterLastMeta(crdtRegister);
-            if(isExpireCrdtHashTombstone(crdtHashTombstone, lastMeta) > COMPARE_META_EQUAL
-               || purgeRegisterTombstone(crdtRegisterTombstone, crdtRegister) == CRDT_OK) {
-                dictDelete(crdtHash->map, field);
-            }
-            freeCrdtMeta(lastMeta);
-            
+         sds field = dictGetKey(de);    
+        CRDT_Register *crdtRegister = dictGetVal(de);
+        CrdtMeta* lastMeta = createCrdtRegisterLastMeta(crdtRegister);
+        if(isExpireCrdtHashTombstone(crdtHashTombstone, lastMeta) > COMPARE_META_EQUAL) {
+            dictDelete(crdtHash->map, field);
+            continue;
         }
-    }
-    dictReleaseIterator(di);
+        dictEntry *existDe = dictFind(crdtHashTombstone->map, field);
+         if(existDe != NULL) {
+           
+            CRDT_RegisterTombstone *crdtRegisterTombstone = dictGetVal(existDe);
+            int r = purgeRegisterTombstone(crdtRegisterTombstone, crdtRegister) ;
+            if(r == PURGE_VAL) {
+                dictDelete(crdtHash->map, field);
+            } else if(r == PURGE_TOMBSTONE) {
+                dictDelete(crdtHashTombstone->map, field);
+             }
+             freeCrdtMeta(lastMeta);
+           
+         }
+     }
+     dictReleaseIterator(di);
+
     if(dictSize(crdtHash->map) == 0) {
-        return CRDT_OK;
+        return PURGE_VAL;
     }
     return CRDT_NO;
 }

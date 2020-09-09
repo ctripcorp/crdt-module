@@ -162,7 +162,7 @@ int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register
     return compareCrdtMeta(getCrdtLWWRegisterMeta(current), getCrdtLWWRegisterTombstoneMeta(t));
 }
 int purgeLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
-    return compareTombstoneAndRegister(tombstone, target) > COMPARE_META_EQUAL;
+    return compareTombstoneAndRegister(tombstone, target) > COMPARE_META_EQUAL ? PURGE_VAL: PURGE_TOMBSTONE;
 }
 int isExpireLWWTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
