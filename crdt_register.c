@@ -509,6 +509,8 @@ int msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     }
     CrdtMeta mset_meta;
     initIncrMeta(&mset_meta);
+    long long vc = RedisModule_CurrentVectorClock();
+    appendVCForMeta(&mset_meta, LL2VC(vc));
     #if defined(MSET_STATISTICS)    
         write_bakclog_start();
     #endif
@@ -568,13 +570,18 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
     if (tombstone != NULL && !isRegisterTombstone(tombstone)) {
         tombstone = NULL;
     }
-    if(tombstone) appendVCForMeta(&set_meta, getCrdtRegisterTombstoneLastVc(tombstone));
-
+    
     if(current == NULL) {
         #if defined(SET_STATISTICS) 
             add_val_start();
         #endif
         current = createCrdtRegister();
+        if(tombstone) {
+            appendVCForMeta(&set_meta, getCrdtRegisterTombstoneLastVc(tombstone));
+        } else {
+            long long vc = RedisModule_CurrentVectorClock();
+            appendVCForMeta(&set_meta, LL2VC(vc));
+        }
         crdtRegisterSetValue(current, &set_meta, RedisModule_GetSds(val));
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
         #if defined(SET_STATISTICS) 

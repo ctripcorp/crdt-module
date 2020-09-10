@@ -259,6 +259,9 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         current = createCrdtHash();
         if(tombstone) {
             updateLastVCHash(current, getCrdtHashTombstoneLastVc(tombstone));
+        } else {
+            long long vc = RedisModule_CurrentVectorClock();
+            updateLastVCHash(current, LL2VC(vc));
         }
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtHash, current);
     } 
