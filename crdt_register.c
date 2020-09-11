@@ -247,7 +247,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     int compare = 0;
     if(t != NULL && isRegisterTombstone(t)) {
         tombstone = (CRDT_RegisterTombstone*)t;
-        int compare = isExpireCrdtTombstone(tombstone, &del_meta);
+        int compare = compareCrdtRegisterTombstone(tombstone, &del_meta);
         if(compare > COMPARE_META_EQUAL) {
             addRegisterTombstone(tombstone, &del_meta, &compare);
             goto end;
@@ -302,7 +302,7 @@ end:
 
 CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_RegisterTombstone* tombstone, CRDT_Register* current, CrdtMeta* meta, RedisModuleString* key,sds value) {
     if(tombstone) {
-        int result = isExpireCrdtTombstone(tombstone, meta);
+        int result = compareCrdtRegisterTombstone(tombstone, meta);
         if(isConflictCommon(result)) {
             RedisModule_IncrCrdtConflict(SET_DEL_CONFLICT | MODIFYCONFLICT);
         }
@@ -466,13 +466,12 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         meta.timestamp = timestamp;
         meta.vectorClock = vclock;
         current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, &meta, argv[1], RedisModule_GetSds(argv[i+1]));
-        RedisModule_MergeVectorClock(gid, *(long long*)(&(meta.vectorClock)));
+        RedisModule_MergeVectorClock(gid, VC2LL(meta.vectorClock));
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
         RedisModule_CloseKey(moduleKey);
         freeVectorClock(meta.vectorClock);
         result++;
     }
-    RedisModule_Debug(logLevel, "mset command");
     RedisModule_CrdtReplicateVerbatim(gid, ctx);
     return RedisModule_ReplyWithLongLong(ctx, result); 
 }
@@ -867,7 +866,7 @@ int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 CRDT_Register* addRegister(void *data, CrdtMeta* meta, sds value) {
     CRDT_RegisterTombstone* tombstone = (CRDT_RegisterTombstone*) data;
     if(tombstone != NULL) {
-        if(isExpireCrdtTombstone(tombstone, meta) > COMPARE_META_EQUAL) {
+        if(compareCrdtRegisterTombstone(tombstone, meta) > COMPARE_META_EQUAL) {
             return NULL;
         }
     }

@@ -130,9 +130,9 @@ CrdtMeta* updateMaxDelCrdtLWWHashTombstone(void* data, CrdtMeta* meta, int* coma
 CrdtMeta* updateMaxDelCrdtHashTombstone(void* data, CrdtMeta* meta, int* comapre) {
     return updateMaxDelCrdtLWWHashTombstone(data, meta, comapre);
 }
-int isExpireCrdtLWWHashTombstone(void* data, CrdtMeta* meta);
-int isExpireCrdtHashTombstone(void* data, CrdtMeta* meta) {
-    return isExpireCrdtLWWHashTombstone(data, meta);
+int compareCrdtLWWHashTombstone(void* data, CrdtMeta* meta);
+int compareCrdtHashTombstone(void* data, CrdtMeta* meta) {
+    return compareCrdtLWWHashTombstone(data, meta);
 }
 CRDT_HashTombstone* dupCrdtLWWHashTombstone(void* data);
 CRDT_HashTombstone* dupCrdtHashTombstone(void* data) {
