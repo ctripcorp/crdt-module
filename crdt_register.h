@@ -76,14 +76,14 @@ typedef struct CrdtRegisterMethod {
     updateLastVCCrdtRegisterFunc updateLastVC;
 } CrdtRegisterMethod;
 
-typedef int (*isExpireCrdtRegisterTombstoneFunc)(CRDT_RegisterTombstone* target, CrdtMeta* meta);
+typedef int (*compareCrdtRegisterTombstoneFunc)(CRDT_RegisterTombstone* target, CrdtMeta* meta);
 typedef CrdtMeta* (*addCrdtRegisterTombstoneFunc)(CRDT_RegisterTombstone* target,CrdtMeta* other);
 typedef CRDT_RegisterTombstone* (*filterCrdtRegisterTombstoneFunc)(CRDT_RegisterTombstone* target, int gid, long long logic_time);
 typedef CRDT_RegisterTombstone* (*dupCrdtRegisterTombstoneFunc)(CRDT_RegisterTombstone* target);
 typedef CRDT_RegisterTombstone* (*mergeRegisterTombstoneFunc)(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other);
 typedef int (*purgeTombstoneFunc)(CrdtTombstone* tombstone, CrdtObject* obj);
 typedef struct CrdtRegisterTombstoneMethod {
-    isExpireCrdtRegisterTombstoneFunc isExpire;
+    compareCrdtRegisterTombstoneFunc isExpire;
     addCrdtRegisterTombstoneFunc add;
     filterCrdtRegisterTombstoneFunc filter;
     dupCrdtRegisterTombstoneFunc dup;
@@ -161,7 +161,7 @@ CRDT_RegisterTombstone* mergeRegisterTombstone(CRDT_RegisterTombstone* target, C
 CRDT_RegisterTombstone** filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time,long long maxsize, int* length);
 int purgeRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
 CrdtMeta* addRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta, int* compare);
-int isExpireCrdtTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);
+int compareCrdtRegisterTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);
 #endif //XREDIS_CRDT_CRDT_REGISTER_H
 static RedisModuleType *CrdtRegister;
 static RedisModuleType *CrdtRegisterTombstone;
@@ -169,4 +169,6 @@ RedisModuleType* getCrdtRegister();
 RedisModuleType* getCrdtRegisterTombstone();
 int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
 size_t crdtRegisterMemUsageFunc(const void *value);
+VectorClock getCrdtRegisterTombstoneLastVc(CRDT_RegisterTombstone* t);
+CrdtMeta* getCrdtRegisterTombstoneMeta(CRDT_RegisterTombstone* t);
 

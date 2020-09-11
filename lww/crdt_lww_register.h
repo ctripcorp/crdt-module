@@ -225,9 +225,9 @@ int crdtRegisterTombstoneGc(CrdtTombstone* target, VectorClock clock) {
 
 
 
-int isExpireLWWTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);
-int isExpireCrdtTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
-    return isExpireLWWTombstone(tombstone, meta);
+int compareCrdtLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);
+int compareCrdtRegisterTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
+    return compareCrdtLWWRegisterTombstone(tombstone, meta);
 }
 sds crdtRegisterInfoFromMetaAndValue(CrdtMeta* meta, sds value) {
     CRDT_LWW_Register c;

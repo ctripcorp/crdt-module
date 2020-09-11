@@ -162,9 +162,9 @@ int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register
     return compareCrdtMeta(getCrdtLWWRegisterMeta(current), getCrdtLWWRegisterTombstoneMeta(t));
 }
 int purgeLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
-    return compareTombstoneAndRegister(tombstone, target) > COMPARE_META_EQUAL;
+    return compareTombstoneAndRegister(tombstone, target) > COMPARE_META_EQUAL ? PURGE_VAL: PURGE_TOMBSTONE;
 }
-int isExpireLWWTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
+int compareCrdtLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
     return compareCrdtMeta(meta, getCrdtLWWRegisterTombstoneMeta(t));
 }
@@ -409,11 +409,20 @@ void *RdbLoadLWWCrdtRegisterTombstone(RedisModuleIO *rdb, int version, int encve
     CRDT_LWW_RegisterTombstone *tombstone = createCrdtLWWRegisterTombstone();
     setCrdtLWWRegisterTombstoneGid(tombstone, RedisModule_LoadSigned(rdb));
     setCrdtLWWRegisterTombstoneTimestamp(tombstone, RedisModule_LoadSigned(rdb));
-    setCrdtLWWRegisterTombstoneVectorClock(tombstone, rdbLoadVectorClock(rdb, CRDT_RDB_VERSION));
+    setCrdtLWWRegisterTombstoneVectorClock(tombstone, rdbLoadVectorClock(rdb, version));
     return tombstone;
 }
 
 int crdtLWWRegisterTombstoneGc(void* target, VectorClock clock) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
     return isVectorClockMonoIncr(getCrdtLWWRegisterTombstoneVectorClock(t), clock);
+}
+
+VectorClock getCrdtRegisterTombstoneLastVc(CRDT_RegisterTombstone* target) {
+    CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
+    return getCrdtLWWRegisterTombstoneVectorClock(t);
+}
+
+CrdtMeta* getCrdtRegisterTombstoneMeta(CRDT_RegisterTombstone* t) {
+    return getCrdtLWWRegisterTombstoneMeta((CRDT_LWW_RegisterTombstone*)t);
 }

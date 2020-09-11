@@ -189,6 +189,14 @@ void setMetaVectorClock(CrdtMeta* meta, VectorClock vc) {
     meta->vectorClock = vc;
     
 }
+sds getMetaInfo(CrdtMeta *data) {
+    sds result = sdsempty();
+    sds vcStr = vectorClockToSds(getMetaVectorClock(data));
+    result = sdscatprintf(result, "type: meata, gid: %d, timestamp: %lld, vector-clock: %s",
+            getMetaGid(data), getMetaTimestamp(data), vcStr);
+    sdsfree(vcStr);
+    return result;
+}
 
 CrdtMeta* mergeMeta(CrdtMeta* target, CrdtMeta* other, int* compare) {
     if(target == NULL) {

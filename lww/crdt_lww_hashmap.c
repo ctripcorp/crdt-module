@@ -126,7 +126,7 @@ CrdtMeta* updateMaxDelCrdtLWWHashTombstone(void* data, CrdtMeta* meta,int* compa
     setCrdtLWWHashTombstoneMaxDelMeta(target, mergeMeta(getCrdtLWWHashTombstoneMaxDelMeta(target), meta, compare));
     return getCrdtLWWHashTombstoneMaxDelMeta(target);
 }
-int isExpireCrdtLWWHashTombstone(void* data, CrdtMeta* meta) {
+int compareCrdtLWWHashTombstone(void* data, CrdtMeta* meta) {
     CRDT_LWW_HashTombstone* target = retrieveCrdtLWWHashTombstone(data);
     return compareCrdtMeta(meta,getCrdtLWWHashTombstoneMaxDelMeta(target));
 }
