@@ -47,6 +47,7 @@
 //data type
 #define CRDT_REGISTER_TYPE 0
 #define CRDT_HASH_TYPE 1
+#define CRDT_SET_TYPE 2
 
 /**
  *

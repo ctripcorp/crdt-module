@@ -178,10 +178,10 @@ size_t crdtBasicHashTombstoneMemUsageFunc(void* data);
 /**
  * about dict
  */
-uint64_t dictSdsHash(const void *key);
-int dictSdsKeyCompare(void *privdata, const void *key1,
-                      const void *key2);
-void dictSdsDestructor(void *privdata, void *val);
+// uint64_t dictSdsHash(const void *key);
+// int dictSdsKeyCompare(void *privdata, const void *key1,
+//                       const void *key2);
+// void dictSdsDestructor(void *privdata, void *val);
 void dictCrdtRegisterDestructor(void *privdata, void *val);
 
 void dictCrdtRegisterTombstoneDestructor(void *privdata, void *val);

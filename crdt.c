@@ -33,12 +33,14 @@
 #include "include/redismodule.h"
 
 #include "crdt.h"
+#include "crdt_set.h"
 #include "crdt_register.h"
 #include "ctrip_crdt_hashmap.h"
 #include "crdt_pubsub.h"
 #include "crdt_expire.h"
 #include "ctrip_crdt_common.h"
 #include "crdt_statistics.h"
+#include "crdt_set.h"
 #include <stdlib.h>
 #include <stdio.h>
 #define CRDT_API_VERSION 1
@@ -177,6 +179,9 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key, RedisModuleKe
         case CRDT_HASH_TYPE:
             saveValue(rio, getCrdtHash(), data);
             break;
+        case CRDT_SET_TYPE:
+            saveValue(rio, getCrdtSet(), data);
+            break;
         }   
     }
     CrdtTombstone* tombstone = RedisModule_ModuleTypeGetTombstone(moduleKey);
@@ -188,6 +193,9 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key, RedisModuleKe
             break;
         case CRDT_HASH_TYPE:
             saveValue(rio, getCrdtHashTombstone(), tombstone);
+            break;
+        case CRDT_SET_TYPE:
+            saveValue(rio, getCrdtSetTombstone(), tombstone);
             break;
         }
     }
@@ -213,11 +221,15 @@ int RdbLoadCrdtValue(void* db, RedisModuleString* key, void* rio, RedisModuleKey
             RedisModule_ModuleTypeLoadRdbAddValue(moduleKey, type, data);
         } else if(type == getCrdtHash()) {
             RedisModule_ModuleTypeLoadRdbAddValue(moduleKey, type, data);
+        } else if(type == getCrdtSet()) {
+            RedisModule_ModuleTypeLoadRdbAddValue(moduleKey, type, data);
         } else if(type == getCrdtRegisterTombstone()) {
             RedisModule_ModuleTombstoneLoadRdbAddValue(moduleKey, type, data);
         } else if(type == getCrdtHashTombstone()) {
             RedisModule_ModuleTombstoneLoadRdbAddValue(moduleKey, type, data);
-        } else{
+        }  else if(type == getCrdtSetTombstone()) {
+            RedisModule_ModuleTombstoneLoadRdbAddValue(moduleKey, type, data);
+        } else {
             result = C_ERR;
             goto error;
         }
@@ -242,6 +254,8 @@ CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
             return &RegisterDataMethod;
         case CRDT_HASH_TYPE:
             return &HashDataMethod;
+        case CRDT_SET_TYPE:
+            return &SetDataMethod;
         default:
             return NULL;
     }
@@ -253,6 +267,8 @@ CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
                 return &RegisterCommonMethod;
             case CRDT_HASH_TYPE:
                 return &HashCommonMethod;
+            case CRDT_SET_TYPE:
+                return &SetCommonMethod;
             default:
                 return NULL;
         }
@@ -267,6 +283,8 @@ CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
                 return &RegisterTombstoneMethod;
             case CRDT_HASH_TYPE:
                 return &HashTombstoneCommonMethod;
+            case CRDT_SET_TYPE:
+                return &SetTombstoneCommonMethod;
             default:
                 return NULL;
         }
@@ -339,6 +357,12 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         RedisModule_Log(ctx, "warning", "expire module -- expire failed");
         return REDISMODULE_ERR;
     }
+
+    if(initCrdtSetModule(ctx) != REDISMODULE_OK) {
+        RedisModule_Log(ctx, "warning", "set module -- set failed");
+        return REDISMODULE_ERR;
+    }
+
 
     if (RedisModule_CreateCommand(ctx,"del",
                                   delCommand,"write",1,-1,1) == REDISMODULE_ERR)

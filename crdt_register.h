@@ -30,8 +30,8 @@
 // Created by zhuchen(zhuchen at ctrip dot com) on 2019-04-16.
 //
 
-#ifndef XREDIS_CRDT_CRDT_REGISTER_H
-#define XREDIS_CRDT_CRDT_REGISTER_H
+#ifndef XREDIS_CRDT_REGISTER_H
+#define XREDIS_CRDT_REGISTER_H
 
 #include "include/rmutil/sds.h"
 #include "ctrip_crdt_common.h"
@@ -162,7 +162,7 @@ CRDT_RegisterTombstone** filterRegisterTombstone(CRDT_RegisterTombstone* target,
 int purgeRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
 CrdtMeta* addRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta, int* compare);
 int compareCrdtRegisterTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);
-#endif //XREDIS_CRDT_CRDT_REGISTER_H
+
 static RedisModuleType *CrdtRegister;
 static RedisModuleType *CrdtRegisterTombstone;
 RedisModuleType* getCrdtRegister();
@@ -171,4 +171,4 @@ int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register
 size_t crdtRegisterMemUsageFunc(const void *value);
 VectorClock getCrdtRegisterTombstoneLastVc(CRDT_RegisterTombstone* t);
 CrdtMeta* getCrdtRegisterTombstoneMeta(CRDT_RegisterTombstone* t);
-
+#endif //XREDIS_CRDT_CRDT_REGISTER_H
