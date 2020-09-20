@@ -178,7 +178,10 @@ int isNullVectorClock(VectorClock vc);
 int isNullVectorClockUnit(VectorClockUnit unit);
 void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time); 
 #define VCU(unit) (*(clk*)(&unit))
-#define LL2VC(vc) (*(VectorClock*)(&vc))
+#define P2VC(p) (*(VectorClock*)p)
+#define LL2VC(vc) (P2VC(&vc))
+
+#define VC2P(a) ((void*)&a)
 #define VC2LL(a) *(unsigned long long*)((void*)&a)
 //
 static inline clk init_clock(char gid, long long logic_clk) {
@@ -213,6 +216,9 @@ dupVectorClock(VectorClock vc);
 /**------------------------Vector Clock & sds convertion--------------------------------------*/
 VectorClock
 sdsToVectorClock(sds vcStr);
+
+VectorClock
+purgeVectorClock(VectorClock targe, VectorClock other);
 
 sds
 vectorClockToSds(VectorClock vc);

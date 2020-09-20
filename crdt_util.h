@@ -1,6 +1,7 @@
 #ifndef XREDIS_CRDT_CRDT_UTIL_H
 #define XREDIS_CRDT_CRDT_UTIL_H
 #include "include/redismodule.h"
+#include "include/rmutil/dict.h"
 #include "ctrip_vector_clock.h"
 #include "utils.h"
 #include "crdt.h"
@@ -38,4 +39,11 @@ size_t feedMeta2Buf(char *buf, int gid, long long time, VectorClock vc);
 size_t feedArgc(char* buf, int argc);
 size_t feedKV2Buf(char *buf,const char* keystr, size_t keylen,const char* valstr, size_t vallen);
 RedisModuleKey* getRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type, int mode);
+
+//about dict
+uint64_t dictSdsHash(const void *key);
+int dictSdsKeyCompare(void *privdata, const void *key1,
+                      const void *key2);
+void dictSdsDestructor(void *privdata, void *val);
+
 #endif //XREDIS_CRDT_CRDT_UTIL_H

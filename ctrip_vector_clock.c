@@ -649,6 +649,38 @@ mergeMinVectorClock(VectorClock vclock1, VectorClock vclock2) {
     return target;
 }
 
+VectorClock
+purgeVectorClock(VectorClock targe, VectorClock src) {
+    if (isNullVectorClock(targe)) {
+        return targe;
+    }
+    if (isNullVectorClock(src)) {
+        return targe;
+    }
+    int len = get_len(targe);
+    clk c[len];
+    int index = 0;
+    for(int i = 0; i < len; i++) {
+        clk* vcu1 = get_clock_unit_by_index(&targe, i);
+        unsigned char gid = (unsigned char) get_gid(*get_clock_unit_by_index(&targe, i));
+        clk* vcu2 = get_clock_unit(&src, gid);
+        if (vcu2 == NULL && (get_logic_clock(*vcu1)) != 0) {
+            c[index] = *vcu1;
+            index++;
+        }
+        if (vcu2 != NULL && ((long long) (get_logic_clock(*vcu2))) < ((long long) (get_logic_clock(*vcu1)))) {
+            c[index] = *vcu1;
+            index ++;
+        }
+    }
+    VectorClock result = newVectorClock(index + 1);
+    for(int i = 0; i < index; i++) {
+        set_clock_unit_by_index(&result, i, c[i]);
+    }
+    freeVectorClock(targe);
+    sortVectorClock(result);
+    return result;
+}
 
 #if defined(VECTOR_CLOCK_TEST_MAIN)
 
