@@ -33,12 +33,14 @@
 #include "include/redismodule.h"
 
 #include "crdt.h"
+#include "crdt_set.h"
 #include "crdt_register.h"
 #include "ctrip_crdt_hashmap.h"
 #include "crdt_pubsub.h"
 #include "crdt_expire.h"
 #include "ctrip_crdt_common.h"
 #include "crdt_statistics.h"
+#include "crdt_set.h"
 #include <stdlib.h>
 #include <stdio.h>
 #define CRDT_API_VERSION 1
@@ -242,6 +244,8 @@ CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
             return &RegisterDataMethod;
         case CRDT_HASH_TYPE:
             return &HashDataMethod;
+        case CRDT_SET_TYPE:
+            return &SetDataMethod;
         default:
             return NULL;
     }
@@ -253,6 +257,8 @@ CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
                 return &RegisterCommonMethod;
             case CRDT_HASH_TYPE:
                 return &HashCommonMethod;
+            case CRDT_SET_TYPE:
+                return &SetCommonMethod;
             default:
                 return NULL;
         }
@@ -267,6 +273,8 @@ CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
                 return &RegisterTombstoneMethod;
             case CRDT_HASH_TYPE:
                 return &HashTombstoneCommonMethod;
+            case CRDT_SET_TYPE:
+                return &SetTombstoneCommonMethod;
             default:
                 return NULL;
         }
@@ -339,6 +347,12 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         RedisModule_Log(ctx, "warning", "expire module -- expire failed");
         return REDISMODULE_ERR;
     }
+
+    if(initCrdtSetModule(ctx) != REDISMODULE_OK) {
+        RedisModule_Log(ctx, "warning", "set module -- set failed");
+        return REDISMODULE_ERR;
+    }
+
 
     if (RedisModule_CreateCommand(ctx,"del",
                                   delCommand,"write",1,-1,1) == REDISMODULE_ERR)
