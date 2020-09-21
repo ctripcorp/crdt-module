@@ -20,14 +20,14 @@ void *RdbLoadCrdtSet(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtSet(RedisModuleIO *rdb, void *value);
 void AofRewriteCrdtSet(RedisModuleIO *aof, RedisModuleString *key, void *value);
 size_t crdtSetMemUsageFunc(const void *value);
-int crdtSetDigestFunc(RedisModuleDigest *md, void *value);
+void crdtSetDigestFunc(RedisModuleDigest *md, void *value);
 void freeCrdtSet(void* set);
 //set tombstone type modulemethod
 void *RdbLoadCrdtSetTombstone(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtSetTombstone(RedisModuleIO *rdb, void *value);
 void AofRewriteCrdtSetTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
 size_t crdtSetTombstoneMemUsageFunc(const void *value);
-int crdtSetTombstoneDigestFunc(RedisModuleDigest *md, void *value);
+void crdtSetTombstoneDigestFunc(RedisModuleDigest *md, void *value);
 void freeCrdtSetTombstone(void* set);
 
 //adbout set
@@ -57,8 +57,6 @@ sds setIterInfo(void *data);
 //about method
 static CrdtDataMethod SetDataMethod = {
     .propagateDel = crdtSetDelete,
-    .getLastVC = getCrdtSetLastVc,
-    .updateLastVC = updateCrdtSetLastVc,
     .info = crdtSetInfo,
 };
 CrdtObject *crdtSetMerge(CrdtObject *currentVal, CrdtObject *value);
@@ -69,6 +67,7 @@ static CrdtObjectMethod SetCommonMethod = {
     .filterAndSplit = crdtSetFilter,
     .freefilter = freeSetFilter,
 };
+int addSetTombstoneDictValue(CRDT_Set* data, sds field, CrdtMeta* meta);
 //about tombstone method
 CrdtTombstone* crdtSetTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other);
 CrdtObject** crdtSetTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) ;

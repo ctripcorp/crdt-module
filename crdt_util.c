@@ -255,6 +255,8 @@ VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version) {
             }
             return result;
         }
+    } else {
+        return newVectorClock(0);
     }
 }
 
