@@ -703,6 +703,9 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx, "smembers",
                                 smembersCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR) 
         return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"sunion",
+                                  sunionCommand,"readonly random",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"sscan",
                                   sscanCommand,"readonly random",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
