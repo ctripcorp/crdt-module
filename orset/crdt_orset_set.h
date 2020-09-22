@@ -4,6 +4,23 @@
 #include "../crdt_util.h"
 #include "../crdt_set.h"
 #include "../include/rmutil/dict.h"
+#if defined(TCL_TEST)
+typedef struct CRDT_ORSET_SET {
+    unsigned char  type;
+    dict*   dict;
+    VectorClock lastVc; //8
+} __attribute__ ((packed, aligned(1))) CRDT_ORSET_SET;
+
+
+typedef struct CRDT_ORSET_SETTOMBSTONE {
+    unsigned char  type;
+    dict*   dict;
+    VectorClock lastVc; //8
+    VectorClock maxDelvectorClock;//8
+} __attribute__ ((packed, aligned(1))) CRDT_ORSET_SETTOMBSTONE;
+
+
+#else 
 typedef struct CRDT_ORSET_SET {
     ULONGLONG   type:8;
     ULONGLONG   dict: 56;
@@ -17,18 +34,9 @@ typedef struct CRDT_ORSET_SETTOMBSTONE {
     VectorClock lastVc; //8
     VectorClock maxDelvectorClock;//8
 } __attribute__ ((packed, aligned(1))) CRDT_ORSET_SETTOMBSTONE;
-
+#endif
 void *RdbLoadCrdtORSETSet(RedisModuleIO *rdb, int version, int encver);
 
-void *RdbLoadCrdtSet(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
-    int type = getCrdtRdbType(header);
-    int version = getCrdtRdbVersion(header);
-    if ( type == ORSET_TYPE ) {
-        return RdbLoadCrdtORSETSet(rdb, version, encver);
-    }
-    return NULL;
-}
 
 
 void dictCrdtORSETSetDestructor(void *privdata, void *val) {
@@ -61,15 +69,6 @@ void *RdbLoadCrdtORSETSetTombstone(RedisModuleIO *rdb, int version, int encver);
 // void AofRewriteCrdtORSETSetTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
 // size_t crdtORSETSetTombstoneMemUsageFunc(const void *value);
 // int crdtORSETSetTombstoneDigestFunc(RedisModuleDigest *md, void *value);
-void *RdbLoadCrdtSetTombstone(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
-    int type = getCrdtRdbType(header);
-    int version = getCrdtRdbVersion(header);
-    if ( type == ORSET_TYPE ) {
-        return RdbLoadCrdtORSETSetTombstone(rdb, version, encver);
-    }
-    return NULL;
-}
 
 
 #endif

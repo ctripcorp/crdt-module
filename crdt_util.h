@@ -45,5 +45,4 @@ uint64_t dictSdsHash(const void *key);
 int dictSdsKeyCompare(void *privdata, const void *key1,
                       const void *key2);
 void dictSdsDestructor(void *privdata, void *val);
-
 #endif //XREDIS_CRDT_CRDT_UTIL_H

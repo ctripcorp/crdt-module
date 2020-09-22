@@ -66,6 +66,7 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
     }
     void
     freeVectorClock(VectorClock vc) {
+        // printf("freeVectorClock %p \n", vc);
         vc_free(vc);
     }
     clk* clocks_address(VectorClock value) {
@@ -673,7 +674,7 @@ purgeVectorClock(VectorClock targe, VectorClock src) {
             index ++;
         }
     }
-    VectorClock result = newVectorClock(index + 1);
+    VectorClock result = newVectorClock(index);
     for(int i = 0; i < index; i++) {
         set_clock_unit_by_index(&result, i, c[i]);
     }
@@ -1349,7 +1350,13 @@ int testUpdateProcessVectorClock(void) {
     test_cond("[testvectorClockMerge][iam-update-myself]", sdscmp(sdsnew("1:200;2:200;3:300"), vectorClockToSds(iam)) == 0);
     return 0;
 }
-
+int testPurgeVectorClock(void) {
+    printf("========[testPurgeVectorClock]==========\r\n");
+    VectorClock iam = sdsToVectorClock(sdsnew("1:100;2:200;3:300"));
+    VectorClock other = sdsToVectorClock(sdsnew("1:200;2:199;3:100"));
+    VectorClock r = purgeVectorClock(iam, other);
+    printf("%s\n", vectorClockToSds(r));
+}
 int vectorClockTest(void) {
     int result = 0;
     {
@@ -1382,6 +1389,7 @@ int vectorClockTest(void) {
         result |= testIsVectorClockMonoIncr();
         result |= testVectorClockMerge();
         result |= testUpdateProcessVectorClock();
+        result |= testPurgeVectorClock();
     }
     test_report();
     return result;

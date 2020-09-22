@@ -1,6 +1,28 @@
 #include "crdt_orset_set.h"
 #define NDEBUG
 #include <assert.h>
+void *RdbLoadCrdtSet(RedisModuleIO *rdb, int encver) {
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
+    if ( type == ORSET_TYPE ) {
+        return RdbLoadCrdtORSETSet(rdb, version, encver);
+    }
+    return NULL;
+}
+
+void *RdbLoadCrdtSetTombstone(RedisModuleIO *rdb, int encver) {
+    RedisModule_Debug(logLevel, "load set tombstone");
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
+    if ( type == ORSET_TYPE ) {
+        return RdbLoadCrdtORSETSetTombstone(rdb, version, encver);
+    }
+    return NULL;
+}
+
+
 CRDT_ORSET_SET* retrieveCrdtORSETSet(void* t) {
     if(t == NULL) {
         return NULL;
@@ -68,17 +90,22 @@ size_t getSetDictSize(CRDT_Set* data) {
     dict* map = getSetDict(set);
     return dictSize(map);
 }
+#define COMPARE_VECTORCLOCK_LT -1
+#define COMPARE_VECTORCLOCK_GT 1
+#define COMPARE_VECTORCLOCK_CONFFLICT 0
 int purgeSetIter(dict* di, sds field,  dictEntry* de, VectorClock vc) {
     VectorClock old = dictGetVectorClock(de);
     if(isVectorClockMonoIncr(old, vc)) {
         dictDelete(di, dictGetKey(de));
+        return COMPARE_VECTORCLOCK_GT;
     } else if(isVectorClockMonoIncr(vc, old)) {
-        return 0;
+        return COMPARE_VECTORCLOCK_LT;
     } else {
         old = purgeVectorClock(old, vc);
         dictSetUnsignedIntegerVal(de, VC2LL(old));
+        return COMPARE_VECTORCLOCK_CONFFLICT;
     }
-    return 1;
+    
 }
 int removeSetDict(CRDT_Set* data, sds field, CrdtMeta* meta) {
     CRDT_ORSET_SET* set = retrieveCrdtORSETSet(data);
@@ -108,11 +135,11 @@ int updateSetDict(CRDT_Set* data, dictEntry* de, CrdtMeta* meta) {
     return 1;
 }
 CRDT_Set* dupCrdtSet(CRDT_Set* t) {
-    CRDT_ORSET_SET* targe = retrieveCrdtORSETSet(t);
+    CRDT_ORSET_SET* target = retrieveCrdtORSETSet(t);
     CRDT_ORSET_SET* result = (CRDT_ORSET_SET*)createCrdtSet();
-    dict* targe_map = getSetDict(targe);
+    dict* target_map = getSetDict(target);
     dict* result_map = getSetDict(result);
-    dictIterator* di = dictGetIterator(targe_map);
+    dictIterator* di = dictGetIterator(target_map);
     dictEntry* de = NULL;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
@@ -120,7 +147,7 @@ CRDT_Set* dupCrdtSet(CRDT_Set* t) {
         dictAddVectorClock(result_map, sdsdup(field), v);
     }
     dictReleaseIterator(di);
-    updateCrdtSetLastVc((CRDT_Set*)result, getCrdtSetLastVc((CRDT_Set*)targe));
+    updateCrdtSetLastVc((CRDT_Set*)result, getCrdtSetLastVc((CRDT_Set*)target));
     return (CRDT_Set*)result;
 }
 dictIterator* getSetDictIterator(CRDT_Set* data) {
@@ -129,6 +156,7 @@ dictIterator* getSetDictIterator(CRDT_Set* data) {
     return dictGetIterator(map);
 }
 void *RdbLoadCrdtORSETSet(RedisModuleIO *rdb, int version, int encver) {
+    RedisModule_Debug(logLevel, "load set");
     CRDT_ORSET_SET* set = (CRDT_ORSET_SET*)createCrdtSet();
     VectorClock lastvc = rdbLoadVectorClock(rdb, version);
     uint64_t len = RedisModule_LoadUnsigned(rdb);
@@ -136,7 +164,7 @@ void *RdbLoadCrdtORSETSet(RedisModuleIO *rdb, int version, int encver) {
     
     size_t strLength;
     dict* map = getSetDict(set);
-    updateCrdtSetLastVc((CRDT_Set*)set, lastvc);
+    setCrdtSetLastVc((CRDT_Set*)set, lastvc);
     while (len > 0) {
         len--;
         /* Load encoded strings */
@@ -162,6 +190,7 @@ void RdbSaveSetDict(RedisModuleIO *rdb, dict* map) {
     dictReleaseIterator(di);
 }
 void RdbSaveCrdtSet(RedisModuleIO *rdb, void *value) {
+    RedisModule_Debug(logLevel, "save set");
     saveCrdtRdbHeader(rdb, ORSET_TYPE);
     CRDT_ORSET_SET *set = retrieveCrdtORSETSet(value);
     rdbSaveVectorClock(rdb, getCrdtSetLastVc((CRDT_Set*)set), CRDT_RDB_VERSION);
@@ -198,7 +227,7 @@ CRDT_SetTombstone* createCrdtSetTombstone() {
     setType((CrdtObject*)tombstone , CRDT_TOMBSTONE);
     setDataType((CrdtObject*)tombstone , CRDT_SET_TYPE);
     dict *map = dictCreate(&crdtSetDictType, NULL);
-    tombstone->dict = *(unsigned long long*)map;
+    tombstone->dict = map;
     tombstone->lastVc = newVectorClock(0);
     tombstone->maxDelvectorClock = newVectorClock(0);
     return (CRDT_SetTombstone*)tombstone;
@@ -213,6 +242,7 @@ sds setIterInfo(void *data) {
     return result;
 
 }
+
 CRDT_ORSET_SETTOMBSTONE* retrieveCrdtORSETSetTombstone(void* t) {
     if(t == NULL) {
         return NULL;
@@ -236,6 +266,10 @@ int setCrdtSetTombstoneMaxDel(CRDT_SetTombstone* data, VectorClock vc) {
     sdsfree(s);
     // printStack();
     tom->maxDelvectorClock = vc;
+
+    s = vectorClockToSds(tom->maxDelvectorClock);
+    RedisModule_Debug(logLevel, "setCrdtSetTombstoneMaxDel2 %s %lld", s, VC2LL(tom->maxDelvectorClock));
+    sdsfree(s);
     return 1;
 }
 dict* getSetTombstoneDict(CRDT_ORSET_SETTOMBSTONE* tombstone) {
@@ -284,8 +318,7 @@ void *RdbLoadCrdtORSETSetTombstone(RedisModuleIO *rdb, int version, int encver) 
     }
     size_t strLength;
     dict* map = getSetTombstoneDict(tom);
-    setCrdtSetTombstoneMaxDel((CRDT_SetTombstone*)tom, maxdel);
-    updateCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom, lastvc);
+    
     while (len > 0) {
         len--;
         /* Load encoded strings */
@@ -296,15 +329,23 @@ void *RdbLoadCrdtORSETSetTombstone(RedisModuleIO *rdb, int version, int encver) 
         dictAddVectorClock(map, field, vc);
         RedisModule_ZFree(str);
     }
+    setCrdtSetTombstoneMaxDel((CRDT_SetTombstone*)tom, maxdel);
+    setCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom, lastvc);
     return tom;
 }
 void RdbSaveCrdtSetTombstone(RedisModuleIO *rdb, void *value) {
+    RedisModule_Debug(logLevel, "save set tombstone1");
     saveCrdtRdbHeader(rdb, ORSET_TYPE);
     CRDT_ORSET_SETTOMBSTONE *tom = retrieveCrdtORSETSetTombstone(value);
+    RedisModule_Debug(logLevel, "save set tombstone2");
     rdbSaveVectorClock(rdb, getCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom), CRDT_RDB_VERSION);
+    RedisModule_Debug(logLevel, "save set tombstone3");
     rdbSaveVectorClock(rdb, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)tom), CRDT_RDB_VERSION);
+    RedisModule_Debug(logLevel, "save set tombstone4");
     dict* map = getSetTombstoneDict(tom);
+    RedisModule_Debug(logLevel, "save set tombstone5");
     RdbSaveSetDict(rdb, map);
+    RedisModule_Debug(logLevel, "save set tombstone6");
 }
 void AofRewriteCrdtSetTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     
@@ -320,17 +361,15 @@ void freeCrdtSetTombstone(void* data) {
     dict* map = getSetTombstoneDict(tom);
     dictRelease(map);
     setCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom, newVectorClock(0));
-    if(!isNullVectorClock(tom->maxDelvectorClock)) {
-        freeVectorClock(tom->maxDelvectorClock);
-    }
+    setCrdtSetTombstoneMaxDel((CRDT_SetTombstone*)tom, newVectorClock(0));
     RedisModule_Free(tom);
 }
 
 
 CrdtObject** crdtSetTombstoneFilter(CrdtTombstone* t, int gid, long long logic_time, long long maxsize,int* num)  {
-    CRDT_ORSET_SETTOMBSTONE* targe = retrieveCrdtORSETSetTombstone(t);
+    CRDT_ORSET_SETTOMBSTONE* target = retrieveCrdtORSETSetTombstone(t);
     CRDT_ORSET_SETTOMBSTONE** result = NULL;
-    dict* map = getSetTombstoneDict(targe);
+    dict* map = getSetTombstoneDict(target);
     dictIterator *di = dictGetIterator(map);
     dictEntry *de = NULL;
     int current_memory = 0;
@@ -380,7 +419,7 @@ CrdtObject** crdtSetTombstoneFilter(CrdtTombstone* t, int gid, long long logic_t
     RedisModule_Debug(logLevel, "crdtSetTombstoneFilter end");
     dictReleaseIterator(di);
     if(tom == NULL && *num == 0) {
-        VectorClockUnit unit = getVectorClockUnit(getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)targe), gid);
+        VectorClockUnit unit = getVectorClockUnit(getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)target), gid);
         long long vcu = get_logic_clock(unit);
         if(vcu <= logic_time) {
             RedisModule_Debug(logLevel, "??????? %lld", vcu);
@@ -395,8 +434,8 @@ CrdtObject** crdtSetTombstoneFilter(CrdtTombstone* t, int gid, long long logic_t
     }
     RedisModule_Debug(logLevel, "crdtSetTombstoneFilter end 2");
     if(tom != NULL) {
-        updateCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom, getCrdtSetTombstoneLastVc((CRDT_SetTombstone*)targe));
-        updateCrdtSetTombstoneMaxDel((CRDT_SetTombstone*)tom, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)targe));
+        updateCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom, getCrdtSetTombstoneLastVc((CRDT_SetTombstone*)target));
+        updateCrdtSetTombstoneMaxDel((CRDT_SetTombstone*)tom, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)target));
     }
     RedisModule_Debug(logLevel, "crdtSetTombstoneFilter end 3");
     return (CrdtObject**)result;
@@ -425,11 +464,14 @@ sds crdtSetTombstoneInfo(void *data) {
     return result;
 }
 int crdtSetTombstonePurge(CrdtTombstone* tombstone, CrdtData* data) {
+    if(tombstone == NULL || data == NULL) {
+        return 0;
+    }
     CRDT_ORSET_SETTOMBSTONE* tom = retrieveCrdtORSETSetTombstone(tombstone);
     CRDT_ORSET_SET* set = retrieveCrdtORSETSet(data);
     dict* map = getSetDict(set);
     dict* tmap = getSetTombstoneDict(tom);
-    dictIterator* di = dictGetIterator(map);
+    dictIterator* di = dictGetSafeIterator(map);
     VectorClock maxdel = getCrdtSetTombstoneMaxDelVc(tombstone);
     dictEntry* de = NULL;
     RedisModule_Debug(logLevel, "purge start");
@@ -441,12 +483,12 @@ int crdtSetTombstonePurge(CrdtTombstone* tombstone, CrdtData* data) {
             dictDelete(map, field);
             continue;
         }
-        VectorClock tvc = NULL;
+        VectorClock tvc = newVectorClock(0);
         if(tde != NULL) {
             tvc = dictGetVectorClock(tde);
             if(isVectorClockMonoIncr(tvc, vc)) {
                 dictDelete(tmap, field);
-                tvc = NULL;
+                tvc = newVectorClock(0);
             } else if(isVectorClockMonoIncr(vc, tvc)) {
                 dictDelete(map, field);
                 continue;
@@ -470,11 +512,11 @@ int setTombstoneIterPurge(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta
     VectorClock vc = dupVectorClock(getMetaVectorClock(meta));
     if(t != NULL) {
         CRDT_ORSET_SETTOMBSTONE* tom = retrieveCrdtORSETSetTombstone(t);
-        if(isVectorClockMonoIncr(vc, tom->maxDelvectorClock)) {
+        if(isVectorClockMonoIncr(vc, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)tom))) {
             freeVectorClock(vc);
             return 0;
         } else {
-            vc = purgeVectorClock(vc, tom->maxDelvectorClock);
+            vc = purgeVectorClock(vc, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)tom));
         }
         dict* tom_map = getSetTombstoneDict(tom);
         dictEntry* tde = dictFind(tom_map, field);
@@ -508,7 +550,7 @@ int setTombstoneIterPurge(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta
 int setValueIterPurge(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta) {
     VectorClock vc = getMetaVectorClock(meta);
     CRDT_ORSET_SETTOMBSTONE* tom = retrieveCrdtORSETSetTombstone(t);
-    if(isVectorClockMonoIncr(vc, tom->maxDelvectorClock)) {
+    if(isVectorClockMonoIncr(vc, getCrdtSetTombstoneMaxDelVc(t))) {
         return 0;
     }
     if(s != NULL) {
@@ -516,12 +558,12 @@ int setValueIterPurge(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* me
         dict* set_map = getSetDict(set);
         dictEntry* de = dictFind(set_map, field);
         if(de != NULL) {
-            purgeSetIter(set_map, field, de, vc);
-            // VectorClock v = vectorClockMerge(vc, old);
-            // dictSetVal(set_map, de, VC2LL(v));
-            // freeVectorClock(old);
+            if(purgeSetIter(set_map, field, de, vc) == COMPARE_VECTORCLOCK_LT) {
+                return 0;
+            }
         } 
     }
+    
     dict* tom_map = getSetTombstoneDict(tom);
     dictEntry* tde = dictFind(tom_map, field);
     if(tde != NULL) {
@@ -530,7 +572,7 @@ int setValueIterPurge(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* me
         dictSetUnsignedIntegerVal(tde, VC2LL(ntvc));
         freeVectorClock(tvc);
     } else {
-        dictAddVectorClock(tom_map, field, dupVectorClock(vc));
+        dictAddVectorClock(tom_map, sdsdup(field), dupVectorClock(vc));
     }
     return 1;
 }
@@ -538,7 +580,7 @@ int setValueIterPurge(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* me
 int purgeSetDelMax(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta) {
     VectorClock vc = getMetaVectorClock(meta);
     CRDT_ORSET_SETTOMBSTONE* tom = retrieveCrdtORSETSetTombstone(t);
-    if(isVectorClockMonoIncr(vc, tom->maxDelvectorClock)) {
+    if(isVectorClockMonoIncr(vc, getCrdtSetTombstoneMaxDelVc(t))) {
         return 0;
     }
     updateCrdtSetTombstoneMaxDel(t, vc);
@@ -564,19 +606,19 @@ int purgeSetDelMax(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta) {
 }
 
 int appendSet(CRDT_Set* t, CRDT_Set* s) {
-    CRDT_ORSET_SET* targe = retrieveCrdtORSETSet(t);
+    CRDT_ORSET_SET* target = retrieveCrdtORSETSet(t);
     CRDT_ORSET_SET* src = retrieveCrdtORSETSet(s);
     dict* src_map = getSetDict(src);
-    dict* targe_map = getSetDict(targe);
+    dict* target_map = getSetDict(target);
     dictEntry* de = NULL;
     dictIterator* di = dictGetIterator(src_map);
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
-        dictEntry* d = dictFind(targe_map, field);
+        dictEntry* d = dictFind(target_map, field);
         VectorClock vc = dictGetVectorClock(de);
         if(d == NULL) {
             VectorClock nvc = dupVectorClock(vc);
-            dictAddVectorClock(targe_map, sdsdup(field), nvc);
+            dictAddVectorClock(target_map, sdsdup(field), nvc);
         } else {
             VectorClock tvc = dictGetVectorClock(d);
             VectorClock nvc = vectorClockMerge(tvc, vc);
@@ -593,9 +635,9 @@ void freeSetFilter(CrdtObject** filters, int num) {
     RedisModule_Free(filters);
 }
 CrdtObject** crdtSetFilter(CrdtObject* t, int gid, long long logic_time, long long maxsize, int* num) {
-    CRDT_ORSET_SET* targe = retrieveCrdtORSETSet(t);
+    CRDT_ORSET_SET* target = retrieveCrdtORSETSet(t);
     CRDT_Set** result = NULL;
-    dict* map = getSetDict(targe);
+    dict* map = getSetDict(target);
     dictIterator *di = dictGetIterator(map);
     dictEntry *de;
     int current_memory = 0;
@@ -657,13 +699,17 @@ static void printStack(void)
     {
         printf("%zu--->%s\n", i, symbols[i]);
     }
-    // zfree(symbols);
+    zfree(symbols);
     return;
 }
 
 
 VectorClock getCrdtSetTombstoneMaxDelVc(CRDT_SetTombstone* t) {
     CRDT_ORSET_SETTOMBSTONE* tom = retrieveCrdtORSETSetTombstone(t);
+    // printStack();
+    // sds s = vectorClockToSds(tom->maxDelvectorClock);
+    // RedisModule_Debug(logLevel, "getCrdtSetTombstoneMaxDelVc %s %lld", s, VC2LL(tom->maxDelvectorClock));
+    // sdsfree(s);
     return tom->maxDelvectorClock;
 }
 int updateCrdtSetTombstoneMaxDel(CRDT_SetTombstone* t, VectorClock vc) {
@@ -674,11 +720,11 @@ int updateCrdtSetTombstoneMaxDel(CRDT_SetTombstone* t, VectorClock vc) {
 
 
 CRDT_SetTombstone* dupCrdtSetTombstone(CRDT_SetTombstone* t) {
-    CRDT_ORSET_SETTOMBSTONE* targe = retrieveCrdtORSETSetTombstone(t);
+    CRDT_ORSET_SETTOMBSTONE* target = retrieveCrdtORSETSetTombstone(t);
     CRDT_ORSET_SETTOMBSTONE* result = (CRDT_ORSET_SETTOMBSTONE*)createCrdtSetTombstone();
-    dict* targe_map = getSetTombstoneDict(targe);
+    dict* target_map = getSetTombstoneDict(target);
     dict* result_map = getSetTombstoneDict(result);
-    dictIterator* di = dictGetIterator(targe_map);
+    dictIterator* di = dictGetIterator(target_map);
     dictEntry* de = NULL;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
@@ -686,25 +732,25 @@ CRDT_SetTombstone* dupCrdtSetTombstone(CRDT_SetTombstone* t) {
         dictAddVectorClock(result_map, sdsdup(field), v);
     }
     dictReleaseIterator(di);
-    updateCrdtSetTombstoneLastVc((CRDT_SetTombstone*)result, getCrdtSetTombstoneLastVc((CRDT_SetTombstone*)targe));
-    updateCrdtSetTombstoneMaxDel((CRDT_SetTombstone*)result, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)targe));
+    updateCrdtSetTombstoneLastVc((CRDT_SetTombstone*)result, getCrdtSetTombstoneLastVc((CRDT_SetTombstone*)target));
+    updateCrdtSetTombstoneMaxDel((CRDT_SetTombstone*)result, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)target));
     return (CRDT_SetTombstone*)result;
 }
 
 int appendSetTombstone(CRDT_SetTombstone* t, CRDT_SetTombstone* s) {
-    CRDT_ORSET_SETTOMBSTONE* targe = retrieveCrdtORSETSetTombstone(t);
+    CRDT_ORSET_SETTOMBSTONE* target = retrieveCrdtORSETSetTombstone(t);
     CRDT_ORSET_SETTOMBSTONE* src = retrieveCrdtORSETSetTombstone(s);
     dict* src_map = getSetTombstoneDict(src);
-    dict* targe_map = getSetTombstoneDict(targe);
+    dict* target_map = getSetTombstoneDict(target);
     dictEntry* de = NULL;
     dictIterator* di = dictGetIterator(src_map);
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
-        dictEntry* d = dictFind(targe_map, field);
+        dictEntry* d = dictFind(target_map, field);
         VectorClock vc = dictGetVectorClock(de);
         if(d == NULL) {
             VectorClock nvc = dupVectorClock(vc);
-            dictAddVectorClock(targe_map, sdsdup(field), nvc);
+            dictAddVectorClock(target_map, sdsdup(field), nvc);
         } else {
             VectorClock tvc = dictGetVectorClock(d);
             VectorClock nvc = vectorClockMerge(tvc, vc);
@@ -713,4 +759,18 @@ int appendSetTombstone(CRDT_SetTombstone* t, CRDT_SetTombstone* s) {
         }
     }
     return 1;
+}
+dictEntry* findSetTombstoneDict(CRDT_SetTombstone* tom, sds field) {
+    CRDT_ORSET_SETTOMBSTONE* tombstone = retrieveCrdtORSETSetTombstone(tom);
+    dict* map = getSetTombstoneDict(tombstone);
+    RedisModule_Debug(logLevel, "findSetTombstoneDict %s %d %p %p", field, dictSize(map), tom, map);
+    return dictFind(map, field);
+}
+sds setTombstoneIterInfo(void *data) {
+    sds result = sdsempty();
+    sds vcStr = vectorClockToSds(LL2VC(data));
+    result = sdscatprintf(result, "type: orset_set_tombstone, vector-clock: %s",
+            vcStr);
+    sdsfree(vcStr);
+    return result;
 }

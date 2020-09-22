@@ -13,7 +13,8 @@ static RedisModuleType *CrdtSetTombstone;
 typedef  CrdtTombstone CRDT_SetTombstone;
 typedef CrdtObject CRDT_Set;
 int initCrdtSetModule(RedisModuleCtx *ctx);
-
+RedisModuleType* getCrdtSet();
+RedisModuleType* getCrdtSetTombstone();
 
 //set type modulemethod
 void *RdbLoadCrdtSet(RedisModuleIO *rdb, int encver);
@@ -89,4 +90,38 @@ VectorClock getCrdtSetTombstoneMaxDelVc(CRDT_SetTombstone* t);
 int updateCrdtSetTombstoneMaxDel(CRDT_SetTombstone* t, VectorClock vc);
 CRDT_SetTombstone* dupCrdtSetTombstone(CRDT_SetTombstone* tom);
 int appendSetTombstone(CRDT_SetTombstone* a, CRDT_SetTombstone* b);
+dictEntry* findSetTombstoneDict(CRDT_SetTombstone* tom, sds field);
+sds setTombstoneIterInfo(void *data);
+static inline int isCrdtSet(void* data) {
+    CRDT_Set* set = (CRDT_Set*)data;
+    if(set != NULL && (getDataType((CrdtObject*)set) == CRDT_SET_TYPE)) {
+        return CRDT_OK;
+    }
+    return CRDT_NO;
+}
+static inline int isCrdtSetTombstone(void *data) {
+    CRDT_SetTombstone* tombstone = (CRDT_SetTombstone*)data;
+    if(tombstone != NULL && (getDataType((CrdtObject*)tombstone) ==  CRDT_SET_TYPE)) {
+        return CRDT_OK;
+    }
+    return CRDT_NO;
+}
+static inline CRDT_Set* retrieveCrdtSet(void* t) {
+    if(t == NULL) {
+        return NULL;
+    }
+    CRDT_Set* result = (CRDT_Set*)t;
+    // assert(result->map != NULL);
+    return result;
+}
+static inline CRDT_SetTombstone* retrieveCrdtSetTombstone(void* t) {
+    if(t == NULL) {
+        return NULL;
+    }
+    CRDT_SetTombstone* result = (CRDT_SetTombstone*)t;
+    // assert(result->map != NULL);
+    return result;
+}
+
+
 #endif

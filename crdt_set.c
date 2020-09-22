@@ -1,34 +1,6 @@
 #include "crdt_set.h"
-int isCrdtSet(void* data) {
-    CRDT_Set* set = (CRDT_Set*)data;
-    if(set != NULL && (getDataType((CrdtObject*)set) == CRDT_SET_TYPE)) {
-        return CRDT_OK;
-    }
-    return CRDT_NO;
-}
-int isCrdtSetTombstone(void *data) {
-    CRDT_SetTombstone* tombstone = (CRDT_SetTombstone*)data;
-    if(tombstone != NULL && (getDataType((CrdtObject*)tombstone) ==  CRDT_SET_TYPE)) {
-        return CRDT_OK;
-    }
-    return CRDT_NO;
-}
-CRDT_Set* retrieveCrdtSet(void* t) {
-    if(t == NULL) {
-        return NULL;
-    }
-    CRDT_Set* result = (CRDT_Set*)t;
-    // assert(result->map != NULL);
-    return result;
-}
-CRDT_SetTombstone* retrieveCrdtSetTombstone(void* t) {
-    if(t == NULL) {
-        return NULL;
-    }
-    CRDT_SetTombstone* result = (CRDT_SetTombstone*)t;
-    // assert(result->map != NULL);
-    return result;
-}
+
+
 int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
     
     if(value == NULL) {
@@ -281,7 +253,15 @@ int crdtSremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         // dictEntry* de = findSetDict(current, field);
         setValueIterPurge(current, tombstone, field, &meta);
     }
-    updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
+    if(current) {
+        if(getSetDictSize(current) == 0) {
+            RedisModule_DeleteKey(moduleKey);
+            current = NULL;
+        } else {
+            updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
+        }
+    }
+    updateCrdtSetTombstoneLastVc(tombstone, getMetaVectorClock(&meta));
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "srem", argv[1]);
 end:
@@ -305,17 +285,44 @@ int crdtSismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         return CRDT_ERROR;
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
-    if(current == NULL) {
-        return RedisModule_ReplyWithNull(ctx); 
-    } 
+    CRDT_SetTombstone* tombstone =  getTombstone(moduleKey);
     sds field = RedisModule_GetSds(argv[2]);
-    dictEntry* de = findSetDict(current, field);
+    dictEntry* de = NULL;
+    dictEntry* tde = NULL;
+    int num = 0;
+    if(current != NULL) {
+        de = findSetDict(current, field);
+        if(de != NULL)  {
+            num += 1;
+        }
+    } 
+    if(tombstone != NULL) {
+        tde = findSetTombstoneDict(tombstone, field);
+        if(tde != NULL)  {
+            num += 1;
+        }
+    }
+    
+    if(num == 0) {
+        return RedisModule_ReplyWithNull(ctx);
+    }
+    RedisModule_Debug(logLevel, "crdtSismember %d", num);
+    RedisModule_ReplyWithArray(ctx, num);
     if(de != NULL) {
         void* data = dictGetVal(de);
         sds info = setIterInfo(data);
-        return RedisModule_ReplyWithStringBuffer(ctx, info, sdslen(info));
+        RedisModule_ReplyWithStringBuffer(ctx, info, sdslen(info));
+        sdsfree(info);
     }
-    return RedisModule_ReplyWithNull(ctx); 
+    if(tde != NULL) {
+        void* data = dictGetVal(tde);
+        sds info = setTombstoneIterInfo(data);
+        RedisModule_ReplyWithStringBuffer(ctx, info, sdslen(info));
+        sdsfree(info);
+    }
+
+    
+     
 }
 //crdt.del_Set <key> gid time vc maxvc
 int crdtDelSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -440,11 +447,17 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx, "smembers",
                                 smembersCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR) 
         return REDISMODULE_ERR;   
-    if (RedisModule_CreateCommand(ctx, "crdt.smembers",
+    if (RedisModule_CreateCommand(ctx, "crdt.sismember",
                                 crdtSismemberCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR) 
         return REDISMODULE_ERR;   
     if (RedisModule_CreateCommand(ctx,"crdt.del_set",
                                   crdtDelSetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;               
     return REDISMODULE_OK;
+}
+RedisModuleType* getCrdtSet() {
+    return CrdtSet;
+}
+RedisModuleType* getCrdtSetTombstone() {
+    return CrdtSetTombstone;
 }

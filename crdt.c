@@ -179,6 +179,9 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key, RedisModuleKe
         case CRDT_HASH_TYPE:
             saveValue(rio, getCrdtHash(), data);
             break;
+        case CRDT_SET_TYPE:
+            saveValue(rio, getCrdtSet(), data);
+            break;
         }   
     }
     CrdtTombstone* tombstone = RedisModule_ModuleTypeGetTombstone(moduleKey);
@@ -190,6 +193,9 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key, RedisModuleKe
             break;
         case CRDT_HASH_TYPE:
             saveValue(rio, getCrdtHashTombstone(), tombstone);
+            break;
+        case CRDT_SET_TYPE:
+            saveValue(rio, getCrdtSetTombstone(), tombstone);
             break;
         }
     }
@@ -215,11 +221,15 @@ int RdbLoadCrdtValue(void* db, RedisModuleString* key, void* rio, RedisModuleKey
             RedisModule_ModuleTypeLoadRdbAddValue(moduleKey, type, data);
         } else if(type == getCrdtHash()) {
             RedisModule_ModuleTypeLoadRdbAddValue(moduleKey, type, data);
+        } else if(type == getCrdtSet()) {
+            RedisModule_ModuleTypeLoadRdbAddValue(moduleKey, type, data);
         } else if(type == getCrdtRegisterTombstone()) {
             RedisModule_ModuleTombstoneLoadRdbAddValue(moduleKey, type, data);
         } else if(type == getCrdtHashTombstone()) {
             RedisModule_ModuleTombstoneLoadRdbAddValue(moduleKey, type, data);
-        } else{
+        }  else if(type == getCrdtSetTombstone()) {
+            RedisModule_ModuleTombstoneLoadRdbAddValue(moduleKey, type, data);
+        } else {
             result = C_ERR;
             goto error;
         }
