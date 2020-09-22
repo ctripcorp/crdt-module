@@ -1,4 +1,5 @@
 #include "crdt_set.h"
+#include "include/rmutil/zmalloc.h"
 
 
 int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
@@ -31,6 +32,12 @@ int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
     freeCrdtMeta(del_meta);
     return CRDT_OK;
 }
+
+/*-----------------------------------------------------------------------------
+ * Set Commands
+ *----------------------------------------------------------------------------*/
+
+/**================================== READ COMMANDS ==========================================*/
 int sismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
@@ -48,6 +55,8 @@ int sismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     return RedisModule_ReplyWithLongLong(ctx, 0); 
 }
+
+
 int scardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
@@ -60,6 +69,7 @@ int scardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     } 
     return RedisModule_ReplyWithLongLong(ctx, getSetDictSize(current));
 }
+
 int smembersCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
@@ -83,6 +93,243 @@ int smembersCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     return REDISMODULE_OK;
 }
+
+int sscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 2) return RedisModule_WrongArity(ctx);
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    if (moduleKey == NULL) {
+        return CRDT_ERROR;
+    }
+    CRDT_Set* set = getCurrentValue(moduleKey);
+    if(set == NULL) {
+        replyEmptyScan(ctx);
+        RedisModule_CloseKey(moduleKey);
+        return REDISMODULE_OK;
+    }
+    unsigned long cursor;
+
+    if (parseScanCursorOrReply(ctx, argv[2], &cursor) == CRDT_ERROR) return 0;
+
+    scanGenericCommand(ctx, argv, argc, getSetDict(set), CRDT_SET_TYPE, cursor);
+
+    if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
+    return REDISMODULE_OK;
+}
+
+/* This is used by SDIFF and in this case we can receive NULL that should
+ * be handled as empty sets. */
+int qsortCompareSetsByRevCardinality(const void *s1, const void *s2) {
+    CRDT_Set *o1 = *(CRDT_Set**)s1, *o2 = *(CRDT_Set**)s2;
+    unsigned long first = o1 ? getSetDictSize(o1) : 0;
+    unsigned long second = o2 ? getSetDictSize(o2) : 0;
+
+    if (first < second) return 1;
+    if (first > second) return -1;
+    return 0;
+}
+
+#define SET_OP_UNION 0
+#define SET_OP_DIFF 1
+#define SET_OP_INTER 2
+
+static inline int setTypeAdd(CRDT_Set *dstset, sds ele) {
+    dict *ht = getSetDict(dstset);
+    dictEntry *de = dictAddRaw(ht, ele,NULL);
+    if (de) {
+        dictSetKey(ht,de,sdsdup(ele));
+        dictSetVal(ht,de,NULL);
+        return 1;
+    }
+    return 0;
+}
+
+static inline int setTypeRemove(CRDT_Set *setobj, sds value) {
+    dict *ht = getSetDict(setobj);
+    if (dictDelete(ht, value) == DICT_OK) {
+        if (htNeedsResize(ht)) dictResize(ht);
+        return 1;
+    }
+    return 0;
+}
+
+int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, int setnum,
+                              RedisModuleString *dstkey, int op) {
+
+    CRDT_Set **target_sets = zmalloc(sizeof(CRDT_Set *) * setnum);
+    dictIterator *di;
+    CRDT_Set *dstset = NULL;
+    sds ele;
+    int j, cardinality = 0;
+    int diff_algo = 1;
+
+    for (j = 0; j < setnum; j++) {
+        RedisModuleKey* moduleKey = dstkey ?
+                        getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_WRITE) :
+                        getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_READ);
+        if (moduleKey == NULL) {
+            target_sets[j] = NULL;
+            continue;
+        }
+        CRDT_Set *setobj = getCurrentValue(moduleKey);
+        if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
+
+        if (!setobj) {
+            target_sets[j] = NULL;
+            continue;
+        }
+        if (setobj->type != CRDT_SET_TYPE) {
+            zfree(target_sets);
+            return CRDT_ERROR;
+        }
+        target_sets[j] = setobj;
+    }
+
+    /* Select what DIFF algorithm to use.
+    *
+    * Algorithm 1 is O(N*M) where N is the size of the element first set
+    * and M the total number of sets.
+    *
+    * Algorithm 2 is O(N) where N is the total number of elements in all
+    * the sets.
+    *
+    * We compute what is the best bet with the current input here. */
+    if (op == SET_OP_DIFF && target_sets[0]) {
+        long long algo_one_work = 0, algo_two_work = 0;
+
+        for (j = 0; j < setnum; j++) {
+            if (target_sets[j] == NULL) continue;
+
+            algo_one_work += getSetDictSize(target_sets[0]);
+            algo_two_work += getSetDictSize(target_sets[j]);
+        }
+
+        /* Algorithm 1 has better constant times and performs less operations
+         * if there are elements in common. Give it some advantage. */
+        algo_one_work /= 2;
+        diff_algo = (algo_one_work <= algo_two_work) ? 1 : 2;
+
+        if (diff_algo == 1 && setnum > 1) {
+            /* With algorithm 1 it is better to order the sets to subtract
+             * by decreasing size, so that we are more likely to find
+             * duplicated elements ASAP. */
+            qsort(target_sets+1,setnum-1,sizeof(CRDT_Set*),
+                  qsortCompareSetsByRevCardinality);
+        }
+    }
+
+    /* We need a temp set object to store our union. If the dstkey
+    * is not NULL (that is, we are inside an SUNIONSTORE operation) then
+    * this set object will be the resulting object to set into the target key*/
+    dstset = createCrdtSet();
+    dictEntry* de = NULL;
+    if (op == SET_OP_UNION) {
+        /* Union is trivial, just add every element of every set to the
+         * temporary set. */
+        for (j = 0; j < setnum; j++) {
+            if (!target_sets[j]) continue; /* non existing keys are like empty sets */
+
+            di = getSetDictIterator(target_sets[j]);
+            while((de = dictNext(di)) != NULL) {
+                ele = dictGetKey(de);
+                if (setTypeAdd(dstset,ele)) cardinality++;
+            }
+            dictReleaseIterator(di);
+        }
+    } else if (op == SET_OP_DIFF && target_sets[0] && diff_algo == 1) {
+        /* DIFF Algorithm 1:
+         *
+         * We perform the diff by iterating all the elements of the first set,
+         * and only adding it to the target set if the element does not exist
+         * into all the other sets.
+         *
+         * This way we perform at max N*M operations, where N is the size of
+         * the first set, and M the number of sets. */
+        di = getSetDictIterator(target_sets[0]);
+        while((de = dictNext(di)) != NULL) {
+            ele = dictGetKey(de);
+            for (j = 1; j < setnum; j++) {
+                if (!target_sets[j]) continue; /* no key is an empty set. */
+                if (target_sets[j] == target_sets[0]) break; /* same set! */
+                if (dictFind(getSetDict(target_sets[j]), ele)) break;
+            }
+            if (j == setnum) {
+                /* There is no other set with this element. Add it. */
+                setTypeAdd(dstset,ele);
+                cardinality++;
+            }
+        }
+        dictReleaseIterator(di);
+    } else if (op == SET_OP_DIFF && target_sets[0] && diff_algo == 2) {
+        /* DIFF Algorithm 2:
+         *
+         * Add all the elements of the first set to the auxiliary set.
+         * Then remove all the elements of all the next sets from it.
+         *
+         * This is O(N) where N is the sum of all the elements in every
+         * set. */
+        for (j = 0; j < setnum; j++) {
+            if (!target_sets[j]) continue; /* non existing keys are like empty sets */
+
+            di = getSetDictIterator(target_sets[j]);
+            while((de = dictNext(di)) != NULL) {
+                ele = dictGetKey(de);
+                if (j == 0) {
+                    if (setTypeAdd(dstset,ele)) cardinality++;
+                } else {
+                    if (setTypeRemove(dstset,ele)) cardinality--;
+                }
+            }
+            dictReleaseIterator(di);
+            /* Exit if result set is empty as any additional removal
+             * of elements will have no effect. */
+            if (cardinality == 0) break;
+        }
+    }
+
+    /* Output the content of the resulting set, if not in STORE mode */
+    if (!dstkey) {
+        RedisModule_ReplyWithArray(ctx, cardinality);
+        di = getSetDictIterator(dstset);
+        while((de = dictNext(di)) != NULL) {
+            ele = dictGetKey(de);
+            RedisModule_ReplyWithStringBuffer(ctx, ele, sdslen(ele));
+            sdsfree(ele);
+        }
+        dictReleaseIterator(di);
+        freeCrdtSet(dstset);
+    } else {
+        /* If we have a target key where to store the resulting set
+         * create this key with the result set inside */
+        //ignore
+//        int deleted = dbDelete(c->db,dstkey);
+//        if (setTypeSize(dstset) > 0) {
+//            dbAdd(c->db,dstkey,dstset);
+//            addReplyLongLong(c,setTypeSize(dstset));
+//            notifyKeyspaceEvent(NOTIFY_SET,
+//                                op == SET_OP_UNION ? "sunionstore" : "sdiffstore",
+//                                dstkey,c->db->id);
+//        } else {
+//            decrRefCount(dstset);
+//            addReply(c,shared.czero);
+//            if (deleted)
+//                notifyKeyspaceEvent(NOTIFY_GENERIC,"del",
+//                                    dstkey,c->db->id);
+//        }
+//        signalModifiedKey(c->db,dstkey);
+//        server.dirty++;
+    }
+    zfree(target_sets);
+}
+
+
+int sunionCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 2) return RedisModule_WrongArity(ctx);
+    sunionDiffGenericCommand(ctx, argv+1, argc-1, NULL, SET_OP_UNION);
+    return REDISMODULE_OK;
+}
+
+
+/**================================== WRITE COMMANDS ==========================================*/
 
 int sremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
@@ -127,6 +374,7 @@ int sremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     return RedisModule_ReplyWithLongLong(ctx, result);
 }
+
 //sadd key <field> <field1> ...
 //crdt.sadd <key> gid vc <field1> <field1>
 int saddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -178,6 +426,11 @@ int saddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     // sds cmdname = RedisModule_GetSds(argv[0]);
     return RedisModule_ReplyWithLongLong(ctx, result);
 }
+
+/*-----------------------------------------------------------------------------
+ * CRDT Set Commands
+ *----------------------------------------------------------------------------*/
+
 //crdt.sadd <key> gid time vc <field1> <field1>
 int crdtSaddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 6) return RedisModule_WrongArity(ctx);
@@ -224,6 +477,7 @@ end:
         return CRDT_ERROR;
     }
 }
+
 //crdt.srem <key>, <gid>, <timestamp>, <vclockStr> k1,k2
 int crdtSremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 6) return RedisModule_WrongArity(ctx);
@@ -277,6 +531,8 @@ end:
         return CRDT_ERROR;
     }  
 }
+
+
 int crdtSismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
@@ -446,7 +702,11 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;   
     if (RedisModule_CreateCommand(ctx, "smembers",
                                 smembersCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR) 
-        return REDISMODULE_ERR;   
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"sscan",
+                                  sscanCommand,"readonly random",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+
     if (RedisModule_CreateCommand(ctx, "crdt.sismember",
                                 crdtSismemberCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR) 
         return REDISMODULE_ERR;   

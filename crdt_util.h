@@ -2,10 +2,22 @@
 #define XREDIS_CRDT_CRDT_UTIL_H
 #include "include/redismodule.h"
 #include "include/rmutil/dict.h"
+#include "include/rmutil/adlist.h"
 #include "ctrip_vector_clock.h"
 #include "utils.h"
 #include "crdt.h"
 #include "ctrip_crdt_common.h"
+
+#ifdef __LP64__
+#define ULONG_MAX       0xffffffffffffffffUL    /* max unsigned long */
+#define LONG_MAX        0x7fffffffffffffffL     /* max signed long */
+#define LONG_MIN        (-0x7fffffffffffffffL-1) /* min signed long */
+#else /* !__LP64__ */
+#define ULONG_MAX       0xffffffffUL    /* max unsigned long */
+#define LONG_MAX        2147483647L     /* max signed long */
+#define LONG_MIN        (-2147483647L-1) /* min signed long */
+#endif /* __LP64__ */
+
 /*
 ####
     replication util
@@ -45,4 +57,15 @@ uint64_t dictSdsHash(const void *key);
 int dictSdsKeyCompare(void *privdata, const void *key1,
                       const void *key2);
 void dictSdsDestructor(void *privdata, void *val);
+
+//cursor
+int parseScanCursorOrReply(RedisModuleCtx *ctx, RedisModuleString *inputCursor, unsigned long *cursor);
+void scanGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, dict *ht, int type, unsigned long cursor);
+
+
+// object utils
+int getLongLongFromObjectOrReply(RedisModuleCtx *ctx, RedisModuleString *o, long long *target, const char *msg);
+int getLongFromObjectOrReply(RedisModuleCtx *ctx, RedisModuleString *o, long *target, const char *msg);
+
+void replyEmptyScan(RedisModuleCtx *ctx);
 #endif //XREDIS_CRDT_CRDT_UTIL_H

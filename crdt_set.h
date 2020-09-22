@@ -23,6 +23,8 @@ void AofRewriteCrdtSet(RedisModuleIO *aof, RedisModuleString *key, void *value);
 size_t crdtSetMemUsageFunc(const void *value);
 void crdtSetDigestFunc(RedisModuleDigest *md, void *value);
 void freeCrdtSet(void* set);
+dict* getSetDict(CRDT_Set* set);
+
 //set tombstone type modulemethod
 void *RdbLoadCrdtSetTombstone(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtSetTombstone(RedisModuleIO *rdb, void *value);

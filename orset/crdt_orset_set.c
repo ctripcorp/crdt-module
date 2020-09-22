@@ -70,8 +70,8 @@ int updateCrdtSetLastVc(CRDT_Set* data, VectorClock vc) {
     VectorClock now = vectorClockMerge(r->lastVc,vc);
     return setCrdtSetLastVc(data, now);
 }
-dict* getSetDict(CRDT_ORSET_SET* set) {
-    return (dict*)(set->dict);
+dict* getSetDict(CRDT_Set* set) {
+    return (dict*)(((CRDT_ORSET_SET* )set)->dict);
 }
 void freeCrdtSet(void* data) {
     CRDT_ORSET_SET* set = retrieveCrdtORSETSet(data);
