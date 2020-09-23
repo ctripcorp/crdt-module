@@ -1,6 +1,7 @@
 #include "crdt_util.h"
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 int ll2str(char* s, long long value, int len) {
     char *p;
@@ -255,6 +256,8 @@ VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version) {
             }
             return result;
         }
+    } else {
+        return newVectorClock(0);
     }
 }
 
@@ -282,4 +285,250 @@ int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock vectorClock, int version)
         }
     }
     return CRDT_OK;
+}
+
+uint64_t dictSdsHash(const void *key) {
+    return dictGenHashFunction((unsigned char*)key, sdslen((char*)key));
+}
+
+int dictSdsKeyCompare(void *privdata, const void *key1,
+                      const void *key2) {
+    int l1,l2;
+    DICT_NOTUSED(privdata);
+
+    l1 = sdslen((sds)key1);
+    l2 = sdslen((sds)key2);
+    if (l1 != l2) return 0;
+    return memcmp(key1, key2, l1) == 0;
+}
+
+void dictSdsDestructor(void *privdata, void *val) {
+    DICT_NOTUSED(privdata);
+    sdsfree(val);
+}
+
+/*-----------------------------------------------------------------------------
+ * DECODE Functionality
+ *----------------------------------------------------------------------------*/
+
+int getLongLongFromObjectOrReply(RedisModuleCtx *ctx, RedisModuleString *o, long long *target, const char *msg) {
+    long long value;
+    if (RedisModule_StringToLongLong(o, &value) == REDISMODULE_ERR) {
+        if (msg != NULL) {
+            RedisModule_ReplyWithStringBuffer(ctx, (char*)msg, strlen(msg));
+        } else {
+            RedisModule_ReplyWithError(ctx, "value is not an integer or out of range");
+        }
+        return CRDT_ERROR;
+    }
+    *target = value;
+    return CRDT_OK;
+}
+
+int getLongFromObjectOrReply(RedisModuleCtx *ctx, RedisModuleString *o, long *target, const char *msg) {
+    long long value;
+
+    if (getLongLongFromObjectOrReply(ctx, o, &value, msg) != CRDT_OK) return CRDT_ERROR;
+    if (value < LONG_MIN || value > LONG_MAX) {
+        if (msg != NULL) {
+            RedisModule_ReplyWithStringBuffer(ctx, (char*)msg, strlen(msg));
+        } else {
+            RedisModule_ReplyWithError(ctx, "value is out of range");
+        }
+        return CRDT_ERROR;
+    }
+    *target = value;
+    return CRDT_OK;
+}
+
+void replySyntaxErr(RedisModuleCtx *ctx) {
+    RedisModule_ReplyWithError(ctx, "syntax error");
+}
+
+void replyEmptyScan(RedisModuleCtx *ctx) {
+    // shared.emptyscan = createObject(OBJ_STRING,sdsnew("*2\r\n$1\r\n0\r\n*0\r\n"));
+    RedisModule_ReplyWithArray(ctx, 2);
+    RedisModule_ReplyWithStringBuffer(ctx, "0", 1);
+    RedisModule_ReplyWithArray(ctx, 0);
+}
+
+/*-----------------------------------------------------------------------------
+ * SCAN Functionality
+ *----------------------------------------------------------------------------*/
+
+/* This callback is used by scanGenericCommand in order to collect elements
+ * returned by the dictionary iterator into a list. */
+void scanCallback(void *privdata, const dictEntry *de) {
+    void **pd = (void**) privdata;
+    list *keys = pd[0];
+    int *type = pd[1];
+    sds key = NULL, val = NULL;
+
+    if (*type == CRDT_HASH_TYPE) {
+        key = dictGetKey(de);
+        //todo: hash should take outof the val as sds
+        // not sure if it's a or-set or lww-element hash, so just leave it for successor's brilliant
+//        val = dictGetVal(de);
+//        key = createStringObject(sdskey,sdslen(sdskey));
+//        val = createStringObject(sdsval,sdslen(sdsval));
+    } else if (*type == CRDT_SET_TYPE) {
+        key = dictGetKey(de);
+//        key = createStringObject(keysds,sdslen(keysds));
+    }
+
+    listAddNodeTail(keys, key);
+    if (val) listAddNodeTail(keys, val);
+}
+
+/* Try to parse a SCAN cursor stored at object 'o':
+ * if the cursor is valid, store it as unsigned integer into *cursor and
+ * returns C_OK. Otherwise return C_ERR and send an error to the
+ * client. */
+int parseScanCursorOrReply(RedisModuleCtx *ctx, RedisModuleString *inputCursor, unsigned long *cursor) {
+    char *eptr;
+
+    /* Use strtoul() because we need an *unsigned* long, so
+     * getLongLongFromObject() does not cover the whole cursor space. */
+    sds inputCursorStr = RedisModule_GetSds(inputCursor);
+    *cursor = strtoul(inputCursorStr, &eptr, 10);
+    if (isspace(((char*)inputCursorStr)[0]) || eptr[0] != '\0') {
+        RedisModule_ReplyWithError(ctx, "invalid cursor");
+        return CRDT_ERROR;
+    }
+    return CRDT_OK;
+}
+
+/* This command implements SCAN, HSCAN and SSCAN commands.
+ * If object 'o' is passed, then it must be a Hash or Set object, otherwise
+ * if 'o' is NULL the command will operate on the dictionary associated with
+ * the current database.
+ *
+ * When 'o' is not NULL the function assumes that the first argument in
+ * the client arguments vector is a key so it skips it before iterating
+ * in order to parse options.
+ *
+ * In the case of a Hash object the function returns both the field and value
+ * of every element on the Hash. */
+void scanGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, dict *ht, int type, unsigned long cursor) {
+    int i, j;
+    list *keys = listCreate();
+    listNode *node, *nextnode;
+    long count = 10;
+    sds pat = NULL;
+    int patlen = 0, use_pattern = 0;
+
+    //copy from redis: i = (o == NULL) ? 2 : 3; /* Skip the key argument if needed. */
+    i = 3;
+    /* Step 1: Parse options. */
+    while (i < argc) {
+        j = argc - i;
+        if (!strcasecmp(RedisModule_GetSds(argv[i]), "count") && j >= 2) {
+            if (getLongFromObjectOrReply(ctx, argv[i+1], &count, NULL) != CRDT_OK) {
+                goto cleanup;
+            }
+
+            if (count < 1) {
+                replySyntaxErr(ctx);
+                goto cleanup;
+            }
+
+            i += 2;
+        } else if (!strcasecmp(RedisModule_GetSds(argv[i]), "match") && j >= 2) {
+            pat = RedisModule_GetSds(argv[i+1]);
+            patlen = sdslen(pat);
+
+            /* The pattern always matches if it is exactly "*", so it is
+             * equivalent to disabling it. */
+            use_pattern = !(pat[0] == '*' && patlen == 1);
+
+            i += 2;
+        } else {
+            replySyntaxErr(ctx);
+            goto cleanup;
+        }
+    }
+
+    /* Step 2: Iterate the collection.
+     *
+     * Note that if the object is encoded with a ziplist, intset, or any other
+     * representation that is not a hash table, we are sure that it is also
+     * composed of a small number of elements. So to avoid taking state we
+     * just return everything inside the object in a single call, setting the
+     * cursor to zero to signal the end of the iteration. */
+
+    /* Handle the case of a hash table. */
+    if(type == CRDT_HASH_TYPE) {
+        count *= 2;
+    }
+
+    if (ht) {
+        void *privdata[2];
+        /* We set the max number of iterations to ten times the specified
+         * COUNT, so if the hash table is in a pathological state (very
+         * sparsely populated) we avoid to block too much time at the cost
+         * of returning no or very few elements. */
+        long maxiterations = count*10;
+
+        /* We pass two pointers to the callback: the list to which it will
+         * add new elements, and the object containing the dictionary so that
+         * it is possible to fetch more data in a type-dependent way. */
+        privdata[0] = keys;
+        privdata[1] = &type;
+        do {
+            cursor = dictScan(ht, cursor, scanCallback, NULL, privdata);
+        } while (cursor &&
+                 maxiterations-- &&
+                 listLength(keys) < (unsigned long)count);
+    }
+
+    /* Step 3: Filter elements. */
+    node = listFirst(keys);
+    while (node) {
+        sds kobj = listNodeValue(node);
+        nextnode = listNextNode(node);
+        int filter = 0;
+
+        /* Filter element if it does not match the pattern. */
+        if (!filter && use_pattern) {
+            if (!stringmatchlen(pat, patlen, kobj, sdslen(kobj), 0))
+                filter = 1;
+        }
+        /* Filter element if it is an expired key.
+         * no need here, as we won't do a db-scan inside a crdt module */
+//        if (!filter && o == NULL && expireIfNeeded(c->db, kobj)) filter = 1;
+
+        /* Remove the element and its associted value if needed. */
+        if (filter) {
+            listDelNode(keys, node);
+        }
+
+        /* If this is a hash or a sorted set, we have a flat list of
+         * key-value elements, so if this element was filtered, remove the
+         * value, or skip it if it was not filtered: we only match keys. */
+        if (type == CRDT_HASH_TYPE) {
+            node = nextnode;
+            nextnode = listNextNode(node);
+            if (filter) {
+                kobj = listNodeValue(node);
+                listDelNode(keys, node);
+            }
+        }
+        node = nextnode;
+    }
+
+    /* Step 4: Reply to the client. */
+    RedisModule_ReplyWithArray(ctx, 2);
+    RedisModule_ReplyWithLongLong(ctx, cursor);
+
+    RedisModule_ReplyWithArray(ctx, listLength(keys));
+    while ((node = listFirst(keys)) != NULL) {
+        sds kobj = listNodeValue(node);
+        RedisModule_ReplyWithStringBuffer(ctx, kobj, sdslen(kobj));
+        listDelNode(keys, node);
+    }
+
+cleanup:
+    listSetFreeMethod(keys, NULL);
+    listRelease(keys);
+
 }

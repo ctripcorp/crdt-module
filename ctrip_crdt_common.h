@@ -47,6 +47,7 @@
 //data type
 #define CRDT_REGISTER_TYPE 0
 #define CRDT_HASH_TYPE 1
+#define CRDT_SET_TYPE 2
 
 /**
  *
@@ -80,8 +81,8 @@
 
 typedef struct CrdtObject {
     unsigned char reserved:3;
-    unsigned char type:2;
-    unsigned char dataType:3;
+    unsigned char type:2; // VAL || TOMBSTONE
+    unsigned char dataType:3; // CRDT_HASH || CRDT_SET
 } __attribute__ ((packed, aligned(1))) CrdtObject;
 int getDataType(CrdtObject *obj);
 void setDataType(CrdtObject *obj, int type);
