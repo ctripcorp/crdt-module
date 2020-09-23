@@ -304,7 +304,6 @@ int dictSdsKeyCompare(void *privdata, const void *key1,
 
 void dictSdsDestructor(void *privdata, void *val) {
     DICT_NOTUSED(privdata);
-
     sdsfree(val);
 }
 
@@ -531,5 +530,5 @@ void scanGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
 cleanup:
     listSetFreeMethod(keys, NULL);
     listRelease(keys);
-}
 
+}

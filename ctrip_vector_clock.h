@@ -221,6 +221,10 @@ addVectorClockUnit(VectorClock vc, int gid, long long logic_time);
 VectorClock
 dupVectorClock(VectorClock vc);
 
+VectorClock
+purgeVectorClock(VectorClock targe, VectorClock other);
+
+
 /**------------------------Vector Clock & sds convertion--------------------------------------*/
 VectorClock
 sdsToVectorClock(sds vcStr);
