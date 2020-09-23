@@ -323,7 +323,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
 
 
 int sunionCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if (argc != 2) return RedisModule_WrongArity(ctx);
+    if (argc < 2) return RedisModule_WrongArity(ctx);
     sunionDiffGenericCommand(ctx, argv+1, argc-1, NULL, SET_OP_UNION);
     return REDISMODULE_OK;
 }
