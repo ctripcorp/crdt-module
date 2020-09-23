@@ -318,6 +318,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
 //        server.dirty++;
     }
     zfree(target_sets);
+    return 1;
 }
 
 
@@ -473,9 +474,6 @@ int saddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         current = createCrdtSet();
         if(tombstone) {
             updateCrdtSetLastVc(current, getCrdtSetTombstoneLastVc(tombstone));
-        } else {
-            long long vc = RedisModule_CurrentVectorClock();
-            updateCrdtSetLastVc(current, LL2VC(vc));
         }
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtSet, current);
     } 
@@ -591,7 +589,6 @@ int crdtSremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         tombstone = createCrdtSetTombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
     }
-
     int result = 0;
     for(int i = 5; i < argc; i++) {
         sds field = RedisModule_GetSds(argv[i]);
@@ -608,7 +605,6 @@ int crdtSremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     updateCrdtSetTombstoneLastVc(tombstone, getMetaVectorClock(&meta));
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
-
     if(result) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "srem", argv[1]);
     }
@@ -618,13 +614,13 @@ end:
         freeVectorClock(meta.vectorClock);
     }
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-    // sds cmdname = RedisModule_GetSds(argv[0]);
     if(status == CRDT_OK) {
         return RedisModule_ReplyWithOk(ctx); 
     }else{
         return CRDT_ERROR;
     }  
 }
+
 
 
 int crdtSismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
