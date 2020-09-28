@@ -4,7 +4,6 @@
 #include "ctrip_crdt_common.h"
 #include "include/redismodule.h"
 #include "crdt_util.h"
-#include "crdt_expire.h"
 
 #define CRDT_SET_DATATYPE_NAME "crdt_setr"
 #define CRDT_SET_TOMBSTONE_DATATYPE_NAME "crdt_sett"

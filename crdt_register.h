@@ -37,14 +37,9 @@
 #include "ctrip_crdt_common.h"
 #include "include/redismodule.h"
 #include "crdt_util.h"
-#include "crdt_expire.h"
 
 #define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
 #define CRDT_REGISTER_TOMBSTONE_DATATYPE_NAME "crdt_regt"
-
-#define DELETED_TAG "deleted"
-
-#define DELETED_TAG_SIZE 7
 
 typedef CrdtObject CRDT_Register ;
 int getCrdtRegisterLastGid(CRDT_Register* r);

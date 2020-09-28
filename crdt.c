@@ -37,7 +37,6 @@
 #include "crdt_register.h"
 #include "ctrip_crdt_hashmap.h"
 #include "crdt_pubsub.h"
-#include "crdt_expire.h"
 #include "ctrip_crdt_common.h"
 #include "crdt_statistics.h"
 #include "crdt_set.h"
