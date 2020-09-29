@@ -37,13 +37,19 @@
 #include "../constans.h"
 
 typedef struct {
-    long long logic_clock: 60;
+    long long start_clock: 60;
     long long type: 1; //integer, float
     long long opt: 3; // optional bytes for further use
+    long long end_clock;
+    long long del_end_clock;
     union {
-        int i;
-        float f;
+        long long i;
+        long double f;
     }conv;
+    union {
+        long long i;
+        long double f;
+    }del_conv;
 } gcounter;
 
 #define get_int_counter(gcounter) (counter->conv.i)

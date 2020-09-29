@@ -38,13 +38,14 @@
 #include "../constans.h"
 
 typedef struct {
+    long long clock;
     unsigned long long timestamp: 52; // enough for 142,808 years
-    unsigned long long type: 8; //integer, float, string
-    unsigned long long opt: 4; // optional bytes for further use
+    unsigned long long type: 2; //integer, float, string
+    unsigned long long opt: 10; // optional bytes for further use
     union {
         sds s;
-        int i;
-        float f;
+        long long i;
+        long double f;
     } val;
 }lww_element;
 

@@ -39,15 +39,18 @@
 #define CRDT_REGISTER_LWW_ELE (1 << 2)
 
 typedef struct {
-    VectorClockUnit vcu;
-    unsigned char flag; //COUNTER, LWW-ELEMENT
-    void **elements;
+    char gid; //tag
+//    unsigned char flag; //COUNTER, LWW-ELEMENT
+    void *base;
+    void *counter;
+//    void *del_counter;
 }rc_element;
 
 typedef struct {
     unsigned char type;
     VectorClock vectorClock;
-    rc_element *elements;
+    //todo: len + pointer
+    rc_element elements[0];
 } crdt_rc;
 
 #endif //CRDT_MODULE_CTRIP_CRDT_REGISTER_H
