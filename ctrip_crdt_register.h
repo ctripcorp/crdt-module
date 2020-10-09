@@ -32,12 +32,27 @@
 
 #ifndef CRDT_MODULE_CTRIP_CRDT_REGISTER_H
 #define CRDT_MODULE_CTRIP_CRDT_REGISTER_H
-
+#include "ctrip_crdt_common.h"
 #include "ctrip_vector_clock.h"
+
+#define CRDT_RC_DATATYPE_NAME "crdt_rc"
+#define CRDT_RC_TOMBSTONE_DATATYPE_NAME "crdt_rct"
 
 #define CRDT_REGISTER_COUNTER (1 << 1)
 #define CRDT_REGISTER_LWW_ELE (1 << 2)
 
+
+#define OBJ_SET_NO_FLAGS 0
+#define OBJ_SET_NX (1<<0)
+#define OBJ_SET_XX (1<<1)
+#define OBJ_SET_EX (1<<2)
+#define OBJ_SET_PX (1<<3)
+#define OBJ_SET_KEEPTTL (1<<4)
+#define UNIT_SECONDS 0
+#define UNIT_MILLISECONDS 1
+
+typedef CrdtObject CRDT_RC;
+typedef CrdtTombstone CRDT_RCTombstone;
 typedef struct {
     char gid; //tag
 //    unsigned char flag; //COUNTER, LWW-ELEMENT
@@ -53,4 +68,35 @@ typedef struct {
     rc_element elements[0];
 } crdt_rc;
 
+//========================= Register moduleType functions =======================
+void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
+void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
+void AofRewriteCrdtRegister(RedisModuleIO *aof, RedisModuleString *key, void *value);
+size_t crdtRegisterMemUsageFunc(const void *value);
+void freeCrdtRegister(void *crdtRegister);
+void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value);
+
+//========================= Virtual functions =======================
+int getCrdtRcType(CRDT_RC* rc);
+sds getCrdtRcStringValue(CRDT_RC* rc);
+long long getCrdtRcIntValue(CRDT_RC* rc);
+long double getCrdtRcFloatValue(CRDT_RC* rc);
+int setCrdtRcBaseIntValue(CRDT_RC* rc, CrdtMeta* meta, long long v);
+CRDT_RC* createCrdtRc();
+int appendCounter(CRDT_RC* rc, int gid);
+int moveDelCounter(CRDT_RC* rc, CRDT_RCTombstone* tom);
+
+//========================= RegisterTombstone moduleType functions =======================
+void *RdbLoadCrdtRegisterTombstone(RedisModuleIO *rdb, int encver) ;
+void RdbSaveCrdtRegisterTombstone(RedisModuleIO *rdb, void *value);
+void AofRewriteCrdtRegisterTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
+size_t crdtRegisterTombstoneMemUsageFunc(const void *value);
+void freeCrdtRegisterTombstone(void *obj);
+void crdtRegisterTombstoneDigestFunc(RedisModuleDigest *md, void *value);
+
+//========================= public functions =======================
+int initRcModule(RedisModuleCtx *ctx);
+
+static RedisModuleType *CrdtRC;
+static RedisModuleType *CrdtRCT;
 #endif //CRDT_MODULE_CTRIP_CRDT_REGISTER_H

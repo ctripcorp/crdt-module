@@ -47,7 +47,7 @@
 #define CRDT_REGISTER_TYPE 0
 #define CRDT_HASH_TYPE 1
 #define CRDT_SET_TYPE 2
-
+#define CRDT_RC_TYPE 3
 /**
  *
  * |  version  |   opt    |  crdt type |

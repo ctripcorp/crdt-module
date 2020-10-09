@@ -26,32 +26,23 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-//
-// Created by zhuchen on 2020/9/25.
-//
+#ifndef XREDIS_CRDT_EXPIRE_H
+#define XREDIS_CRDT_EXPIRE_H
+#include "ctrip_crdt_common.h"
+#include "crdt.h"
+#include "crdt_util.h"
+#include <assert.h>
+#include "include/redismodule.h"
+#define CRDT_EXPIRE_DATATYPE_NAME "crdt_expi"
+#define CRDT_EXPIRE_TOMBSTONE_DATATYPE_NAME "crdt_expt"
 
-#ifndef CRDT_MODULE_CRDT_LWW_ELEMENT_H
-#define CRDT_MODULE_CRDT_LWW_ELEMENT_H
-
-#include "../include/rmutil/sds.h"
-#include "../include/redismodule.h"
-#include "../constans.h"
 
 
-typedef struct {
-    long long clock;
-    unsigned long long timestamp: 52; // enough for 142,808 years
-    unsigned long long type: 2; //integer, float, string
-    unsigned long long opt: 10; // optional bytes for further use
-    union {
-        sds s;
-        long long i;
-        long double f;
-    } val;
-}lww_element;
 
-void* createLwwElement();
 
-void freeLwwElement(void *ele);
-
-#endif //CRDT_MODULE_CRDT_LWW_ELEMENT_H
+//utils
+int setExpire(RedisModuleKey *key, long long expiteTime);
+int trySetExpire(RedisModuleKey* moduleKey, RedisModuleString* key, long long  time, int type, long long expireTime) ;
+//command
+int initCrdtExpireModule(RedisModuleCtx *ctx);
+#endif 

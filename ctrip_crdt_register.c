@@ -29,5 +29,354 @@
 //
 // Created by zhuchen on 2020/9/25.
 //
-
+#include "crdt.h"
+#include "crdt_register.h"
 #include "ctrip_crdt_register.h"
+//  generic function
+int isCrdtRcTombstone(CrdtTombstone* tom) {
+    if(tom != NULL && getType(tom) == CRDT_TOMBSTONE && (getDataType(tom) ==  CRDT_RC_TYPE)) {
+        return CRDT_OK;
+    }
+    return CRDT_NO;
+}
+
+//============================== read command ==============================
+int getGeneric(RedisModuleCtx* ctx, RedisModuleString *key, int sendtype) {
+    RedisModuleKey *modulekey = RedisModule_OpenKey(ctx, key, REDISMODULE_READ );
+    CRDT_Register* reg = NULL;
+    CRDT_RC* rc = NULL;
+    RedisModuleType* mtype= RedisModule_ModuleTypeGetType(modulekey) ;
+    if (RedisModule_KeyType(modulekey) == REDISMODULE_KEYTYPE_EMPTY) {
+        RedisModule_CloseKey(modulekey);
+        RedisModule_ReplyWithNull(ctx);
+        return CRDT_ERROR;
+    } else if (mtype == CrdtRegister) {
+        reg = RedisModule_ModuleTypeGetValue(modulekey);
+    } else if (mtype == CrdtRC) {
+        rc = RedisModule_ModuleTypeGetValue(modulekey);
+    } else {
+        if(sendtype) {
+            RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+        } else {
+            RedisModule_ReplyWithNull(ctx);
+        }
+        goto error;
+    }
+    if(reg) {
+        sds val = getCrdtRegisterLastValue(reg);
+        if(!val) {
+            RedisModule_ReplyWithNull(ctx);
+            goto error;
+        }
+        RedisModuleString *result = RedisModule_CreateString(ctx, val, sdslen(val));
+        RedisModule_ReplyWithString(ctx, result);
+        goto next;
+    }
+    if(rc) {
+        int type = getCrdtRcType(rc);
+        RedisModuleString *result;
+        if(type == VALUETYPE_STRING) {
+            sds v = getCrdtRcStringValue(rc);
+            result = RedisModule_CreateString(ctx, v, sdslen(v));
+        } else if(type == VALUETYPE_INT) {
+            long long l = getCrdtRcIntValue(rc);
+            result = RedisModule_CreateStringFromLongLong(ctx, l);
+        } else if(type == VALUETYPE_FLOAT) {
+            long double f = getCrdtRcFloatValue(rc);
+            result = RedisModule_CreateStringPrintf(ctx, "%lf", f);
+        }else{
+            RedisModule_ReplyWithError(ctx, "[CRDT_RC][Get] type error");
+            goto error;
+        }
+        RedisModule_ReplyWithString(ctx, result);
+    }
+
+next:
+    RedisModule_CloseKey(modulekey);
+    return CRDT_OK;
+error:
+    RedisModule_CloseKey(modulekey);
+    return CRDT_ERROR;
+}
+int getCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 2) return RedisModule_WrongArity(ctx);
+    getGeneric(ctx, argv[1], 1);
+    return REDISMODULE_OK;
+}
+//============================== write command ==============================
+int incrbyCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 3) return RedisModule_WrongArity(ctx);
+    RedisModuleKey* moduleKey = NULL;
+    long long increment = 0;
+    CRDT_RC* current = NULL;
+    if ((RedisModule_StringToLongLong(argv[2],&increment) != REDISMODULE_OK)) {
+        RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+        return 0;
+    }
+    RedisModuleKey *modulekey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+    if (moduleKey == NULL) {
+        goto error;
+    }
+    CRDT_Register* reg = NULL;
+    RedisModuleType* mtype= RedisModule_ModuleTypeGetType(modulekey) ;
+    if (RedisModule_KeyType(modulekey) == REDISMODULE_KEYTYPE_EMPTY) {
+        RedisModule_CloseKey(modulekey);
+        RedisModule_ReplyWithNull(ctx);
+        return CRDT_ERROR;
+    } else if (mtype == CrdtRegister) {
+        reg = RedisModule_ModuleTypeGetValue(modulekey);
+    } else if (mtype == CrdtRC) {
+        current = RedisModule_ModuleTypeGetValue(modulekey);
+    } else {
+        RedisModule_ReplyWithError(ctx, "[CRDT_RC][incry] type error");
+        goto error;
+    }
+    if (reg) {
+        sds v = getCrdtRegisterLastValue(reg);
+        long long l = 0;
+        if (string2ll(v, sdslen(v), &l)) {
+            goto error;
+        }
+        RedisModule_DeleteKey(moduleKey);
+        current = createCrdtRc();
+        setType(current, VALUETYPE_INT);
+        setCrdtRcBaseIntValue(current, getCrdtRegisterLastMeta(reg),l);
+        RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, current);
+    }
+    CrdtMeta set_meta;
+    
+    initIncrMeta(&set_meta);
+    // int gid = getMetaGid(&set_meta);
+    CrdtTombstone* tom = getTombstone(moduleKey);
+    if(tom != NULL && !isCrdtRcTombstone(tom)) {
+        tom = NULL;
+    }
+    long long  result = 0;
+    if (current == NULL) {
+        current = createCrdtRc();
+        setCrdtRcBaseIntValue(current, &set_meta, 0);
+        setType(current, VALUETYPE_INT);
+        RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, current);
+    } else {
+        if(getCrdtRcType(current) != VALUETYPE_INT) {
+            goto error;
+        }
+    }
+    if(tom) {
+        moveDelCounter(current, tom);
+    }
+    result = appendCounter(current, increment);
+    sds vcSds = vectorClockToSds(getMetaVectorClock(&set_meta));
+    RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.COUNTER", "sllcl", argv[1], getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vcSds, result);
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrby", argv[1]);
+
+error:
+    if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
+    return REDISMODULE_OK;
+}
+int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags, RedisModuleString* key, RedisModuleString* val, RedisModuleString* expire, int unit, int sendtype) {
+    int result = 0;
+    CRDT_Register* reg = NULL;
+    //get value
+    RedisModuleType* mtype= RedisModule_ModuleTypeGetType(moduleKey) ;
+    CRDT_RC* rc = NULL;
+    if (RedisModule_KeyType(moduleKey) == REDISMODULE_KEYTYPE_EMPTY) {
+        RedisModule_CloseKey(moduleKey);
+        RedisModule_ReplyWithNull(ctx);
+        return CRDT_ERROR;
+    } else if (mtype == CrdtRegister) {
+        reg = RedisModule_ModuleTypeGetValue(moduleKey);
+    } else if (mtype == CrdtRC) {
+        rc = RedisModule_ModuleTypeGetValue(moduleKey);
+    } 
+    CrdtMeta set_meta = {.gid = 0};
+    if(moduleKey == NULL) {
+        result = 0;
+        goto error;
+    }
+    CRDT_Register* current = getCurrentValue(moduleKey);
+    if((current != NULL && flags & OBJ_SET_NX) 
+        || (current == NULL && flags & OBJ_SET_XX)) {
+        if(sendtype) RedisModule_ReplyWithNull(ctx);  
+        result = 0;   
+        goto error;
+    }
+    long long milliseconds = 0;
+    if (expire) {
+        if (RedisModule_StringToLongLong(expire, &milliseconds) != REDISMODULE_OK) {
+            result = 0;
+            if(sendtype) RedisModule_ReplyWithSimpleString(ctx, "ERR syntax error\r\n");
+            goto error;
+        }
+        if (milliseconds <= 0) {
+            result = 0;
+            if(sendtype) RedisModule_ReplyWithSimpleString(ctx,"invalid expire time in set\r\n");
+            goto error;
+        }
+        if (unit == UNIT_SECONDS) milliseconds *= 1000;
+    }
+    initIncrMeta(&set_meta);
+    CrdtTombstone* tombstone = getTombstone(moduleKey);
+    if(reg) {
+        crdtRegisterTryUpdate(reg, &set_meta, RedisModule_GetSds(key), COMPARE_META_VECTORCLOCK_GT);
+        RedisModule_DeleteTombstone(moduleKey);
+        replicationCrdtSetCommand(key, val, set_meta, expire);
+    } else if(rc) {
+        rc_element* es = crdtRcTryUpdate(rc, &set_meta, RedisModule_GetSds(key), tombstone);
+        replicationCrdtRcCommand(key, val, set_meta, expire, es);
+    } else if(tombstone && isRcTombstone(tombstone)) {
+        rc = createCrdtRc();
+        sds v = RedisModule_GetSds(val);
+        if(isInt(v)) {
+            setTypeInt(rc);
+        } else if(isFloat(v)) {
+            setTypeFloat(rc);
+        } else {
+            goto error;
+        }
+        if(tombstone) {
+            appendVCForMeta(&set_meta, getCrdtRegisterTombstoneLastVc(tombstone));
+        } else {
+            long long vc = RedisModule_CurrentVectorClock();
+            appendVCForMeta(&set_meta, LL2VC(vc));
+        }
+        rc_element* es = crdtRcSetValue(rc, &set_meta, v);
+        RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, rc);
+        replicationCrdtRcCommand(key, val, set_meta, expire, es);
+    } else if((tombstone && isRegisterTombstone(tombstone)) || !tombstone) {
+        reg = createCrdtRegister();
+        if(tombstone) {
+            appendVCForMeta(&set_meta, getCrdtRegisterTombstoneLastVc(tombstone));
+        } else {
+            long long vc = RedisModule_CurrentVectorClock();
+            appendVCForMeta(&set_meta, LL2VC(vc));
+        }
+        crdtRegisterSetValue(reg, &set_meta, RedisModule_GetSds(val));
+        RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, reg);
+        replicationCrdtSetCommand(key, val, set_meta, expire);
+    } else {
+        goto error;
+    }
+error:
+    if(set_meta.gid != 0) freeIncrMeta(&set_meta);
+    if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
+    return REDISMODULE_OK;
+}
+//set k v
+int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc < 3) return RedisModule_WrongArity(ctx);
+    RedisModuleString* expire = NULL;
+    int flags = OBJ_SET_NO_FLAGS;
+    int j;
+    int unit = UNIT_SECONDS;
+    #if defined(SET_STATISTICS) 
+        parse_start(); 
+    #endif
+    for (j = 3; j < argc; j++) {
+        sds a = RedisModule_GetSds(argv[j]);
+        RedisModuleString *next = (j == argc-1) ? NULL : argv[j+1];
+        if ((a[0] == 'n' || a[0] == 'N') &&
+            (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' &&
+             !(flags & OBJ_SET_XX)) {
+            flags |= OBJ_SET_NX;    
+        } else if ((a[0] == 'x' || a[0] == 'X') &&
+                   (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' &&
+                   !(flags & OBJ_SET_NX)) {
+            flags |= OBJ_SET_XX;
+        } else if (!strcasecmp(RedisModule_GetSds(argv[j]),"KEEPTTL") &&
+                   !(flags & OBJ_SET_EX) && !(flags & OBJ_SET_PX))
+        {
+            flags |= OBJ_SET_KEEPTTL;
+        } else if ((a[0] == 'e' || a[0] == 'E') &&
+                   (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' &&
+                   !(flags & OBJ_SET_KEEPTTL) &&
+                   !(flags & OBJ_SET_PX) && next)
+        {
+            flags |= OBJ_SET_EX;
+            unit = UNIT_SECONDS;
+            expire = next;
+            j++;
+        } else if ((a[0] == 'p' || a[0] == 'P') &&
+                   (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' &&
+                   !(flags & OBJ_SET_KEEPTTL) &&
+                   !(flags & OBJ_SET_EX) && next)
+        {
+            flags |= OBJ_SET_PX;
+            unit = UNIT_MILLISECONDS;
+            expire = next;
+            j++;
+        } else {
+            RedisModule_ReplyWithError(ctx, "ERR syntax error");
+            return CRDT_ERROR;
+        }
+    }
+    int result = setGenericCommand(ctx, NULL, flags, argv[1], argv[2], expire, unit, 1);
+    if(result == CRDT_OK) {
+        return RedisModule_ReplyWithOk(ctx);
+    } else {
+        return CRDT_ERROR;
+    }
+}
+int initRcModule(RedisModuleCtx *ctx) {
+    RedisModuleTypeMethods tm = {
+        .version = REDISMODULE_APIVER_1,
+        .rdb_load = RdbLoadCrdtRegister, 
+        .rdb_save = RdbSaveCrdtRegister,
+        .aof_rewrite = AofRewriteCrdtRegister,
+        .mem_usage = crdtRegisterMemUsageFunc,
+        .free = freeCrdtRegister,
+        .digest = crdtRegisterDigestFunc
+    };
+    CrdtRC = RedisModule_CreateDataType(ctx, CRDT_RC_DATATYPE_NAME, 0, &tm);
+    if (CrdtRegister == NULL) return REDISMODULE_ERR;
+    RedisModuleTypeMethods tombtm = {
+        .version = REDISMODULE_APIVER_1,
+        .rdb_load = RdbLoadCrdtRegisterTombstone,
+        .rdb_save = RdbSaveCrdtRegisterTombstone,
+        .aof_rewrite = AofRewriteCrdtRegisterTombstone,
+        .mem_usage = crdtRegisterTombstoneMemUsageFunc,
+        .free = freeCrdtRegisterTombstone,
+        .digest = crdtRegisterTombstoneDigestFunc,
+    };
+    CrdtRCT = RedisModule_CreateDataType(ctx, CRDT_RC_TOMBSTONE_DATATYPE_NAME, 0, &tombtm);
+    if (CrdtRegisterTombstone == NULL) return REDISMODULE_ERR;
+    // write readonly admin deny-oom deny-script allow-loading pubsub random allow-stale no-monitor fast getkeys-api no-cluster
+    // if (RedisModule_CreateCommand(ctx,"SET",
+    //                               setCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+    
+    // if (RedisModule_CreateCommand(ctx,"CRDT.SET",
+    //                               CRDT_SetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+
+    // if (RedisModule_CreateCommand(ctx,"GET",
+    //                               getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+    // if (RedisModule_CreateCommand(ctx, "MGET", 
+    //                                 mgetCommand, "readonly fast",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+    // if (RedisModule_CreateCommand(ctx,"CRDT.GET",
+    //                               CRDT_GetCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+
+    // if (RedisModule_CreateCommand(ctx,"CRDT.DEL_REG",
+    //                               CRDT_DelRegCommand,"write",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+
+    // if (RedisModule_CreateCommand(ctx, "SETEX", 
+    //                                 setexCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+    // if (RedisModule_CreateCommand(ctx, "MSET", 
+    //                                 msetCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+    // if (RedisModule_CreateCommand(ctx, "CRDT.MSET",
+    //                                 CRDT_MSETCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "incr",
+                                    incrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "get",
+                                    getCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    return REDISMODULE_OK;
+}
