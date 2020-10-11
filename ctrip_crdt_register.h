@@ -35,8 +35,8 @@
 #include "ctrip_crdt_common.h"
 #include "ctrip_vector_clock.h"
 
-#define CRDT_RC_DATATYPE_NAME "crdt_rc"
-#define CRDT_RC_TOMBSTONE_DATATYPE_NAME "crdt_rct"
+#define CRDT_RC_DATATYPE_NAME "crdt_rc_v"
+#define CRDT_RC_TOMBSTONE_DATATYPE_NAME "crdt_rc_t"
 
 #define CRDT_REGISTER_COUNTER (1 << 1)
 #define CRDT_REGISTER_LWW_ELE (1 << 2)
@@ -69,12 +69,12 @@ typedef struct {
 } crdt_rc;
 
 //========================= Register moduleType functions =======================
-void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
-void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
-void AofRewriteCrdtRegister(RedisModuleIO *aof, RedisModuleString *key, void *value);
-size_t crdtRegisterMemUsageFunc(const void *value);
-void freeCrdtRegister(void *crdtRegister);
-void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value);
+void *RdbLoadCrdtRc(RedisModuleIO *rdb, int encver);
+void RdbSaveCrdtRc(RedisModuleIO *rdb, void *value);
+void AofRewriteCrdtRc(RedisModuleIO *aof, RedisModuleString *key, void *value);
+size_t crdtRcMemUsageFunc(const void *value);
+void freeCrdtRc(void *crdtRegister);
+void crdtRcDigestFunc(RedisModuleDigest *md, void *value);
 
 //========================= Virtual functions =======================
 int getCrdtRcType(CRDT_RC* rc);
@@ -85,14 +85,20 @@ int setCrdtRcBaseIntValue(CRDT_RC* rc, CrdtMeta* meta, long long v);
 CRDT_RC* createCrdtRc();
 int appendCounter(CRDT_RC* rc, int gid);
 int moveDelCounter(CRDT_RC* rc, CRDT_RCTombstone* tom);
-
+rc_element* crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds v);
+rc_element* crdtRcTryUpdate(CRDT_RC* rc, CrdtMeta* set_meta, sds key, CrdtTombstone* tombstone);
+int isFloat(sds v);
+int isInt(sds v);
+int setTypeInt(CRDT_RC* rc);
+int setTypeFloat(CRDT_RC* rc);
+int isRcTombstone(CrdtTombstone* t);
 //========================= RegisterTombstone moduleType functions =======================
-void *RdbLoadCrdtRegisterTombstone(RedisModuleIO *rdb, int encver) ;
-void RdbSaveCrdtRegisterTombstone(RedisModuleIO *rdb, void *value);
-void AofRewriteCrdtRegisterTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
-size_t crdtRegisterTombstoneMemUsageFunc(const void *value);
-void freeCrdtRegisterTombstone(void *obj);
-void crdtRegisterTombstoneDigestFunc(RedisModuleDigest *md, void *value);
+void *RdbLoadCrdtRcTombstone(RedisModuleIO *rdb, int encver) ;
+void RdbSaveCrdtRcTombstone(RedisModuleIO *rdb, void *value);
+void AofRewriteCrdtRcTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
+size_t crdtRcTombstoneMemUsageFunc(const void *value);
+void freeCrdtRcTombstone(void *obj);
+void crdtRcTombstoneDigestFunc(RedisModuleDigest *md, void *value);
 
 //========================= public functions =======================
 int initRcModule(RedisModuleCtx *ctx);

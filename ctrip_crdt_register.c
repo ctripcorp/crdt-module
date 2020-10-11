@@ -32,6 +32,15 @@
 #include "crdt.h"
 #include "crdt_register.h"
 #include "ctrip_crdt_register.h"
+int replicationCrdtRcCommand(RedisModuleString* key, RedisModuleString* val, CrdtMeta* set_meta, long long expire, rc_element* es) {
+    return 1;
+}
+int replicationCrdtSetCommand(RedisModuleCtx* ctx,  RedisModuleString* key,RedisModuleString* val,CrdtMeta* set_meta, long long expire) {
+    sds vcSds = vectorClockToSds(getMetaVectorClock(set_meta));
+    RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.SET", "ssllcl", key, val, getMetaGid(set_meta), getMetaTimestamp(set_meta), vcSds, expire);
+    sdsfree(vcSds);
+    return 1;
+}
 //  generic function
 int isCrdtRcTombstone(CrdtTombstone* tom) {
     if(tom != NULL && getType(tom) == CRDT_TOMBSTONE && (getDataType(tom) ==  CRDT_RC_TYPE)) {
@@ -70,6 +79,7 @@ int getGeneric(RedisModuleCtx* ctx, RedisModuleString *key, int sendtype) {
         }
         RedisModuleString *result = RedisModule_CreateString(ctx, val, sdslen(val));
         RedisModule_ReplyWithString(ctx, result);
+        // RedisModule_FreeString(ctx, result);
         goto next;
     }
     if(rc) {
@@ -174,26 +184,34 @@ error:
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     return REDISMODULE_OK;
 }
+long long setExpireByModuleKey(RedisModuleKey* moduleKey, int flags, RedisModuleString* expire,long long milliseconds, CrdtMeta* meta) {
+    long long expire_time = -2;
+    if(expire) {
+        expire_time = getMetaTimestamp(meta) + milliseconds;
+        RedisModule_SetExpire(moduleKey, milliseconds);
+    }else if(!(flags & OBJ_SET_KEEPTTL)){
+        RedisModule_SetExpire(moduleKey, -1);
+        expire_time = -1;
+    }
+    return expire_time;
+}
 int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags, RedisModuleString* key, RedisModuleString* val, RedisModuleString* expire, int unit, int sendtype) {
     int result = 0;
     CRDT_Register* reg = NULL;
     //get value
+    if(moduleKey == NULL) {
+        moduleKey = RedisModule_OpenKey(ctx, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+    }
     RedisModuleType* mtype= RedisModule_ModuleTypeGetType(moduleKey) ;
     CRDT_RC* rc = NULL;
-    if (RedisModule_KeyType(moduleKey) == REDISMODULE_KEYTYPE_EMPTY) {
-        RedisModule_CloseKey(moduleKey);
-        RedisModule_ReplyWithNull(ctx);
-        return CRDT_ERROR;
-    } else if (mtype == CrdtRegister) {
+    if (mtype == CrdtRegister) {
         reg = RedisModule_ModuleTypeGetValue(moduleKey);
     } else if (mtype == CrdtRC) {
         rc = RedisModule_ModuleTypeGetValue(moduleKey);
-    } 
-    CrdtMeta set_meta = {.gid = 0};
-    if(moduleKey == NULL) {
-        result = 0;
+    } else {
         goto error;
     }
+    CrdtMeta set_meta = {.gid = 0};
     CRDT_Register* current = getCurrentValue(moduleKey);
     if((current != NULL && flags & OBJ_SET_NX) 
         || (current == NULL && flags & OBJ_SET_XX)) {
@@ -217,13 +235,16 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
     }
     initIncrMeta(&set_meta);
     CrdtTombstone* tombstone = getTombstone(moduleKey);
+    long long expire_time = -2;
     if(reg) {
         crdtRegisterTryUpdate(reg, &set_meta, RedisModule_GetSds(key), COMPARE_META_VECTORCLOCK_GT);
         RedisModule_DeleteTombstone(moduleKey);
-        replicationCrdtSetCommand(key, val, set_meta, expire);
+        expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
+        replicationCrdtSetCommand(ctx, key, val, &set_meta, expire_time);
     } else if(rc) {
         rc_element* es = crdtRcTryUpdate(rc, &set_meta, RedisModule_GetSds(key), tombstone);
-        replicationCrdtRcCommand(key, val, set_meta, expire, es);
+        expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
+        replicationCrdtRcCommand(key, val, &set_meta, expire_time, es);
     } else if(tombstone && isRcTombstone(tombstone)) {
         rc = createCrdtRc();
         sds v = RedisModule_GetSds(val);
@@ -242,7 +263,8 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         }
         rc_element* es = crdtRcSetValue(rc, &set_meta, v);
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, rc);
-        replicationCrdtRcCommand(key, val, set_meta, expire, es);
+        expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
+        replicationCrdtRcCommand(key, val, &set_meta, expire_time, es);
     } else if((tombstone && isRegisterTombstone(tombstone)) || !tombstone) {
         reg = createCrdtRegister();
         if(tombstone) {
@@ -253,14 +275,15 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         }
         crdtRegisterSetValue(reg, &set_meta, RedisModule_GetSds(val));
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, reg);
-        replicationCrdtSetCommand(key, val, set_meta, expire);
+        expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
+        replicationCrdtSetCommand(ctx, key, val, &set_meta, expire_time);
     } else {
         goto error;
     }
 error:
     if(set_meta.gid != 0) freeIncrMeta(&set_meta);
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
-    return REDISMODULE_OK;
+    return CRDT_OK;
 }
 //set k v
 int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -317,41 +340,80 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         return CRDT_ERROR;
     }
 }
+//========================= Register moduleType functions =======================
+void *RdbLoadCrdtRc(RedisModuleIO *rdb, int encver) {
+    return NULL;
+}
+void RdbSaveCrdtRc(RedisModuleIO *rdb, void *value) {
+
+}
+void AofRewriteCrdtRc(RedisModuleIO *aof, RedisModuleString *key, void *value) {
+
+}
+size_t crdtRcMemUsageFunc(const void *value) {
+    return 1;
+}
+void freeCrdtRc(void *value) {
+
+}
+void crdtRcDigestFunc(RedisModuleDigest *md, void *value) {
+
+}
+//========================= RegisterTombstone moduleType functions =======================
+void *RdbLoadCrdtRcTombstone(RedisModuleIO *rdb, int encver)  {
+    return NULL;
+}
+void RdbSaveCrdtRcTombstone(RedisModuleIO *rdb, void *value) {
+
+}
+void AofRewriteCrdtRcTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {
+
+}
+size_t crdtRcTombstoneMemUsageFunc(const void *value) {
+    return 1;
+}
+void freeCrdtRcTombstone(void *obj) {
+
+}
+void crdtRcTombstoneDigestFunc(RedisModuleDigest *md, void *value) {
+
+}
+
 int initRcModule(RedisModuleCtx *ctx) {
     RedisModuleTypeMethods tm = {
         .version = REDISMODULE_APIVER_1,
-        .rdb_load = RdbLoadCrdtRegister, 
-        .rdb_save = RdbSaveCrdtRegister,
-        .aof_rewrite = AofRewriteCrdtRegister,
-        .mem_usage = crdtRegisterMemUsageFunc,
-        .free = freeCrdtRegister,
-        .digest = crdtRegisterDigestFunc
+        .rdb_load = RdbLoadCrdtRc, 
+        .rdb_save = RdbSaveCrdtRc,
+        .aof_rewrite = AofRewriteCrdtRc,
+        .mem_usage = crdtRcMemUsageFunc,
+        .free = freeCrdtRc,
+        .digest = crdtRcDigestFunc
     };
     CrdtRC = RedisModule_CreateDataType(ctx, CRDT_RC_DATATYPE_NAME, 0, &tm);
-    if (CrdtRegister == NULL) return REDISMODULE_ERR;
+    if (CrdtRC == NULL) return REDISMODULE_ERR;
     RedisModuleTypeMethods tombtm = {
         .version = REDISMODULE_APIVER_1,
-        .rdb_load = RdbLoadCrdtRegisterTombstone,
-        .rdb_save = RdbSaveCrdtRegisterTombstone,
-        .aof_rewrite = AofRewriteCrdtRegisterTombstone,
-        .mem_usage = crdtRegisterTombstoneMemUsageFunc,
-        .free = freeCrdtRegisterTombstone,
-        .digest = crdtRegisterTombstoneDigestFunc,
+        .rdb_load = RdbLoadCrdtRcTombstone,
+        .rdb_save = RdbSaveCrdtRcTombstone,
+        .aof_rewrite = AofRewriteCrdtRcTombstone,
+        .mem_usage = crdtRcTombstoneMemUsageFunc,
+        .free = freeCrdtRcTombstone,
+        .digest = crdtRcTombstoneDigestFunc,
     };
     CrdtRCT = RedisModule_CreateDataType(ctx, CRDT_RC_TOMBSTONE_DATATYPE_NAME, 0, &tombtm);
-    if (CrdtRegisterTombstone == NULL) return REDISMODULE_ERR;
+    if (CrdtRCT == NULL) return REDISMODULE_ERR;
     // write readonly admin deny-oom deny-script allow-loading pubsub random allow-stale no-monitor fast getkeys-api no-cluster
-    // if (RedisModule_CreateCommand(ctx,"SET",
-    //                               setCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
-    //     return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"SET",
+                                  setCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
     
     // if (RedisModule_CreateCommand(ctx,"CRDT.SET",
     //                               CRDT_SetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
     //     return REDISMODULE_ERR;
 
-    // if (RedisModule_CreateCommand(ctx,"GET",
-    //                               getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
-    //     return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"GET",
+                                  getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
     // if (RedisModule_CreateCommand(ctx, "MGET", 
     //                                 mgetCommand, "readonly fast",1,1,1) == REDISMODULE_ERR)
     //     return REDISMODULE_ERR;
@@ -372,11 +434,64 @@ int initRcModule(RedisModuleCtx *ctx) {
     // if (RedisModule_CreateCommand(ctx, "CRDT.MSET",
     //                                 CRDT_MSETCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
     //     return REDISMODULE_ERR;
-    if (RedisModule_CreateCommand(ctx, "incr",
-                                    incrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
-    if (RedisModule_CreateCommand(ctx, "get",
-                                    getCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
+    // if (RedisModule_CreateCommand(ctx, "incr",
+    //                                 incrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+    // if (RedisModule_CreateCommand(ctx, "get",
+    //                                 getCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
     return REDISMODULE_OK;
+}
+
+
+
+//========================= Virtual functions =======================
+int appendCounter(CRDT_RC* rc, int gid) {
+    return 0;
+}
+
+rc_element* crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds v) {
+    return NULL;
+}
+
+rc_element* crdtRcTryUpdate(CRDT_RC* rc, CrdtMeta* set_meta, sds key, CrdtTombstone* tombstone) {
+    return NULL;
+}
+
+CRDT_RC* createCrdtRc() {
+    return NULL;
+}
+
+long double getCrdtRcFloatValue(CRDT_RC* rc) {
+    return (long double)0;
+}
+long long getCrdtRcIntValue(CRDT_RC* rc) {
+    return 0;
+}
+sds getCrdtRcStringValue(CRDT_RC* rc) {
+    return NULL;
+}
+int getCrdtRcType(CRDT_RC* rc) {
+    return 0;
+}
+int isFloat(sds v) {
+    return 0;
+}
+int isInt(sds v) {
+    return 0;
+}
+int isRcTombstone(CrdtTombstone* t) {
+    return 0;
+}
+int moveDelCounter(CRDT_RC* rc, CRDT_RCTombstone* tom) {
+    return 0;
+}
+int setCrdtRcBaseIntValue(CRDT_RC* rc, CrdtMeta* meta, long long v) {
+    return 0;
+}
+int setTypeInt(CRDT_RC* rc) {
+    return 0;
+}
+int setTypeFloat(CRDT_RC* rc) {
+    return 0;
 }

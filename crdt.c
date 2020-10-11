@@ -35,6 +35,7 @@
 #include "crdt.h"
 #include "crdt_set.h"
 #include "crdt_register.h"
+#include "ctrip_crdt_register.h"
 #include "ctrip_crdt_hashmap.h"
 #include "crdt_pubsub.h"
 #include "ctrip_crdt_common.h"
@@ -361,7 +362,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         RedisModule_Log(ctx, "warning", "set module -- set failed");
         return REDISMODULE_ERR;
     }
-
+    if(initRcModule(ctx) != REDISMODULE_OK) {
+        RedisModule_Log(ctx, "warning", "counter module -- counter failed");
+        return REDISMODULE_ERR;
+    }
 
     if (RedisModule_CreateCommand(ctx,"del",
                                   delCommand,"write",1,-1,1) == REDISMODULE_ERR)

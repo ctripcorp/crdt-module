@@ -168,7 +168,7 @@ int initRegisterModule(RedisModuleCtx *ctx) {
 
     // if (RedisModule_CreateCommand(ctx,"GET",
     //                               getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
+    // return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "MGET", 
                                     mgetCommand, "readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
