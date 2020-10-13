@@ -672,7 +672,6 @@ int crdtSismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
 //crdt.del_Set <key> gid time vc maxvc
 int crdtDelSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    RedisModule_Debug(logLevel, "crdt.del");
     if (argc < 6) return RedisModule_WrongArity(ctx);
     CrdtMeta meta = {.gid = 0};
     int status = CRDT_OK;

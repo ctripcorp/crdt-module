@@ -162,9 +162,9 @@ int initRegisterModule(RedisModuleCtx *ctx) {
     //                               setCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
     //     return REDISMODULE_ERR;
     
-    if (RedisModule_CreateCommand(ctx,"CRDT.SET",
-                                  CRDT_SetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
+    // if (RedisModule_CreateCommand(ctx,"CRDT.SET",
+    //                               CRDT_SetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
 
     // if (RedisModule_CreateCommand(ctx,"GET",
     //                               getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
@@ -318,7 +318,7 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
     if(current == NULL) {
         current = createCrdtRegister();
         crdtRegisterSetValue(current, meta, value);
-        RedisModule_ModuleTypeSetValue(moduleKey, CrdtRegister, current);
+        int res = RedisModule_ModuleTypeSetValue(moduleKey, getCrdtRegister(), current);
         //delete different tombstone
         RedisModule_DeleteTombstone(moduleKey);
     }else{
@@ -722,7 +722,7 @@ int msetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 // }
 // CRDT.SET key <val> <gid> <timestamp> <vc> <expire-at-milli> 
 // 0         1    2     3      4         5        6
-int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+int CRDT_SetCommand_(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
     if (argc < 6) return RedisModule_WrongArity(ctx);
     long long expire_time = -2;
@@ -731,7 +731,6 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
         }  
     }
-
     CrdtMeta meta = {.gid = 0};
     int status = CRDT_OK;
     if (readMeta(ctx, argv, 3, &meta) != CRDT_OK) {
@@ -757,6 +756,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
+    
 end:
     if (meta.gid != 0) {
         RedisModule_CrdtReplicateVerbatim(getMetaGid(&meta), ctx);

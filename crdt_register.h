@@ -166,4 +166,5 @@ int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register
 size_t crdtRegisterMemUsageFunc(const void *value);
 VectorClock getCrdtRegisterTombstoneLastVc(CRDT_RegisterTombstone* t);
 CrdtMeta* getCrdtRegisterTombstoneMeta(CRDT_RegisterTombstone* t);
+CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_RegisterTombstone* tombstone, CRDT_Register* current, CrdtMeta* meta, RedisModuleString* key,sds value);
 #endif //XREDIS_CRDT_CRDT_REGISTER_H

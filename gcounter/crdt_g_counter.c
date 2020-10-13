@@ -43,7 +43,9 @@ void* createGcounter() {
     gcounter *counter = RedisModule_Alloc(sizeof(gcounter));
 #endif
     counter->type = VALUE_TYPE_INTEGER;
-    counter->logic_clock = 0;
+    // counter->logic_clock = 0;
+    counter->conv.i = 0;
+    counter->conv.f = 0;
     return counter;
 }
 

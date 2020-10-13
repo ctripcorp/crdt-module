@@ -34,7 +34,7 @@
 #define CRDT_MODULE_CTRIP_CRDT_REGISTER_H
 #include "ctrip_crdt_common.h"
 #include "ctrip_vector_clock.h"
-
+#include "gcounter/crdt_g_counter.h"
 #define CRDT_RC_DATATYPE_NAME "crdt_rc_v"
 #define CRDT_RC_TOMBSTONE_DATATYPE_NAME "crdt_rc_t"
 
@@ -54,18 +54,29 @@
 typedef CrdtObject CRDT_RC;
 typedef CrdtTombstone CRDT_RCTombstone;
 typedef struct {
+    unsigned char type;
+    VectorClock vc;
+    long long timespace;
+    union {
+        long long i;
+        long double f;
+    }conv;
+} rc_base;
+
+typedef struct {
     char gid; //tag
 //    unsigned char flag; //COUNTER, LWW-ELEMENT
-    void *base;
-    void *counter;
+    rc_base *base;
+    gcounter *counter;
 //    void *del_counter;
 }rc_element;
 
 typedef struct {
     unsigned char type;
+    unsigned char len;
     VectorClock vectorClock;
     //todo: len + pointer
-    rc_element elements[0];
+    rc_element** elements;
 } crdt_rc;
 
 //========================= Register moduleType functions =======================
@@ -81,9 +92,9 @@ int getCrdtRcType(CRDT_RC* rc);
 sds getCrdtRcStringValue(CRDT_RC* rc);
 long long getCrdtRcIntValue(CRDT_RC* rc);
 long double getCrdtRcFloatValue(CRDT_RC* rc);
-int setCrdtRcBaseIntValue(CRDT_RC* rc, CrdtMeta* meta, long long v);
+int setCrdtRcBaseIntValue(CRDT_RC* rc, CrdtMeta* meta, int gid, long long v);
 CRDT_RC* createCrdtRc();
-int appendCounter(CRDT_RC* rc, int gid);
+int appendCounter(CRDT_RC* rc, int gid, long long value);
 int moveDelCounter(CRDT_RC* rc, CRDT_RCTombstone* tom);
 rc_element* crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds v);
 rc_element* crdtRcTryUpdate(CRDT_RC* rc, CrdtMeta* set_meta, sds key, CrdtTombstone* tombstone);
@@ -91,7 +102,6 @@ int isFloat(sds v);
 int isInt(sds v);
 int setTypeInt(CRDT_RC* rc);
 int setTypeFloat(CRDT_RC* rc);
-int isRcTombstone(CrdtTombstone* t);
 //========================= RegisterTombstone moduleType functions =======================
 void *RdbLoadCrdtRcTombstone(RedisModuleIO *rdb, int encver) ;
 void RdbSaveCrdtRcTombstone(RedisModuleIO *rdb, void *value);
@@ -105,4 +115,8 @@ int initRcModule(RedisModuleCtx *ctx);
 
 static RedisModuleType *CrdtRC;
 static RedisModuleType *CrdtRCT;
+//========================= element functions =========================
+rc_element* createElement(int gid);
+rc_element* findElement(crdt_rc* rc, int gid);
+long long  addOrCreateIntCounter(CRDT_RC* rc,  CrdtMeta* meta, long long value);
 #endif //CRDT_MODULE_CTRIP_CRDT_REGISTER_H
