@@ -841,7 +841,6 @@ void RdbSaveCrdtRc(RedisModuleIO *rdb, void *value) {
     for(int i = 0; i < rc->len; i++) {
         save_rc_element(rdb, rc->elements[i]);
     }
-
 }
 
 void AofRewriteCrdtRc(RedisModuleIO *aof, RedisModuleString *key, void *value) {
@@ -866,11 +865,57 @@ void crdtRcDigestFunc(RedisModuleDigest *md, void *value) {
 }
 
 //========================= RegisterTombstone moduleType functions =======================
+rc_tombstone_element* load_rc_tombstone_element(RedisModuleIO *rdb) {
+    rc_tombstone_element* el = createRcTombstoneElement(0);
+    el->gid = RedisModule_LoadUnsigned(rdb);
+    el->del_unit = RedisModule_LoadUnsigned(rdb);
+    int hasCounter = RedisModule_LoadUnsigned(rdb);
+    if(hasCounter) {
+        el->counter = load_counter(rdb);
+    }
+    return el;
+}
+void save_rc_tombstone_element(RedisModuleIO *rdb, rc_tombstone_element* el) {
+    RedisModule_SaveUnsigned(rdb, el->gid);
+    RedisModule_SaveUnsigned(rdb, el->del_unit);
+    if(!el->counter) { 
+        RedisModule_SaveUnsigned(rdb, 0);
+        return;
+    } 
+    RedisModule_SaveUnsigned(rdb, 1);
+    save_counter(rdb, el->counter);
+}
+
+crdt_rc_tombstone* RdbLoadCrdtOrSetRcTombstone(RedisModuleIO *rdb, int version, int encver) {
+    crdt_rc_tombstone* rt = createCrdtRcTombstone();
+    rt->vectorClock = rdbLoadVectorClock(rdb, version);
+    int len = RedisModule_LoadUnsigned(rdb);
+    for(int i = 0; i < len; i++) {
+        rc_tombstone_element* el = load_rc_tombstone_element(rdb);
+        if(el == NULL) { freeCrdtRcTombstone(rt); return NULL;}
+        appendRcTombstoneElement(rt, el);
+    }
+    return rt;
+}
+
 void *RdbLoadCrdtRcTombstone(RedisModuleIO *rdb, int encver)  {
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
+    if( type == ORSET_TYPE) {
+        return RdbLoadCrdtOrSetRcTombstone(rdb, version, encver);
+    }
     return NULL;
 }
-void RdbSaveCrdtRcTombstone(RedisModuleIO *rdb, void *value) {
 
+void RdbSaveCrdtRcTombstone(RedisModuleIO *rdb, void *value) {
+    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(value);
+    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+    rdbSaveVectorClock(rdb, rt->vectorClock, CRDT_RDB_VERSION);
+    RedisModule_SaveUnsigned(rdb, rt->len);
+    for(int i = 0; i < rt->len; i++) {
+        save_rc_tombstone_element(rdb, rt->elements[i]);
+    }
 }
 void AofRewriteCrdtRcTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {
 
@@ -1421,3 +1466,4 @@ int crdtRcDelete(int dbId, void *keyRobj, void *key, void *value) {
 
 //=== type =====
 RedisModuleType* getCrdtRc() {return CrdtRC;};
+RedisModuleType* getCrdtRcTombstone() {return CrdtRCT;}

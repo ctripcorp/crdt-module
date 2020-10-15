@@ -151,7 +151,7 @@ int initRcModule(RedisModuleCtx *ctx);
 static RedisModuleType *CrdtRC;
 static RedisModuleType *CrdtRCT;
 RedisModuleType* getCrdtRc();
-
+RedisModuleType* getCrdtRcTombstone();
 //========================= rc element functions =========================
 rc_element* createRcElement(int gid);
 void freeRcElement(void* element);
