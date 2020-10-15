@@ -177,16 +177,13 @@ int incrbyCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     long long  result = 0;
     if (current == NULL) {
         current = createCrdtRc();
-        setCrdtRcBaseIntValue(current, &set_meta ,0);
+        initCrdtRcFromTombstone(current, tom);
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, current);
     } else {
         if(getCrdtRcType(current) != VALUE_TYPE_INTEGER) {
             RedisModule_ReplyWithError(ctx, "ERR value is not an integer or out of range");
             goto error;
         }
-    }
-    if(tom) {
-        moveDelCounter(current, tom);
     }
     int gid = RedisModule_CurrentGid();
     result = addOrCreateCounter(current, &set_meta, VALUE_TYPE_INTEGER, &increment);
@@ -596,14 +593,7 @@ int mergeRcTombstone(CRDT_RCTombstone* tombstone, CrdtMeta* meta, int del_len, g
         }
         for(int j = 0; j < del_len; j++) {
             if(del_counter[j] != NULL && del_counter[j]->gid == el->gid) {
-                if(el->counter->del_end_clock < del_counter[j]->end_clock) {
-                    el->counter->del_end_clock = del_counter[j]->end_clock;
-                    if(del_counter[j]->type == VALUE_TYPE_FLOAT) {
-                        el->counter->del_conv.f = del_counter[j]->conv.f;
-                    } else if(del_counter[j]->type == VALUE_TYPE_INTEGER) {
-                        el->counter->del_conv.i = del_counter[j]->conv.i;
-                    }
-                }
+                update_del_counter_by_meta(el->counter, del_counter[j]);
                 freeGcounterMeta(del_counter[j]);
                 del_counter[j] = NULL;
             }
@@ -617,11 +607,7 @@ int mergeRcTombstone(CRDT_RCTombstone* tombstone, CrdtMeta* meta, int del_len, g
             el->counter = createGcounter(del_counter[j]->type);
             el->counter->start_clock = del_counter[j]->start_clock;
             el->counter->del_end_clock = del_counter[j]->end_clock;
-            if(del_counter[j]->type == VALUE_TYPE_FLOAT) {
-                el->counter->del_conv.f = del_counter[j]->conv.f;
-            } else if(del_counter[j]->type == VALUE_TYPE_INTEGER) {
-                el->counter->del_conv.i = del_counter[j]->conv.i;
-            }
+            update_del_counter_by_meta(el->counter, del_counter[j]);
             freeGcounterMeta(del_counter[j]);
             del_counter[j] = NULL;
         }
@@ -643,7 +629,7 @@ int purgeRc(CRDT_RC* r,CRDT_RCTombstone* tombstone) {
     crdt_rc* rc = retrieveCrdtRc(r);
     crdt_rc_tombstone* t = retrieveCrdtRcTombstone(tombstone);
     if(isVectorClockMonoIncr(getCrdtRcLastVc(rc), getCrdtRcTombstoneLastVc(t))) {
-        
+        // rc.counter.conv -> tombstone.counter.conv 
         return 1;
     }
     for(int i = 0; i < t->len; i++) {
@@ -658,24 +644,13 @@ int purgeRc(CRDT_RC* r,CRDT_RCTombstone* tombstone) {
         }
         if(t->elements[i]->counter != NULL) {
             if(el->counter) {
-                if(el->counter->end_clock < t->elements[i]->counter->end_clock) {
-                    if(t->elements[i]->counter->type  == VALUE_TYPE_FLOAT) {
-                        el->counter->conv.f = t->elements[i]->counter->conv.f;
-                    } else if(t->elements[i]->counter->type == VALUE_TYPE_INTEGER) {
-                        el->counter->conv.i = t->elements[i]->counter->conv.i;
-                    }
-                }
-                if(el->counter->del_end_clock < t->elements[i]->counter->del_end_clock) {
-                    if(t->elements[i]->counter->type == VALUE_TYPE_FLOAT) {
-                        el->counter->del_conv.f = t->elements[i]->counter->del_conv.f;
-                    } else if(t->elements[i]->counter->type == VALUE_TYPE_INTEGER) {
-                        el->counter->del_conv.i = t->elements[i]->counter->del_conv.i;
-                    }
-                }
+                update_add_counter(el->counter, t->elements[i]->counter);
+                update_del_counter(el->counter, t->elements[i]->counter);
+                freeGcounter(t->elements[i]->counter);
             } else {
                 el->counter = t->elements[i]->counter;
-                t->elements[i] = NULL;
             }
+            t->elements[i] = NULL;
         }
     }
     return 0;
@@ -923,7 +898,7 @@ long long  addOrCreateCounter(CRDT_RC* rc,  CrdtMeta* meta, int type, void* val)
     }
     long long vcu = getVcu(meta);
     if(e->counter == NULL) {
-        e->counter = createGcounter(VALUE_TYPE_INTEGER);
+        e->counter = createGcounter(type);
         e->counter->start_clock = vcu;
     }
     e->counter->end_clock = vcu;
@@ -956,17 +931,27 @@ void crdtRcUpdateLastVC(CRDT_RC* rc, VectorClock vc) {
         r->vectorClock = dupVectorClock(vc);
     }
 }
-int setCounterDel(gcounter* counter, gcounter_meta* src) {
-    counter->del_end_clock = src->end_clock;
-    if(src->type == VALUE_TYPE_FLOAT) {
-        counter->del_conv.f = src->conv.f;
-    } else if(src->type == VALUE_TYPE_INTEGER) {
-        counter->del_conv.i = src->conv.i;
-    } else {
-        return 0;
+void initCrdtRcFromTombstone(CRDT_RC* r, CRDT_RCTombstone* t) {
+    crdt_rc* rc = retrieveCrdtRc(r);
+    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(t);
+    rc->vectorClock = dupVectorClock(rt->vectorClock);
+    rc->type = rt->type;
+    for(int i = 0; i < rt->len; i++) {
+        rc_tombstone_element* tel =  rt->elements[i];
+        rc_element* rel = findRcElement(rc, tel->gid);
+        if(rel == NULL) {
+            rel = createRcElement(tel->gid);
+            rel->counter = tel->counter;
+            tel = NULL;
+            appendRcElement(rc, rel);
+        } else {
+            update_add_counter(rel->counter, tel->counter);
+            update_del_counter(rel->counter, tel->counter);
+        }
     }
-    return 1;
 }
+
+
 int crdtRcTrySetValue(CRDT_RC* rc, CrdtMeta* set_meta, int gslen, gcounter_meta** gs, CrdtTombstone* tombstone, int type, void* val) {
     crdt_rc* r = retrieveCrdtRc(rc);
     int gid = getMetaGid(set_meta);
@@ -1000,7 +985,7 @@ int crdtRcTrySetValue(CRDT_RC* rc, CrdtMeta* set_meta, int gslen, gcounter_meta*
                     r->elements[i]->counter = createGcounter(gs[i]->type);
                 }
                 if(r->elements[i]->counter->del_end_clock < gs[i]->end_clock) {
-                    setCounterDel(r->elements[i]->counter, gs[i]);
+                    update_del_counter_by_meta(r->elements[i]->counter, gs[i]);
                 }
                 freeGcounterMeta(gs[i]);
                 gs[i] = NULL;
@@ -1011,7 +996,7 @@ int crdtRcTrySetValue(CRDT_RC* rc, CrdtMeta* set_meta, int gslen, gcounter_meta*
         if(gs[i] != NULL) {
             rc_element* e = createRcElement(gs[i]->gid);
             e->counter = createGcounter(gs[i]->type);
-            setCounterDel(e->counter, gs[i]);
+            update_del_counter_by_meta(e->counter, gs[i]);
             appendRcElement(rc, e);
             if(gs[i]->gid == gid) {
                 e->base = createRcElementBase( set_meta, type, val);
@@ -1130,46 +1115,18 @@ int initRcTombstoneFromRc(CRDT_RCTombstone *tombstone, CrdtMeta* meta, CRDT_RC* 
         if(r->elements[i]->counter) {
             if(t->counter == NULL) {
                 t->counter = r->elements[i]->counter;
-                if(t->counter->del_end_clock < t->counter->end_clock) {
-                    t->counter->del_end_clock = t->counter->end_clock;
-                    if(t->counter->type == VALUE_TYPE_FLOAT) {
-                        t->counter->del_conv.f = t->counter->conv.f;
-                    } else if(t->counter->type == VALUE_TYPE_INTEGER) {
-                        t->counter->del_conv.i = t->counter->conv.i;
-                    }
-                }
+                counter_del(t->counter, t->counter);
             } else {
                 rc_element* el = r->elements[i];
                 assert(t->counter->start_clock == el->counter->start_clock);
-                if(t->counter->end_clock < el->counter->end_clock) {
-                    t->counter->end_clock = el->counter->end_clock;
-                    if(el->counter->type == VALUE_TYPE_FLOAT) {
-                        t->counter->conv.f = el->counter->conv.f;
-                    } else if(el->counter->type == VALUE_TYPE_INTEGER) {
-                        t->counter->conv.i = el->counter->conv.i;
-                    } else {
-                        assert(1 == -1);
-                    }
-                }
+                update_add_counter(t->counter, el->counter);
                 long long last_clock;
                 void* lastconit;
                 if( el->counter->end_clock < el->counter->del_end_clock) {
-                    if(t->counter->del_end_clock < el->counter->del_end_clock) {
-                        t->counter->del_end_clock = el->counter->del_end_clock;
-                        if(el->counter->type == VALUE_TYPE_FLOAT) {
-                            t->counter->del_conv.f = el->counter->del_conv.f;
-                        } else if(el->counter->type == VALUE_TYPE_INTEGER) {
-                            t->counter->del_conv.i = el->counter->del_conv.i;
-                        }
-                    }
+                    update_del_counter(t->counter, el->counter);
                 } else {
                     if(t->counter->del_end_clock < el->counter->end_clock) {
-                        t->counter->del_end_clock = el->counter->end_clock;
-                        if(el->counter->type == VALUE_TYPE_FLOAT) {
-                            t->counter->del_conv.f = el->counter->conv.f;
-                        } else if(el->counter->type == VALUE_TYPE_INTEGER) {
-                            t->counter->del_conv.i = el->counter->conv.i;
-                        }
+                        counter_del(t->counter, el->counter);
                     }
                 }   
                 freeGcounter(el->counter);             
@@ -1260,21 +1217,7 @@ rc_element* findRcElement(crdt_rc* rc, int gid) {
     }
     return NULL;
 }
-int setCrdtRcBaseIntValue(CRDT_RC* rc, CrdtMeta* meta,  long long v) {
-    crdt_rc* r = retrieveCrdtRc(rc);
-    int gid = getMetaGid(meta);
-    rc_element* element = findRcElement(r, gid);
-    rc_base* base = createRcElementBase( meta, VALUE_TYPE_INTEGER, &v);
-    if(element == NULL) {
-        element = createRcElement(gid);
-        appendRcElement(r, element);
-    } else {
-        freeBase(element->base);
-        element->base = NULL;
-    }
-    element->base = base;
-    return 0;
-}
+
 //
 VectorClock  getCrdtRcLastVc(crdt_rc* rc) {
     return rc->vectorClock;

@@ -109,6 +109,7 @@ void crdtRcDigestFunc(RedisModuleDigest *md, void *value);
 int crdtRcDelete(int dbId, void *keyRobj, void *key, void *value);
 VectorClock  getCrdtRcLastVc(crdt_rc* rc);
 void crdtRcUpdateLastVC(CRDT_RC* rc, VectorClock vc);
+void initCrdtRcFromTombstone(CRDT_RC* rc, CRDT_RCTombstone* t);
 static CrdtDataMethod RcDataMethod = {
     .propagateDel = crdtRcDelete,
     .getLastVC = getCrdtRcLastVc,

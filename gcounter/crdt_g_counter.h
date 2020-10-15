@@ -75,5 +75,9 @@ void freeGcounterMeta(void *counter);
 sds gcounterDelToSds(int gid, gcounter* g);
 
 int gcounterMetaFromSds(sds str, gcounter_meta* g);
+int update_del_counter(gcounter* target, gcounter* src);
+int update_add_counter(gcounter* target, gcounter* src);
+int update_del_counter_by_meta(gcounter* target, gcounter_meta* meta);
+int counter_del(gcounter* target, gcounter* src);
 gcounter_meta* sdsTogcounterMeta(sds str);
 #endif //CRDT_MODULE_CRDT_G_COUNTER_H

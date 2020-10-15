@@ -146,6 +146,64 @@ int gcounterMetaFromSds(sds str, gcounter_meta* g) {
     return 1;
 }
 
+int update_del_counter(gcounter* target, gcounter* src) {
+    if(target->del_end_clock < src->del_end_clock) {
+        if(src->type == VALUE_TYPE_FLOAT) {
+            target->del_conv.f = src->del_conv.f;
+        } else if(src->type == VALUE_TYPE_INTEGER) {
+            target->del_conv.i = src->del_conv.i;
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+int update_add_counter(gcounter* target, gcounter* src) {
+    if(target->end_clock < src->end_clock) {
+        if(src->type == VALUE_TYPE_FLOAT) {
+            target->conv.f = src->conv.f;
+        } else if(src->type == VALUE_TYPE_INTEGER) {
+            target->conv.i = src->conv.i;
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+    return 1;
+}
+int update_del_counter_by_meta(gcounter* target, gcounter_meta* src) {
+    if(target->del_end_clock < src->end_clock) {
+        target->del_end_clock = src->end_clock;
+        if(src->type == VALUE_TYPE_FLOAT) {
+            target->del_conv.f = src->conv.f;
+        } else if(src->type == VALUE_TYPE_INTEGER) {
+            target->del_conv.i = src->conv.i;
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+    
+    return 1;
+}
+int counter_del(gcounter* target, gcounter* src) {
+    if(target->del_end_clock < src->end_clock) {
+        target->del_end_clock = src->end_clock;
+        if(target->type == VALUE_TYPE_FLOAT) {
+            target->del_conv.f = src->conv.f;
+        } else if(target->type == VALUE_TYPE_INTEGER) {
+            target->del_conv.i = src->conv.i;
+        }else{
+            return 0;
+        }
+    }
+    return 1;
+}
 #if defined(G_COUNTER_TEST_MAIN)
 
 #include <stdlib.h>
