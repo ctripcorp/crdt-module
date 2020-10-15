@@ -162,9 +162,9 @@ int initRegisterModule(RedisModuleCtx *ctx) {
     //                               setCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
     //     return REDISMODULE_ERR;
     
-    // if (RedisModule_CreateCommand(ctx,"CRDT.SET",
-    //                               CRDT_SetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
-    //     return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"CRDT.SET",
+                                  CRDT_SetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
 
     // if (RedisModule_CreateCommand(ctx,"GET",
     //                               getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
@@ -722,7 +722,7 @@ int msetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 // }
 // CRDT.SET key <val> <gid> <timestamp> <vc> <expire-at-milli> 
 // 0         1    2     3      4         5        6
-int CRDT_SetCommand_(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
     if (argc < 6) return RedisModule_WrongArity(ctx);
     long long expire_time = -2;
