@@ -172,9 +172,9 @@ int initRegisterModule(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx, "MGET", 
                                     mgetCommand, "readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
-    if (RedisModule_CreateCommand(ctx,"CRDT.GET",
-                                  CRDT_GetCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
+    // if (RedisModule_CreateCommand(ctx,"CRDT.GET",
+    //                               CRDT_GetCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.DEL_REG",
                                   CRDT_DelRegCommand,"write",1,1,1) == REDISMODULE_ERR)
@@ -824,44 +824,44 @@ int mgetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 // <val> <gid> <timestamp> <vc>
 //  0      1       2         3
-int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+// int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-    RedisModule_AutoMemory(ctx);
+//     RedisModule_AutoMemory(ctx);
 
-    if (argc != 2) return RedisModule_WrongArity(ctx);
+//     if (argc != 2) return RedisModule_WrongArity(ctx);
 
-    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+//     RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
 
-    CRDT_Register *crdtRegister;
+//     CRDT_Register *crdtRegister;
 
-    if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
-        RedisModule_CloseKey(key);
-        return RedisModule_ReplyWithNull(ctx);
-    } else if (RedisModule_ModuleTypeGetType(key) != CrdtRegister) {
-        RedisModule_CloseKey(key);
-        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
-    } else {
-        crdtRegister = RedisModule_ModuleTypeGetValue(key);
-    }
-    sds val = getCrdtRegisterLastValue(crdtRegister);
-    if(!val) {
-        RedisModule_Log(ctx, "warning", "empty val for key");
-        RedisModule_CloseKey(key);
-        return RedisModule_ReplyWithNull(ctx);
-    }
+//     if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
+//         RedisModule_CloseKey(key);
+//         return RedisModule_ReplyWithNull(ctx);
+//     } else if (RedisModule_ModuleTypeGetType(key) != CrdtRegister) {
+//         RedisModule_CloseKey(key);
+//         return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+//     } else {
+//         crdtRegister = RedisModule_ModuleTypeGetValue(key);
+//     }
+//     sds val = getCrdtRegisterLastValue(crdtRegister);
+//     if(!val) {
+//         RedisModule_Log(ctx, "warning", "empty val for key");
+//         RedisModule_CloseKey(key);
+//         return RedisModule_ReplyWithNull(ctx);
+//     }
 
-    RedisModule_ReplyWithArray(ctx, 4);
+//     RedisModule_ReplyWithArray(ctx, 4);
     
-    RedisModuleString *result = RedisModule_CreateString(ctx, val, sdslen(val));
-    RedisModule_ReplyWithString(ctx, result);
-    RedisModule_ReplyWithLongLong(ctx, getCrdtRegisterLastGid(crdtRegister));
-    RedisModule_ReplyWithLongLong(ctx, getCrdtRegisterLastTimestamp(crdtRegister));
-    sds vclockSds = vectorClockToSds(getCrdtRegisterLastVc(crdtRegister));
-    RedisModule_ReplyWithStringBuffer(ctx, vclockSds, sdslen(vclockSds));
-    sdsfree(vclockSds);
-    RedisModule_CloseKey(key);
-    return REDISMODULE_OK;
-}
+//     RedisModuleString *result = RedisModule_CreateString(ctx, val, sdslen(val));
+//     RedisModule_ReplyWithString(ctx, result);
+//     RedisModule_ReplyWithLongLong(ctx, getCrdtRegisterLastGid(crdtRegister));
+//     RedisModule_ReplyWithLongLong(ctx, getCrdtRegisterLastTimestamp(crdtRegister));
+//     sds vclockSds = vectorClockToSds(getCrdtRegisterLastVc(crdtRegister));
+//     RedisModule_ReplyWithStringBuffer(ctx, vclockSds, sdslen(vclockSds));
+//     sdsfree(vclockSds);
+//     RedisModule_CloseKey(key);
+//     return REDISMODULE_OK;
+// }
 
 CRDT_Register* addRegister(void *data, CrdtMeta* meta, sds value) {
     CRDT_RegisterTombstone* tombstone = (CRDT_RegisterTombstone*) data;

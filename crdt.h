@@ -45,9 +45,7 @@
 
 #define CRDT_DEFAULT_LOG_LEVEL "warning"
 #define CRDT_DEBUG_LOG_LEVEL "debug"
-#define VALUETYPE_STRING 0
-#define VALUETYPE_INT 1
-#define VALUETYPE_FLOAT 2
+
 char *logLevel;
 
 #define SECOND_HIGHER_PRIORITY(first_gid, sec_gid) (sec_gid <= first_gid ? 1 : 0)

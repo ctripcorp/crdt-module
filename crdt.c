@@ -256,6 +256,8 @@ CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
             return &HashDataMethod;
         case CRDT_SET_TYPE:
             return &SetDataMethod;
+        case CRDT_RC_TYPE:
+            return &RcDataMethod;
         default:
             return NULL;
     }

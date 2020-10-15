@@ -35,6 +35,8 @@
 
 #include "../include/redismodule.h"
 #include "../constans.h"
+#include "../include/rmutil/sds.h"
+#include "../util.h"
 
 typedef struct {
     long long start_clock: 60;
@@ -51,12 +53,27 @@ typedef struct {
         long double f;
     }del_conv;
 } gcounter;
-
+typedef struct {
+    int gid;
+    long long start_clock: 60;
+    long long type: 1; //integer, float
+    long long opt: 3; // optional bytes for further use
+    long long end_clock;
+    union {
+        long long i;
+        long double f;
+    }conv;
+} gcounter_meta;
 #define get_int_counter(gcounter) (counter->conv.i)
 #define get_float_counter(gcounter) (counter->conv.f)
 
-void* createGcounter();
-
+void* createGcounter(int type);
 void freeGcounter(void *counter);
+//about gcounter_meta
+void* createGcounterMeta(int type);
+void freeGcounterMeta(void *counter);
+sds gcounterDelToSds(int gid, gcounter* g);
 
+int gcounterMetaFromSds(sds str, gcounter_meta* g);
+gcounter_meta* sdsTogcounterMeta(sds str);
 #endif //CRDT_MODULE_CRDT_G_COUNTER_H

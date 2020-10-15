@@ -55,7 +55,7 @@ typedef CrdtObject CRDT_RC;
 typedef CrdtTombstone CRDT_RCTombstone;
 typedef struct {
     unsigned char type;
-    VectorClock vc;
+    long long unit;
     long long timespace;
     union {
         long long i;
@@ -75,9 +75,27 @@ typedef struct {
     unsigned char type;
     unsigned char len;
     VectorClock vectorClock;
-    //todo: len + pointer
     rc_element** elements;
 } crdt_rc;
+
+//========================= Register moduleType functions =======================
+typedef struct {
+    long long gid: 4; //tag
+//    unsigned char flag; //COUNTER, LWW-ELEMENT
+    long long del_unit: 60;
+    gcounter *counter;
+//    void *del_counter;
+} rc_tombstone_element;
+typedef struct {
+    unsigned char type;
+    unsigned char len;
+    VectorClock vectorClock;
+    //todo: len + pointer
+    rc_tombstone_element** elements;
+} crdt_rc_tombstone;
+
+CRDT_RCTombstone* createCrdtRcTombstone();
+
 
 //========================= Register moduleType functions =======================
 void *RdbLoadCrdtRc(RedisModuleIO *rdb, int encver);
@@ -87,21 +105,28 @@ size_t crdtRcMemUsageFunc(const void *value);
 void freeCrdtRc(void *crdtRegister);
 void crdtRcDigestFunc(RedisModuleDigest *md, void *value);
 
+//========================= CRDT Data functions =======================
+int crdtRcDelete(int dbId, void *keyRobj, void *key, void *value);
+VectorClock  getCrdtRcLastVc(crdt_rc* rc);
+void crdtRcUpdateLastVC(CRDT_RC* rc, VectorClock vc);
+static CrdtDataMethod RcDataMethod = {
+    .propagateDel = crdtRcDelete,
+    .getLastVC = getCrdtRcLastVc,
+    .updateLastVC = crdtRcUpdateLastVC,
+    // .info = crdtRcInfo,
+};
+//========================= CRDT Tombstone functions =======================
+void updateRcTombstoneLastVc(CRDT_RCTombstone* rt, VectorClock vc);
+VectorClock getCrdtRcTombstoneLastVc(crdt_rc_tombstone* rt);
 //========================= Virtual functions =======================
 int getCrdtRcType(CRDT_RC* rc);
-sds getCrdtRcStringValue(CRDT_RC* rc);
 long long getCrdtRcIntValue(CRDT_RC* rc);
 long double getCrdtRcFloatValue(CRDT_RC* rc);
-int setCrdtRcBaseIntValue(CRDT_RC* rc, CrdtMeta* meta, int gid, long long v);
 CRDT_RC* createCrdtRc();
 int appendCounter(CRDT_RC* rc, int gid, long long value);
 int moveDelCounter(CRDT_RC* rc, CRDT_RCTombstone* tom);
-rc_element* crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds v);
-rc_element* crdtRcTryUpdate(CRDT_RC* rc, CrdtMeta* set_meta, sds key, CrdtTombstone* tombstone);
-int isFloat(sds v);
-int isInt(sds v);
-int setTypeInt(CRDT_RC* rc);
-int setTypeFloat(CRDT_RC* rc);
+int crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds* es, CrdtTombstone* tombstone,int type, void* val);
+int crdtRcTryUpdate(CRDT_RC* rc, CrdtMeta* set_meta, CrdtTombstone* tombstone, rc_element** es, int val_type, void* val);
 //========================= RegisterTombstone moduleType functions =======================
 void *RdbLoadCrdtRcTombstone(RedisModuleIO *rdb, int encver) ;
 void RdbSaveCrdtRcTombstone(RedisModuleIO *rdb, void *value);
@@ -115,8 +140,22 @@ int initRcModule(RedisModuleCtx *ctx);
 
 static RedisModuleType *CrdtRC;
 static RedisModuleType *CrdtRCT;
-//========================= element functions =========================
-rc_element* createElement(int gid);
-rc_element* findElement(crdt_rc* rc, int gid);
-long long  addOrCreateIntCounter(CRDT_RC* rc,  CrdtMeta* meta, long long value);
+//========================= rc element functions =========================
+rc_element* createRcElement(int gid);
+int setCrdtRcType(CRDT_RC* rc, int type);
+rc_element* findRcElement(crdt_rc* rc, int gid);
+int updateFloatCounter(CRDT_RC* rc, int gid, long long timestamp, long long start_clock, long long end_clock, long double ld);
+//========================= rc base functions ============================
+void freeBase(rc_base* base);
+rc_base* createRcElementBase(CrdtMeta* meta,  int val_type, void* v);
+int resetElementBase(rc_base* base, CrdtMeta* meta, int val_type, void* v);
+int getRcElementLen(crdt_rc* rc);
+//========================= counter functions ============================
+long long addOrCreateCounter(CRDT_RC* rc,  CrdtMeta* meta, int type, void* val);
+
+
+//========================= rc tombstone element functions =========================
+rc_tombstone_element* createRcTombstoneElement(int gid);
+int appendRcTombstoneElement(crdt_rc_tombstone* rt, rc_tombstone_element* el);
+rc_tombstone_element* findRcTombstoneElement(crdt_rc_tombstone* rt, int gid);
 #endif //CRDT_MODULE_CTRIP_CRDT_REGISTER_H
