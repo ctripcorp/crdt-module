@@ -707,7 +707,7 @@ end:
         return CRDT_ERROR;
     }
 }
-//========================= Register moduleType functions =======================
+//========================= Rc moduleType functions =======================
 
 #define ADD 1
 #define DEL (1<<1)
@@ -864,7 +864,7 @@ void crdtRcDigestFunc(RedisModuleDigest *md, void *value) {
 
 }
 
-//========================= RegisterTombstone moduleType functions =======================
+//========================= RcTombstone moduleType functions =======================
 rc_tombstone_element* load_rc_tombstone_element(RedisModuleIO *rdb) {
     rc_tombstone_element* el = createRcTombstoneElement(0);
     el->gid = RedisModule_LoadUnsigned(rdb);
@@ -1113,6 +1113,7 @@ long long  addOrCreateCounter(CRDT_RC* rc,  CrdtMeta* meta, int type, void* val)
     } else if(type == VALUE_TYPE_INTEGER) {
         e->counter->conv.i += *(long long*)val;
     }
+    crdtRcUpdateLastVC(rc, getMetaVectorClock(meta));
     return getCrdtRcIntValue(rc);
 }
 
@@ -1277,7 +1278,21 @@ CRDT_RC* createCrdtRc() {
     setDataType(rc, CRDT_RC_TYPE);
     setType(rc, CRDT_DATA);
     rc->len = 0;
+    rc->elements = NULL;
     return (CRDT_RC*)rc;
+}
+CRDT_RC* dupCrdtRc(CRDT_RC* rc) {
+    if(rc == NULL) {return NULL;}
+    crdt_rc* r = retrieveCrdtRc(rc);
+    crdt_rc* dup = createCrdtRc();
+    dup->vectorClock = dupVectorClock(r->vectorClock);
+    for(int i = 0; i < r->len; i++) {
+        rc_element* el = dupRcElement(r->elements[i]);
+        appendRcElement(dup, el);
+    }
+    assert(r->len == dup->len);
+    return  dup;
+;
 }
 
 CRDT_RCTombstone* createCrdtRcTombstone() {
@@ -1386,6 +1401,33 @@ rc_base* createRcElementBase() {
     rc_base* base = RedisModule_Alloc(sizeof(rc_base));
     return base;
 }
+
+void assign_max_rc_base(rc_base* target, rc_base* src) {
+    if(target->unit < src->unit) {
+        target->timespace = src->timespace;
+        target->type = src->type;
+        if (src->type == VALUE_TYPE_FLOAT) {
+            target->conv.f = src->conv.f;
+        } else if(src->type = VALUE_TYPE_INTEGER) {
+            target->conv.i = src->conv.i;
+        }
+    }
+}
+
+rc_base* dupRcBase(rc_base* base) {
+    if(base == NULL) { return NULL;}
+    rc_base* dup = createRcElementBase();
+    dup->type = base->type;
+    dup->timespace = base->timespace;
+    dup->unit = base->unit;
+    if(dup->type == VALUE_TYPE_FLOAT) {
+        dup->conv.f = base->conv.f;
+    } else if (dup->type == VALUE_TYPE_INTEGER) {
+        dup->conv.i = base->conv.i;
+    }
+    return dup;
+}
+
 int resetElementBase(rc_base* base, CrdtMeta* meta, int val_type, void* v) {
     if (val_type == VALUE_TYPE_FLOAT) {
         base->conv.f = *(long double*)v;
@@ -1413,6 +1455,22 @@ rc_element* createRcElement(int gid) {
 
 void freeRcElement(void* element) {
     RedisModule_Free(element);
+}
+
+
+
+rc_element* dupRcElement(rc_element* el) {
+    rc_element* dup = createRcElement(el->gid);
+    dup->base = dupRcBase(el->base);
+    dup->counter = dupGcounter(el->counter);
+    return dup;
+}
+
+void assign_rc_element(rc_element* target, rc_element* src) {
+    if(target == NULL || src == NULL) return;
+    assert(target->gid == src->gid);
+    assign_max_rc_base(target->base, src->base);
+    assign_max_rc_counter(target->counter, src->counter);
 }
 
 int appendRcElement(crdt_rc* rc, rc_element* element) {
@@ -1464,6 +1522,62 @@ int crdtRcDelete(int dbId, void *keyRobj, void *key, void *value) {
     return CRDT_OK;
 }
 
+CrdtObject *crdtRcMerge(CrdtObject *currentVal, CrdtObject *value) {
+    if(currentVal == NULL && value == NULL) {
+        return NULL;
+    }
+    if(currentVal == NULL) {
+        return dupCrdtRc(value);
+    }
+    if(value == NULL) {
+        return dupCrdtRc(currentVal);
+    }
+    crdt_rc *current = retrieveCrdtRc(currentVal);
+    crdt_rc *other = retrieveCrdtRc(value);
+    crdt_rc* result = dupCrdtRc(current);
+    freeVectorClock(result->vectorClock);
+    result->vectorClock = vectorClockMerge(current->vectorClock, other->vectorClock);
+    for(int i = 0; i < other->len; i++) {
+        rc_element* el = findRcElement(current, other->elements[i]->gid);
+        if(el == NULL) {
+            el = dupRcElement(other->elements[i]);
+            appendRcElement(result, el);
+        } else {
+            assign_rc_element(el, other->elements[i]);
+        }
+    }
+    return result;
+}
+
+CrdtObject** crdtRcFilter(CrdtObject* target, int gid, long long logic_time, long long maxsize, int* length) {
+    crdt_rc* rc = retrieveCrdtRc(target);
+    RedisModule_Debug(logLevel, "filter 1 %d %lld", gid, logic_time);
+    //value + gid + time + vectorClock
+    if (crdtRcMemUsageFunc(rc) > maxsize) {
+        *length  = -1;
+        return NULL;
+    }
+    sds s = vectorClockToSds(rc->vectorClock);
+    RedisModule_Debug(logLevel, "filter 2 %s", s);
+    sdsfree(s);
+    VectorClockUnit unit = getVectorClockUnit(rc->vectorClock, gid);
+    RedisModule_Debug(logLevel, "filter 3 %d %lld", unit.gid, unit.clock);
+    if(isNullVectorClockUnit(unit)) return NULL;
+    RedisModule_Debug(logLevel, "filter 4");
+    long long vcu = get_logic_clock(unit);
+    if(vcu > logic_time) {
+        *length = 1;
+        crdt_rc** re = RedisModule_Alloc(sizeof(crdt_rc*));
+        re[0] = rc;
+        return re;
+    }  
+    RedisModule_Debug(logLevel, "filter 5");
+    return NULL;
+}
+
+void freeRcFilter(CrdtObject** filters, int num) {
+    RedisModule_ZFree(filters);
+}
 //=== type =====
 RedisModuleType* getCrdtRc() {return CrdtRC;};
 RedisModuleType* getCrdtRcTombstone() {return CrdtRCT;}

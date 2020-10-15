@@ -279,6 +279,8 @@ CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
                 return &HashCommonMethod;
             case CRDT_SET_TYPE:
                 return &SetCommonMethod;
+            case CRDT_RC_TYPE:
+                return &RcCommonMethod;
             default:
                 return NULL;
         }

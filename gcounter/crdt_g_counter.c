@@ -54,12 +54,48 @@ void* createGcounter(int type) {
     return counter;
 }
 
+gcounter* dupGcounter(gcounter* g) {
+    if(g == NULL) { return g; }
+    gcounter* dup = createGcounter(g->type);
+    dup->start_clock = g->start_clock;
+    dup->end_clock = g->end_clock;
+    dup->del_end_clock = g->del_end_clock;
+    if(g->type == VALUE_TYPE_FLOAT) {
+        dup->conv.f = g->conv.f;
+        dup->del_conv.f = g->del_conv.f;
+    } else if(g->type == VALUE_TYPE_INTEGER) {
+        dup->conv.i = g->conv.i;
+        dup->del_conv.i = g->del_conv.i;
+    }
+    return dup;
+}
+
 void freeGcounter(void *counter) {
 #if defined(G_COUNTER_TEST_MAIN)
     free(counter);//unit test only
 #else
     RedisModule_Free(counter);
 #endif
+}
+
+void assign_max_rc_counter(gcounter* target, gcounter* src) {
+    assert(target->start_clock == src->start_clock);
+    if(target->end_clock < src->end_clock) {
+        target->end_clock = src->end_clock;
+        if(target->type == VALUE_TYPE_FLOAT) {
+            target->conv.f = src->conv.f;
+        } else if(target->type == VALUE_TYPE_INTEGER) {
+            target->conv.i = src->conv.i;
+        }
+    } 
+    if(target->del_end_clock < src->del_end_clock) {
+        target->del_end_clock = src->del_end_clock;
+        if(target->type == VALUE_TYPE_FLOAT) {
+            target->del_conv.f = src->del_conv.f;
+        } else if(target->type == VALUE_TYPE_INTEGER) {
+            target->del_conv.i = src->del_conv.i;
+        }
+    }
 }
 
 

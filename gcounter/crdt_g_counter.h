@@ -68,7 +68,10 @@ typedef struct {
 #define get_float_counter(gcounter) (counter->conv.f)
 
 void* createGcounter(int type);
+gcounter* dupGcounter(gcounter* g);
 void freeGcounter(void *counter);
+void assign_max_rc_counter(gcounter* target, gcounter* src);
+
 //about gcounter_meta
 void* createGcounterMeta(int type);
 void freeGcounterMeta(void *counter);

@@ -116,6 +116,15 @@ static CrdtDataMethod RcDataMethod = {
     .updateLastVC = crdtRcUpdateLastVC,
     // .info = crdtRcInfo,
 };
+
+CrdtObject *crdtRcMerge(CrdtObject *currentVal, CrdtObject *value);
+CrdtObject** crdtRcFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
+void freeRcFilter(CrdtObject** filters, int num);
+static CrdtObjectMethod RcCommonMethod = {
+    .merge = crdtRcMerge,
+    .filterAndSplit = crdtRcFilter,
+    .freefilter = freeRcFilter,
+};
 //========================= CRDT Tombstone functions =======================
 int rcTombstoneGc(CrdtTombstone* target, VectorClock clock);
 static CrdtTombstoneMethod RcTombstoneCommonMethod = {
@@ -134,6 +143,7 @@ int getCrdtRcType(CRDT_RC* rc);
 long long getCrdtRcIntValue(CRDT_RC* rc);
 long double getCrdtRcFloatValue(CRDT_RC* rc);
 CRDT_RC* createCrdtRc();
+CRDT_RC* dupCrdtRc(CRDT_RC* rc);
 int appendCounter(CRDT_RC* rc, int gid, long long value);
 int crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds* es, CrdtTombstone* tombstone,int type, void* val);
 int crdtRcTryUpdate(CRDT_RC* rc, CrdtMeta* set_meta, CrdtTombstone* tombstone, rc_element** es, int val_type, void* val);
@@ -154,6 +164,8 @@ RedisModuleType* getCrdtRc();
 RedisModuleType* getCrdtRcTombstone();
 //========================= rc element functions =========================
 rc_element* createRcElement(int gid);
+rc_element* dupRcElement(rc_element* el);
+void assign_rc_element(rc_element* target, rc_element* src);
 void freeRcElement(void* element);
 int setCrdtRcType(CRDT_RC* rc, int type);
 rc_element* findRcElement(crdt_rc* rc, int gid);
@@ -161,6 +173,8 @@ int updateFloatCounter(CRDT_RC* rc, int gid, long long timestamp, long long star
 //========================= rc base functions ============================
 void freeBase(rc_base* base);
 rc_base* createRcElementBase();
+void assign_max_rc_base(rc_base* target, rc_base* src);
+rc_base* dupRcBase(rc_base* base);
 int resetElementBase(rc_base* base, CrdtMeta* meta, int val_type, void* v);
 int getRcElementLen(crdt_rc* rc);
 //========================= counter functions ============================
