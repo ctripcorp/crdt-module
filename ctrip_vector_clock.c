@@ -55,7 +55,13 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
 
 
 /**------------------------Vector Clock Lifecycle--------------------------------------*/
-
+VectorClock
+newVectorClockFromGidAndClock(int gid, long long clock) {
+    VectorClock vc = newVectorClock(1);
+    clk clock_unit = init_clock((char)gid, clock);
+    set_clock_unit_by_index(&vc, 0, clock_unit);
+    return vc;
+}
 #if defined(TCL_TEST)
     VectorClock
     newVectorClock(int numVcUnits) {

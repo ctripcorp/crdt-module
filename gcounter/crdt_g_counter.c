@@ -199,6 +199,7 @@ int update_del_counter(gcounter* target, gcounter* src) {
 
 int update_add_counter(gcounter* target, gcounter* src) {
     if(target->end_clock < src->end_clock) {
+        target->end_clock = src->end_clock;
         if(src->type == VALUE_TYPE_FLOAT) {
             target->conv.f = src->conv.f;
         } else if(src->type == VALUE_TYPE_INTEGER) {

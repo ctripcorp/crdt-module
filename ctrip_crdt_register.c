@@ -418,14 +418,28 @@ int CRDT_CounterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         return 0;
     }   
     CRDT_RCTombstone* tombstone = getTombstone(moduleKey);
-    if(!isCrdtRcTombstone(tombstone)) {
+    if(tombstone != NULL && !isCrdtRcTombstone(tombstone)) {
         tombstone = NULL;
     }
     crdt_rc* rc = RedisModule_ModuleTypeGetValue(moduleKey);
+    int need_add = 0;
+    if(rc == NULL) {
+        need_add = 1;
+        rc = createCrdtRc();
+    }
     int result = tryUpdateCounter(rc, tombstone, gid, timestamp, start_clock , end_clock, val_type, val_type == VALUE_TYPE_FLOAT? &ld: &l);
-    if(result == CRDT_OK && tombstone != NULL) {
-        RedisModule_DeleteTombstone(tombstone);
-    } 
+    if(result == PURGE_TOMBSTONE) {
+        if(tombstone != NULL) {
+            RedisModule_DeleteTombstone(tombstone);
+        }
+        if(need_add) RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, rc);
+    } else {
+        if(need_add) {
+            freeCrdtRc(rc);
+        } else {
+            RedisModule_DeleteKey(moduleKey);
+        }
+    }
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrby", argv[1]);
     // RedisModule_MergeClock(gid, end_clock);
 end:
@@ -464,6 +478,9 @@ int CRDT_RCCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModuleType* mtype= RedisModule_ModuleTypeGetType(moduleKey) ;
     CRDT_RC* rc = RedisModule_ModuleTypeGetValue(moduleKey);
     CrdtTombstone* tombstone = getTombstone(moduleKey);
+    if(tombstone != NULL && !isCrdtRcTombstone(tombstone)) {
+        tombstone = NULL;
+    }
     long long int_val = 0;
     long double float_val = 0;
     sds sds_val;
@@ -477,12 +494,22 @@ int CRDT_RCCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         dels[i - 7]  = d;
         gcounterMetaFromSds(RedisModule_GetSds(argv[i]), d);
     }
+    int need_add = 0;
     if(!rc) {
-        //to counter
         rc = createCrdtRc();
-        RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, rc);
+        need_add = 1;
     }
-    crdtRcTrySetValue(rc, &meta, argc - 7, dels, tombstone, val_type, val_type == VALUE_TYPE_FLOAT ? &float_val: &int_val);
+    int result = crdtRcTrySetValue(rc, &meta, argc - 7, dels, tombstone, val_type, val_type == VALUE_TYPE_FLOAT ? &float_val: &int_val);
+    if(result == PURGE_TOMBSTONE) {
+        if(tombstone != NULL) {
+            RedisModule_DeleteTombstone(tombstone);
+        }
+        if(need_add) RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, rc);
+    } else {
+        if(need_add) {
+            freeCrdtRc(rc);
+        } 
+    }
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
 end:
@@ -570,11 +597,7 @@ int CRDT_GetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 int mergeRcTombstone(CRDT_RCTombstone* tombstone, CrdtMeta* meta, int del_len, gcounter_meta** del_counter) {
     crdt_rc_tombstone* t = retrieveCrdtRcTombstone(tombstone);
-    if(isVectorClockMonoIncr(getMetaVectorClock(meta), t->vectorClock) > 0) {
-        return 0;
-    }
     VectorClock vc = getMetaVectorClock(meta);
-    
     for(int i = 0; i < t->len; i++) {
         rc_tombstone_element* el = (t->elements[i]);
         long long unit = get_vcu(vc, el->gid);
@@ -596,7 +619,6 @@ int mergeRcTombstone(CRDT_RCTombstone* tombstone, CrdtMeta* meta, int del_len, g
             el->del_unit = get_vcu(vc, el->gid);
             el->counter = createGcounter(del_counter[j]->type);
             el->counter->start_clock = del_counter[j]->start_clock;
-            el->counter->del_end_clock = del_counter[j]->end_clock;
             update_del_counter_by_meta(el->counter, del_counter[j]);
             freeGcounterMeta(del_counter[j]);
             del_counter[j] = NULL;
@@ -615,20 +637,19 @@ int mergeRcTombstone(CRDT_RCTombstone* tombstone, CrdtMeta* meta, int del_len, g
     return 1;
 }
 
-int purgeRc(CRDT_RC* r,CRDT_RCTombstone* tombstone) {
+int crdtRcTombstonePurge(CRDT_RCTombstone* tombstone, CRDT_RC* r) {
     crdt_rc* rc = retrieveCrdtRc(r);
     crdt_rc_tombstone* t = retrieveCrdtRcTombstone(tombstone);
     if(isVectorClockMonoIncr(getCrdtRcLastVc(rc), getCrdtRcTombstoneLastVc(t))) {
         // rc.counter.conv -> tombstone.counter.conv 
         for(int i = 0; i < rc->len; i++) {
-            rc_tombstone_element* el = findRcTombstoneElement(rc, rc->elements[i]->gid);
-            if(el == NULL) {
-                el = createRcTombstoneElement(rc->elements[i]->gid);
-                appendRcTombstoneElement(t, el);
+            rc_tombstone_element* el = findRcTombstoneElement(t, rc->elements[i]->gid);
+            assert(el != NULL);
+            if(rc->elements[i]->counter) {
+                update_add_counter(el->counter, rc->elements[i]->counter);
             }
-            update_add_counter(el->counter, rc->elements[i]->counter);
         }
-        return 1;
+        return PURGE_VAL;
     }
     for(int i = 0; i < t->len; i++) {
         rc_element* el = findRcElement(rc, t->elements[i]->gid);
@@ -651,8 +672,10 @@ int purgeRc(CRDT_RC* r,CRDT_RCTombstone* tombstone) {
             t->elements[i] = NULL;
         }
     }
-    return 0;
+    crdtRcUpdateLastVC(rc, t->vectorClock);
+    return PURGE_TOMBSTONE;
 }
+
 //del_rc <key> <gid> <timestamp> <vc>  <gid:start:end:val>
 int CRDT_DelRcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     gcounter_meta* dels[argc-5];
@@ -683,7 +706,7 @@ int CRDT_DelRcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         mergeRcTombstone(tombstone, &del_meta, argc-5, dels);
         crdt_rc* current = getCurrentValue(moduleKey);
         if(current) {
-            if(purgeRc(current, tombstone)) {
+            if(crdtRcTombstonePurge(tombstone, current) == PURGE_VAL) {
                 RedisModule_DeleteKey(moduleKey);
                 RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRCT, tombstone);
             } else {
@@ -1060,12 +1083,16 @@ int tryUpdateCounter(CRDT_RC* rc, CRDT_RCTombstone* tom, int gid, long long time
         if(tvcu > end_clock) {
             rc_tombstone_element* el =  findRcTombstoneElement(rt, gid);
             assert(el != NULL && el->counter != NULL);
-            if(type == VALUE_TYPE_FLOAT) {
-                el->counter->conv.f = *(long double*)val;
-            } else if(type == VALUE_TYPE_INTEGER) {
-                el->counter->conv.i = *(long long*)val;
+            assert(el->counter->type == type);
+            if(el->counter->end_clock < end_clock) {
+                el->counter->end_clock = end_clock;
+                if(type == VALUE_TYPE_FLOAT) {
+                    el->counter->conv.f = *(long double*)val;
+                } else if(type == VALUE_TYPE_INTEGER) {
+                    el->counter->conv.i = *(long long*)val;
+                }
             }
-            return 0;
+            return PURGE_VAL;
         } else {
             initCrdtRcFromTombstone(rc, rt);
         }
@@ -1087,7 +1114,10 @@ int tryUpdateCounter(CRDT_RC* rc, CRDT_RCTombstone* tom, int gid, long long time
     } else if(type == VALUE_TYPE_INTEGER) {
         e->counter->conv.i = *(long long*)val;
     }
-    return CRDT_OK;
+    VectorClock vc = newVectorClockFromGidAndClock(gid, end_clock);
+    crdtRcUpdateLastVC(rc, vc);
+    freeVectorClock(vc);
+    return PURGE_TOMBSTONE;
 }
 
 long long getVcu(CrdtMeta* meta) {
@@ -1118,12 +1148,85 @@ long long  addOrCreateCounter(CRDT_RC* rc,  CrdtMeta* meta, int type, void* val)
 }
 
 //========================= CRDT Tombstone functions =======================
-int rcTombstoneGc(CrdtTombstone* target, VectorClock clock) {
+int crdtRcTombstoneGc(CrdtTombstone* target, VectorClock clock) {
     crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(target);
-    if(isVectorClockMonoIncr(rt->vectorClock, clock)) {
-        return 1;
+    return isVectorClockMonoIncr(rt->vectorClock, clock);
+    // return 0;
+}
+
+CrdtTombstone* crdRcTombstoneMerge(CrdtTombstone* currentVal, CrdtTombstone* value) {
+    if(currentVal == NULL && value == NULL) {
+        return NULL;
     }
-    return 0;
+    if(currentVal == NULL) {
+        return dupCrdtRcTombstone(value);
+    }
+    if(value == NULL) {
+        return dupCrdtRcTombstone(currentVal);
+    }
+    crdt_rc_tombstone *current = retrieveCrdtRcTombstone(currentVal);
+    crdt_rc_tombstone *other = retrieveCrdtRcTombstone(value);
+    crdt_rc_tombstone* result = dupCrdtRcTombstone(current);
+    freeVectorClock(result->vectorClock);
+    result->vectorClock = vectorClockMerge(current->vectorClock, other->vectorClock);
+    for(int i = 0; i < other->len; i++) {
+        rc_tombstone_element * el = findRcTombstoneElement(current, other->elements[i]->gid);
+        if(el == NULL) {
+            el = dupCrdtRcTombstoneElement(other->elements[i]);
+            appendRcTombstoneElement(result, el);
+        } else {
+            assign_max_rc_tombstone_element(el, other->elements[i]);
+        }
+    }
+    return result;
+}
+
+CrdtObject** crdtRcTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) {
+    crdt_rc_tombstone* rt = retrieveCrdtRc(target);
+    //value + gid + time + vectorClock
+    if (crdtRcTombstoneMemUsageFunc(rt) > maxsize) {
+        *length  = -1;
+        return NULL;
+    }
+    VectorClockUnit unit = getVectorClockUnit(rt->vectorClock, gid);
+    if(isNullVectorClockUnit(unit)) return NULL;
+    long long vcu = get_logic_clock(unit);
+    if(vcu > logic_time) {
+        *length = 1;
+        crdt_rc** re = RedisModule_Alloc(sizeof(crdt_rc_tombstone*));
+        re[0] = rt;
+        return re;
+    }  
+    return NULL;
+}
+
+void freeCrdtRcTombstoneFilter(CrdtTombstone** filters, int num) {
+    RedisModule_ZFree(filters);
+}
+int comp_rc_tombstone_element(void* a, void* b) {
+    return (*(rc_tombstone_element**)a)->gid > (*(rc_tombstone_element**)b)->gid? 1: 0;
+}
+sds crdtRcTombstoneInfo(CRDT_RCTombstone* t) {
+    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(t);
+    sds result = sdsempty();
+    sds vc_info = vectorClockToSds(rt->vectorClock);
+    result = sdscatprintf(result, "type: crdt_rc_tombstone, vc: %s\r\n", vc_info);
+    sdsfree(vc_info);
+    qsort(rt->elements, rt->len, sizeof(rc_tombstone_element*), comp_rc_tombstone_element);
+    for(int i = 0; i < rt->len; i++) {
+        rc_tombstone_element* el = rt->elements[i];
+        result = sdscatprintf(result, "   %d) gid: %d, unit: %lld\r\n", i, el->gid, el->del_unit);
+        if(el->counter) {
+            if(el->counter->type == VALUE_TYPE_FLOAT) {
+                result = sdscatprintf(result, "       counter: { start: %lld, end: %lld, value: %lf}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.f);
+                result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %lf}\r\n",el->counter->del_end_clock, el->counter->del_conv.f);
+            } else {
+                result = sdscatprintf(result, "       counter: { start: %lld, end: %lld, value: %lld}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.i);
+                result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %lld}\r\n",el->counter->del_end_clock, el->counter->del_conv.i);
+            }
+        }
+    }
+    return result;
 }
 
 void updateRcTombstoneLastVc(CRDT_RCTombstone* rt, VectorClock vc) {
@@ -1147,6 +1250,7 @@ void crdtRcUpdateLastVC(CRDT_RC* rc, VectorClock vc) {
         r->vectorClock = dupVectorClock(vc);
     }
 }
+
 void initCrdtRcFromTombstone(CRDT_RC* r, CRDT_RCTombstone* t) {
     crdt_rc* rc = retrieveCrdtRc(r);
     crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(t);
@@ -1166,10 +1270,48 @@ void initCrdtRcFromTombstone(CRDT_RC* r, CRDT_RCTombstone* t) {
     }
 }
 
+int comp_rc_element(void* a, void* b) {
+    return (*(rc_element**)a)->gid > (*(rc_element**)b)->gid? 1: 0;
+}
+
+sds crdtRcInfo(CRDT_RC* value) {
+    crdt_rc* rc = retrieveCrdtRc(value);
+    sds result = sdsempty();
+    sds vc_info = vectorClockToSds(rc->vectorClock);
+    result = sdscatprintf(result, "type: crdt_rc, vc: %s\r\n", vc_info);
+    sdsfree(vc_info);
+    qsort(rc->elements, rc->len, sizeof(rc_element*), comp_rc_element);
+    for(int i = 0; i < rc->len; i++) {
+        rc_element* el = rc->elements[i];
+        result = sdscatprintf(result, "  %d) gid: %lld\r\n", i, el->gid);
+        if(el->base) {
+            if(el->base->type) {
+                result = sdscatprintf(result, "     base: { clock: %lld, timespace: %lld, value: %lf} \r\n", el->base->unit, el->base->timespace, el->base->conv.f);
+            } else {
+                result = sdscatprintf(result, "     base: { clock: %lld, timespace: %lld, value: %lld} \r\n", el->base->unit, el->base->timespace, el->base->conv.i);
+            }
+        }
+        if(el->counter) {
+            if(el->counter->type == VALUE_TYPE_FLOAT) {
+                result = sdscatprintf(result, "       counter: { start: %lld, end: %lld, value: %f}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.f);
+                if(el->counter->del_end_clock != 0) result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %f}\r\n",el->counter->del_end_clock, el->counter->del_conv.f);
+            } else {
+                result = sdscatprintf(result, "       counter: { start: %lld, end: %lld, value: %lld}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.i);
+                if(el->counter->del_end_clock != 0) result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %lld}\r\n",el->counter->del_end_clock, el->counter->del_conv.i);
+            }
+        }
+    }
+    return result;
+}
 
 int crdtRcTrySetValue(CRDT_RC* rc, CrdtMeta* set_meta, int gslen, gcounter_meta** gs, CrdtTombstone* tombstone, int type, void* val) {
     crdt_rc* r = retrieveCrdtRc(rc);
     crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(tombstone);
+    if(rt != NULL) {
+        if(isVectorClockMonoIncr(getMetaVectorClock(set_meta) , rt->vectorClock)) {
+            return PURGE_VAL;
+        }
+    }
     int gid = getMetaGid(set_meta);
     VectorClock vc = getMetaVectorClock(set_meta);
     crdtRcUpdateLastVC(rc, vc);
@@ -1178,7 +1320,7 @@ int crdtRcTrySetValue(CRDT_RC* rc, CrdtMeta* set_meta, int gslen, gcounter_meta*
         if(r->elements[i]->gid == gid) {
             if(r->elements[i]->base) {
                 long long unit = get_vcu(vc, r->elements[i]->gid);
-                if(r->elements[i]->base->unit < unit) {
+                if(r->elements[i]->base->unit <= unit) {
                     resetElementBase(r->elements[i]->base, set_meta, type, val);
                 }
             } else {
@@ -1189,7 +1331,7 @@ int crdtRcTrySetValue(CRDT_RC* rc, CrdtMeta* set_meta, int gslen, gcounter_meta*
         } else {
             if(r->elements[i]->base) {
                 long long unit = get_vcu(vc, r->elements[i]->gid);
-                if(unit > r->elements[i]->base->unit) {
+                if(unit >= r->elements[i]->base->unit) {
                     freeBase(r->elements[i]->base);
                     r->elements[i]->base = NULL;
                 }
@@ -1230,7 +1372,7 @@ int crdtRcTrySetValue(CRDT_RC* rc, CrdtMeta* set_meta, int gslen, gcounter_meta*
         resetElementBase(e->base, set_meta, type, val);
         appendRcElement(rc, e);
     }
-    return 1;
+    return PURGE_TOMBSTONE;
 }
 int crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds* gs, CrdtTombstone* tombstone, int type, void* val) {
     crdt_rc* r = retrieveCrdtRc(rc);
@@ -1306,6 +1448,19 @@ CRDT_RCTombstone* createCrdtRcTombstone() {
     assert(isCrdtRcTombstone(rc));
     return rc;
 }
+
+CRDT_RCTombstone* dupCrdtRcTombstone(CRDT_RCTombstone* tombstone) { 
+    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(tombstone);
+    crdt_rc_tombstone* dup = createCrdtRcTombstone();
+    dup->vectorClock = dupVectorClock(rt->vectorClock);
+    for(int i = 0; i < rt->len; i++) {
+        rc_tombstone_element* el = dupCrdtRcTombstoneElement(rt->elements[i]);
+        appendRcTombstoneElement(dup, el);
+    }
+    assert(dup->len == rt->len);
+    return dup;
+}
+
 int appendRcTombstoneElement(crdt_rc_tombstone* rt, rc_tombstone_element* element) {
     rt->len ++;
     if(rt->len != 1) {
@@ -1329,6 +1484,20 @@ void freeRcTombstoneElement(void* element) {
     RedisModule_Free(element);
 }
 
+rc_tombstone_element* dupCrdtRcTombstoneElement(rc_tombstone_element* rt) {
+    rc_tombstone_element* dup = createCrdtRcTombstone();
+    dup->gid = rt->gid;
+    dup->del_unit = rt->del_unit;
+    dup->counter = dupGcounter(rt->counter);
+    return dup;
+}
+
+void assign_max_rc_tombstone_element(rc_tombstone_element* target, rc_tombstone_element* src) {
+    assert(target->gid == src->gid);
+    target->del_unit = max(target->del_unit, src->del_unit);
+    assign_max_rc_counter(target->counter, src->counter);
+}
+
 rc_tombstone_element* findRcTombstoneElement(crdt_rc_tombstone* rt, int gid) {
     for(int i = 0; i < rt->len; i++) {
         if(rt->elements[i]->gid == gid) {
@@ -1341,10 +1510,15 @@ rc_tombstone_element* findRcTombstoneElement(crdt_rc_tombstone* rt, int gid) {
 int initRcTombstoneFromRc(CRDT_RCTombstone *tombstone, CrdtMeta* meta, CRDT_RC* rc, sds* del_counters) {
     crdt_rc* r = retrieveCrdtRc(rc);
     crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(tombstone);
-    updateRcTombstoneLastVc(rt, meta);
+    updateRcTombstoneLastVc(rt, getMetaVectorClock(meta));
     int index = 0;
+    int added = 0;
+    int gid = getMetaGid(meta);
     for(int i = 0; i < r->len; i++) {
         rc_tombstone_element* t = findRcTombstoneElement(rt, r->elements[i]->gid);
+        if(r->elements[i]->gid == gid) {
+            added = 1;
+        }
         if(t == NULL) {
             t = createRcTombstoneElement(r->elements[i]->gid);
             appendRcTombstoneElement(rt, t);
@@ -1377,6 +1551,11 @@ int initRcTombstoneFromRc(CRDT_RCTombstone *tombstone, CrdtMeta* meta, CRDT_RC* 
             if(del_counters) del_counters[index++] = gcounterDelToSds(t->gid,t->counter);
         }
     } 
+    if(added == 0) {
+        rc_tombstone_element* el = createRcTombstoneElement(gid);
+        el->del_unit = getVcu(meta);
+        appendRcTombstoneElement(rt, el);
+    }
     return index;
 }
 
@@ -1408,7 +1587,7 @@ void assign_max_rc_base(rc_base* target, rc_base* src) {
         target->type = src->type;
         if (src->type == VALUE_TYPE_FLOAT) {
             target->conv.f = src->conv.f;
-        } else if(src->type = VALUE_TYPE_INTEGER) {
+        } else if(src->type == VALUE_TYPE_INTEGER) {
             target->conv.i = src->conv.i;
         }
     }
@@ -1466,11 +1645,18 @@ rc_element* dupRcElement(rc_element* el) {
     return dup;
 }
 
-void assign_rc_element(rc_element* target, rc_element* src) {
+void assign_max_rc_element(rc_element* target, rc_element* src) {
     if(target == NULL || src == NULL) return;
     assert(target->gid == src->gid);
-    assign_max_rc_base(target->base, src->base);
-    assign_max_rc_counter(target->counter, src->counter);
+    if(src->base) {
+        if(!target->base) target->base = createRcElementBase();
+        assign_max_rc_base(target->base, src->base);
+    }
+    if(src->counter) {
+        if(!target->counter) target->counter = createGcounter(src->counter->type);
+        assign_max_rc_counter(target->counter, src->counter);
+    }
+    
 }
 
 int appendRcElement(crdt_rc* rc, rc_element* element) {
@@ -1543,7 +1729,7 @@ CrdtObject *crdtRcMerge(CrdtObject *currentVal, CrdtObject *value) {
             el = dupRcElement(other->elements[i]);
             appendRcElement(result, el);
         } else {
-            assign_rc_element(el, other->elements[i]);
+            assign_max_rc_element(el, other->elements[i]);
         }
     }
     return result;
@@ -1551,19 +1737,13 @@ CrdtObject *crdtRcMerge(CrdtObject *currentVal, CrdtObject *value) {
 
 CrdtObject** crdtRcFilter(CrdtObject* target, int gid, long long logic_time, long long maxsize, int* length) {
     crdt_rc* rc = retrieveCrdtRc(target);
-    RedisModule_Debug(logLevel, "filter 1 %d %lld", gid, logic_time);
     //value + gid + time + vectorClock
     if (crdtRcMemUsageFunc(rc) > maxsize) {
         *length  = -1;
         return NULL;
     }
-    sds s = vectorClockToSds(rc->vectorClock);
-    RedisModule_Debug(logLevel, "filter 2 %s", s);
-    sdsfree(s);
     VectorClockUnit unit = getVectorClockUnit(rc->vectorClock, gid);
-    RedisModule_Debug(logLevel, "filter 3 %d %lld", unit.gid, unit.clock);
     if(isNullVectorClockUnit(unit)) return NULL;
-    RedisModule_Debug(logLevel, "filter 4");
     long long vcu = get_logic_clock(unit);
     if(vcu > logic_time) {
         *length = 1;
@@ -1571,7 +1751,6 @@ CrdtObject** crdtRcFilter(CrdtObject* target, int gid, long long logic_time, lon
         re[0] = rc;
         return re;
     }  
-    RedisModule_Debug(logLevel, "filter 5");
     return NULL;
 }
 

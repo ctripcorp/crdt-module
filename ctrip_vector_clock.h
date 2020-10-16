@@ -211,6 +211,9 @@ static inline clk init_clock(char gid, long long logic_clk) {
 VectorClock
 newVectorClock(int numVcUnits);
 
+VectorClock
+newVectorClockFromGidAndClock(int gid, long long clock);
+
 void
 freeVectorClock(VectorClock vc);
 
