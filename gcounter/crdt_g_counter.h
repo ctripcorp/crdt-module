@@ -39,9 +39,9 @@
 #include "../util.h"
 
 typedef struct {
-    long long start_clock: 60;
-    long long type: 1; //integer, float
-    long long opt: 3; // optional bytes for further use
+    unsigned long long start_clock: 60;
+    unsigned long long type: 1; //integer, float
+    unsigned long long opt: 3; // optional bytes for further use
     long long end_clock;
     long long del_end_clock;
     union {
@@ -55,9 +55,9 @@ typedef struct {
 } gcounter;
 typedef struct {
     int gid;
-    long long start_clock: 60;
-    long long type: 1; //integer, float
-    long long opt: 3; // optional bytes for further use
+    unsigned long long start_clock: 60;
+    unsigned long long type: 1; //integer, float
+    unsigned long long opt: 3; // optional bytes for further use
     long long end_clock;
     union {
         long long i;
@@ -83,4 +83,7 @@ int update_add_counter(gcounter* target, gcounter* src);
 int update_del_counter_by_meta(gcounter* target, gcounter_meta* meta);
 int counter_del(gcounter* target, gcounter* src);
 gcounter_meta* sdsTogcounterMeta(sds str);
+//================ utils ==================
+void setCounterType(gcounter* gcounter, int type);
+int getCounterType(gcounter* gcounter);
 #endif //CRDT_MODULE_CRDT_G_COUNTER_H

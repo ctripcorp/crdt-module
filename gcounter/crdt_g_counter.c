@@ -42,7 +42,7 @@ void* createGcounter(int type) {
 #else
     gcounter *counter = RedisModule_Alloc(sizeof(gcounter));
 #endif
-    counter->type = type;
+    setCounterType(counter, type);
     // counter->logic_clock = 0;
     counter->conv.i = 0;
     counter->conv.f = 0;
@@ -128,7 +128,7 @@ sds gcounterDelToSds(int gid, gcounter* c) {
     if(c->type == VALUE_TYPE_INTEGER) {
         str = sdscatprintf(str, "%d:%lld:%lld:%lld", gid, c->start_clock, c->del_end_clock, c->del_conv.i);
     } else if(c->type == VALUE_TYPE_FLOAT) {
-        str = sdscatprintf(str, "%lld:%lld:%lf", gid, c->start_clock, c->del_end_clock, c->del_conv.f);
+        str = sdscatprintf(str, "%d:%lld:%lld:%Lf", gid, c->start_clock, c->del_end_clock, c->del_conv.f);
     }
     return str;
 }
@@ -240,6 +240,14 @@ int counter_del(gcounter* target, gcounter* src) {
         }
     }
     return 1;
+}
+
+void setCounterType(gcounter* gcounter, int type) {
+    gcounter->type = type;
+}
+
+int getCounterType(gcounter* gcounter) {
+    return (int)gcounter->type;
 }
 #if defined(G_COUNTER_TEST_MAIN)
 

@@ -181,6 +181,7 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key, RedisModuleKe
             break;
         case CRDT_SET_TYPE:
             saveValue(rio, getCrdtSet(), data);
+            break;
         case CRDT_RC_TYPE:
             saveValue(rio, getCrdtRc(), data);
             break;
@@ -198,6 +199,7 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key, RedisModuleKe
             break;
         case CRDT_SET_TYPE:
             saveValue(rio, getCrdtSetTombstone(), tombstone);
+            break;
         case CRDT_RC_TYPE:
             saveValue(rio, getCrdtRcTombstone(), tombstone);
             break;
