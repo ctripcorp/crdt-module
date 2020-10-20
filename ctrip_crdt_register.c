@@ -79,11 +79,39 @@ int replicationCrdtSetCommand(RedisModuleCtx* ctx,  RedisModuleString* key,Redis
     }
     return 1;
 }
-
+//crdt.rc key value gid time vc expire 68*n
+const char* crdt_rc_head = "$7\r\nCRDT.rc\r\n";
+const size_t crdt_rc_basic_str_len = 18 + 2 *REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + REPLICATION_MAX_LONGLONG_LEN;
+size_t replicationFeedCrdtRCCommand(RedisModuleCtx *ctx,char* cmdbuf, const char* keystr, size_t keylen,const char* valstr, size_t vallen, CrdtMeta* meta, VectorClock vc, long long expire_time, int eslen, sds* del_strs) {
+    size_t cmdlen = 0;
+    cmdlen += feedArgc(cmdbuf + cmdlen, eslen + 7);
+    cmdlen += feedBuf(cmdbuf + cmdlen, crdt_rc_head);
+    cmdlen += feedKV2Buf(cmdbuf + cmdlen, keystr, keylen, valstr, vallen);
+    cmdlen += feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(meta), getMetaTimestamp(meta), vc);
+    cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, expire_time);
+    for(int i = 0; i < eslen; i++) {
+        cmdlen += feedStr2Buf(cmdbuf + cmdlen, del_strs[i], sdslen(del_strs[i]));
+    }
+    RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
+    return cmdlen;
+}
 int replicationCrdtRcCommand(RedisModuleCtx* ctx, RedisModuleString* key, RedisModuleString* val, CrdtMeta* set_meta, CRDT_RC* rc ,long long expire, int eslen, sds* del_strs) {
-    sds vcSds = vectorClockToSds(getCrdtRcLastVc(rc));
-    RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Rc", "ssllcla", key, val, getMetaGid(set_meta), getMetaTimestamp(set_meta), vcSds, expire,  del_strs, (size_t)eslen);
-    sdsfree(vcSds);
+    // sds vcSds = vectorClockToSds(getCrdtRcLastVc(rc));
+    // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Rc", "ssllcla", key, val, getMetaGid(set_meta), getMetaTimestamp(set_meta), vcSds, expire,  del_strs, (size_t)eslen);
+    // sdsfree(vcSds);
+    size_t keylen = 0;
+    const char* keystr = RedisModule_StringPtrLen(key, &keylen);
+    size_t vallen = 0;
+    const char* valstr = RedisModule_StringPtrLen(val, &vallen);
+    size_t alllen = keylen + vallen + crdt_rc_basic_str_len + 68 * eslen;
+    if(alllen > MAXSTACKSIZE) {
+        char* cmdbuf = RedisModule_Alloc(alllen);
+        replicationFeedCrdtRCCommand(ctx, cmdbuf, keystr, keylen, valstr, vallen,set_meta, getCrdtRcLastVc(rc), expire, eslen,  del_strs);
+        RedisModule_Free(cmdbuf);
+    } else {
+        char cmdbuf[alllen]; 
+        replicationFeedCrdtRCCommand(ctx, cmdbuf, keystr, keylen, valstr, vallen,set_meta, getCrdtRcLastVc(rc), expire, eslen, del_strs);
+    }
     return 1;
 }
 
@@ -364,6 +392,9 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         int len = crdtRcSetValue(rc, &set_meta, gs, tombstone,  val_type, val_type == VALUE_TYPE_FLOAT? (void*)&float_val: (void*)&int_val);
         expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
         replicationCrdtRcCommand(ctx, key, val, &set_meta,rc, expire_time, len, gs);
+        for(int i = 0; i < len; i++) {
+            sdsfree(gs[i]);
+        }
     } else if((tombstone && isCrdtRcTombstone(tombstone)) || (!tombstone && (val_type == VALUE_TYPE_INTEGER || val_type == VALUE_TYPE_FLOAT) )) {
         rc = createCrdtRc();
         if(tombstone) {

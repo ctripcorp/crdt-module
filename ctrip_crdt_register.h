@@ -80,20 +80,7 @@ typedef CrdtTombstone CRDT_RCTombstone;
 // } crdt_rc;
 
 //========================= Register moduleType functions =======================
-typedef struct {
-    long long gid: 4; //tag
-//    unsigned char flag; //COUNTER, LWW-ELEMENT
-    long long del_unit: 60;
-    gcounter *counter;
-//    void *del_counter;
-} rc_tombstone_element;
-typedef struct {
-    unsigned char type;
-    unsigned char len;
-    VectorClock vectorClock;
-    //todo: len + pointer
-    rc_tombstone_element** elements;
-} crdt_rc_tombstone;
+
 
 
 
@@ -153,7 +140,7 @@ static CrdtTombstoneMethod RcTombstoneCommonMethod = {
 };
 
 void updateRcTombstoneLastVc(CRDT_RCTombstone* rt, VectorClock vc);
-VectorClock getCrdtRcTombstoneLastVc(crdt_rc_tombstone* rt);
+VectorClock getCrdtRcTombstoneLastVc(CRDT_RCTombstone* rt);
 //========================= Virtual functions =======================
 CRDT_RC* createCrdtRc();
 CRDT_RC* dupCrdtRc(CRDT_RC* rc);
@@ -171,7 +158,7 @@ void AofRewriteCrdtRcTombstone(RedisModuleIO *aof, RedisModuleString *key, void 
 size_t crdtRcTombstoneMemUsageFunc(const void *value);
 void freeCrdtRcTombstone(void *obj);
 void crdtRcTombstoneDigestFunc(RedisModuleDigest *md, void *value);
-crdt_rc_tombstone* RdbLoadCrdtOrSetRcTombstone(RedisModuleIO *rdb, int version, int encver);
+void* RdbLoadCrdtOrSetRcTombstone(RedisModuleIO *rdb, int version, int encver);
 
 //========================= public functions =======================
 int initRcModule(RedisModuleCtx *ctx);

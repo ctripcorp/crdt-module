@@ -29,6 +29,21 @@ typedef struct crdt_orset_rc
 } crdt_orset_rc;
 
 
+typedef struct {
+    long long gid: 4; //tag
+//    unsigned char flag; //COUNTER, LWW-ELEMENT
+    long long del_unit: 60;
+    gcounter *counter;
+//    void *del_counter;
+} rc_tombstone_element;
+typedef struct {
+    unsigned char type;
+    unsigned char len;
+    VectorClock vectorClock;
+    //todo: len + pointer
+    rc_tombstone_element** elements;
+} crdt_rc_tombstone;
+
 
 //========================= rc element functions =========================
 rc_element* createRcElement(int gid);

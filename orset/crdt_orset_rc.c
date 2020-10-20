@@ -765,7 +765,8 @@ VectorClock  getCrdtRcLastVc(void* r) {
     return rc->vectorClock;
 }
 
-VectorClock getCrdtRcTombstoneLastVc(crdt_rc_tombstone* rt) {
+VectorClock getCrdtRcTombstoneLastVc(CRDT_RCTombstone* r) {
+    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(r);
     return rt->vectorClock;
 }
 
@@ -1008,7 +1009,7 @@ void save_rc_tombstone_element(RedisModuleIO *rdb, rc_tombstone_element* el) {
     save_counter(rdb, el->counter);
 }
 
-crdt_rc_tombstone* RdbLoadCrdtOrSetRcTombstone(RedisModuleIO *rdb, int version, int encver) {
+void* RdbLoadCrdtOrSetRcTombstone(RedisModuleIO *rdb, int version, int encver) {
     crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(createCrdtRcTombstone());
     rt->vectorClock = rdbLoadVectorClock(rdb, version);
     int len = RedisModule_LoadUnsigned(rdb);
