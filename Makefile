@@ -54,10 +54,12 @@ ctrip_crdt_register.o: ctrip_crdt_register.c crdt_register.o crdt_util.o crdt_st
 	$(CC) $(CFLAGS) -c -o $@ ctrip_crdt_register.c
 crdt_statistics.o: crdt_statistics.c 
 	$(CC) $(CFLAGS) -c -o $@ crdt_statistics.c
+ctrip_orset_rc.o: ./orset/crdt_orset_rc.c ctrip_crdt_register.o crdt_util.o
+	$(CC) $(CFLAGS) -c -o $@ ./orset/crdt_orset_rc.c
 # crdt.so: rmutil crdt.o crdt_register.o ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o
 	# $(LD) -o $@ crdt.o crdt_register.o ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
-crdt.so: rmutil crdt_set.o crdt_g_counter.o crdt_orset_set.o crdt_statistics.o  ctrip_crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_crdt_register.o
-	$(LD) -o $@ crdt_set.o crdt_g_counter.o crdt_orset_set.o  crdt_statistics.o  ctrip_crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_crdt_register.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc 
+crdt.so: rmutil ctrip_orset_rc.o crdt_set.o crdt_g_counter.o crdt_orset_set.o crdt_statistics.o  ctrip_crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_crdt_register.o
+	$(LD) -o $@ ctrip_orset_rc.o crdt_set.o crdt_g_counter.o crdt_orset_set.o  crdt_statistics.o  ctrip_crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_crdt_register.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc 
 
 clean:
 	rm -rf *.xo crdt.so *.o *.pyc *.so *.gcno *.gcda

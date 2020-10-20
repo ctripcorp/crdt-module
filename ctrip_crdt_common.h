@@ -157,6 +157,8 @@ int getCrdtRdbVersion(long long crdtRdbHeader);
 int getCrdtRdbType(long long crdtRdbHeader);
 
 sds getMetaInfo(CrdtMeta *data);
+long long get_vcu(VectorClock vc, int gid);
+long long getVcu(CrdtMeta *data);
 
 // int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 

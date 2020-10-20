@@ -151,6 +151,7 @@ void *RdbLoadCrdtRegisterTombstone(RedisModuleIO *rdb, int encver) ;
 void AofRewriteCrdtRegisterTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
 
 CRDT_RegisterTombstone* createCrdtRegisterTombstone();
+int isRegisterTombstone(void *data);
 CRDT_RegisterTombstone* dupCrdtRegisterTombstone(CRDT_RegisterTombstone* target);
 CRDT_RegisterTombstone* mergeRegisterTombstone(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other, int* comapre);
 CRDT_RegisterTombstone** filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time,long long maxsize, int* length);
