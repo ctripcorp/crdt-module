@@ -59,7 +59,7 @@ ctrip_orset_rc.o: ./orset/crdt_orset_rc.c ctrip_crdt_register.o crdt_util.o
 # crdt.so: rmutil crdt.o crdt_register.o ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o
 	# $(LD) -o $@ crdt.o crdt_register.o ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
 crdt.so: rmutil ctrip_orset_rc.o crdt_set.o crdt_g_counter.o crdt_orset_set.o crdt_statistics.o  ctrip_crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_crdt_register.o
-	$(LD) -o $@ ctrip_orset_rc.o crdt_set.o crdt_g_counter.o crdt_orset_set.o  crdt_statistics.o  ctrip_crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_crdt_register.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc 
+	$(LD) -o $@ ctrip_orset_rc.o crdt_set.o crdt_g_counter.o crdt_orset_set.o  crdt_statistics.o  ctrip_crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_crdt_register.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc
 
 clean:
 	rm -rf *.xo crdt.so *.o *.pyc *.so *.gcno *.gcda
@@ -68,14 +68,6 @@ clean:
 # tests
 
 # unit tests
-test-lww-element: lww/crdt_lww_element.c lww/crdt_lww_element.h
-	$(CC) -Wnullability-extension lww/crdt_lww_element.c -DLWW_ELEMENT_TEST_MAIN -lm -o /tmp/lww_element_test
-	/tmp/lww_element_test
-
-test-gcounter: gcounter/crdt_g_counter.c gcounter/crdt_g_counter.h
-	$(CC) -Wnullability-extension gcounter/crdt_g_counter.c -DG_COUNTER_TEST_MAIN -lm -o /tmp/gcounter_test
-	/tmp/gcounter_test
-
 test_crdt: tests/unit/test_crdt.c
 	$(CC) -Wall -o $@ $^ -lc -O0
 	@(sh -c ./$@)

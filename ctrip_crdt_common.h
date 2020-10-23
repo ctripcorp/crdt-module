@@ -47,7 +47,8 @@
 #define CRDT_REGISTER_TYPE 0
 #define CRDT_HASH_TYPE 1
 #define CRDT_SET_TYPE 2
-#define CRDT_RC_TYPE 3
+#define CRDT_ZSET_TYPE 3
+
 /**
  *
  * |  version  |   opt    |  crdt type |
@@ -66,6 +67,17 @@
 
 
 
+#define setTimestampToLongLong(l, timestamp) do { \
+    l &= ((long long)0xFFF) ;\
+    l |= ((timestamp << 12) & 0xFFFFFFFFFFFFF000);\
+} while(0)
+#define getTimestampFromLongLong(l) (l >> 12)
+
+#define getGidFromLongLong(l) ((l >> 8) & 0x00F)
+#define setGidToLongLong(l, gid) do { \
+    l &= 0xFFFFFFFFFFFFF0FF;\
+    l |= (((long long)gid << 8) & 0xF00);\
+} while(0)
 
 typedef struct CrdtObject {
     unsigned char reserved:3;
