@@ -198,8 +198,7 @@ CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index
 }
 
 RedisModuleKey* getRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type, int mode) {
-    RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv,
-                                    REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);                      
+    RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv, mode);
     int type = RedisModule_KeyType(moduleKey);
     if (type != REDISMODULE_KEYTYPE_EMPTY && RedisModule_ModuleTypeGetType(moduleKey) != redismodule_type) {
         RedisModule_CloseKey(moduleKey);
@@ -457,7 +456,9 @@ void scanGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
      * cursor to zero to signal the end of the iteration. */
 
     /* Handle the case of a hash table. */
-    if(type == CRDT_HASH_TYPE) {
+    if (type == CRDT_HASH_TYPE) {
+        count *= 2;
+    } else if (type == CRDT_ZSET_TYPE) {
         count *= 2;
     }
 
