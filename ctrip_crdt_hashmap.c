@@ -232,7 +232,7 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     #if defined(HSET_STATISTICS) 
         get_modulekey_start();
     #endif
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtHash, REDISMODULE_WRITE);
+    RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
     if (moduleKey == NULL) {
         return CRDT_ERROR;
     }

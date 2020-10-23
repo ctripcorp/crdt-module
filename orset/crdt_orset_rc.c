@@ -198,7 +198,7 @@ gcounter*  addOrCreateCounter(CRDT_RC* rc,  CrdtMeta* meta, int type, void* val)
         e = createRcElement(gid);
         appendRcElement(r, e);
     }
-    long long vcu = getVcu(meta);
+    long long vcu = get_vcu_by_meta(meta);
     if(e->counter == NULL) {
         e->counter = createGcounter(type);
         setCounterType(e->counter, type);
@@ -233,7 +233,6 @@ gcounter*  addOrCreateCounter(CRDT_RC* rc,  CrdtMeta* meta, int type, void* val)
 int crdtRcTombstoneGc(CrdtTombstone* target, VectorClock clock) {
     crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(target);
     return isVectorClockMonoIncr(rt->vectorClock, clock);
-    // return 0;
 }
 
 CrdtTombstone* crdRcTombstoneMerge(CrdtTombstone* currentVal, CrdtTombstone* value) {
@@ -348,8 +347,7 @@ void initCrdtRcFromTombstone(CRDT_RC* r, CRDT_RCTombstone* t) {
         rc_element* rel = findRcElement(rc, tel->gid);
         if(rel == NULL) {
             rel = createRcElement(tel->gid);
-            rel->counter = tel->counter;
-            tel = NULL;
+            rel->counter = dupGcounter(tel->counter);
             appendRcElement(rc, rel);
         } else {
             update_add_counter(rel->counter, tel->counter);
@@ -601,7 +599,7 @@ int initRcTombstoneFromRc(CRDT_RCTombstone *tombstone, CrdtMeta* meta, CRDT_RC* 
     int index = 0;
     int added = 0;
     int gid = getMetaGid(meta);
-    int vcu = getVcu(meta);
+    int vcu = get_vcu_by_meta(meta);
     for(int i = 0; i < r->len; i++) {
         rc_tombstone_element* t = findRcTombstoneElement(rt, r->elements[i]->gid);
         if(t == NULL) {
@@ -688,7 +686,7 @@ int resetElementBase(rc_base* base, CrdtMeta* meta, int val_type, void* v) {
     } else {
         assert( 1 == 0);
     }
-    base->unit = getVcu(meta);
+    base->unit = get_vcu_by_meta(meta);
     base->timespace = getMetaTimestamp(meta);
     base->type = val_type;
     return 1;
@@ -697,6 +695,7 @@ int resetElementBase(rc_base* base, CrdtMeta* meta, int val_type, void* v) {
 void freeBase(rc_base* base) {
     RedisModule_Free(base);
 }
+
 rc_element* createRcElement(int gid) {
     rc_element* element = RedisModule_Alloc(sizeof(rc_element));
     element->gid = gid;

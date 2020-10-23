@@ -239,6 +239,7 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         current = createCrdtRc();
         initCrdtRcFromTombstone(current, tom);
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, current);
+        RedisModule_DeleteTombstone(moduleKey);
     } else {
         if(type == VALUE_TYPE_INTEGER && getCrdtRcType(current) != VALUE_TYPE_INTEGER) {
             RedisModule_ReplyWithError(ctx, "ERR value is not an integer or out of range");

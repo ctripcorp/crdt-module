@@ -39,8 +39,9 @@ int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
 
 int sismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ);
     if (moduleKey == NULL) {
+        RedisModule_ReplyWithLongLong(ctx, 0);
         return CRDT_ERROR;
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
@@ -60,6 +61,7 @@ int scardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
     if (moduleKey == NULL) {
+        RedisModule_ReplyWithLongLong(ctx, 0);
         return CRDT_ERROR;
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
@@ -72,8 +74,9 @@ int scardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 int smembersCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ);
     if (moduleKey == NULL) {
+        RedisModule_ReplyWithArray(ctx, 0);
         return CRDT_ERROR;
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
@@ -95,9 +98,11 @@ int smembersCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 
 int sscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if (argc < 2) return RedisModule_WrongArity(ctx);
+    if (argc < 3) return RedisModule_WrongArity(ctx);
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
     if (moduleKey == NULL) {
+        RedisModule_ReplyWithStringBuffer(ctx, "0", 1);
+        RedisModule_ReplyWithArray(ctx, 0);
         return CRDT_ERROR;
     }
     CRDT_Set* set = getCurrentValue(moduleKey);
@@ -335,7 +340,7 @@ int sremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
     int result = 0;
     CrdtMeta meta = {.gid=0}; 
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSet);
     if (moduleKey == NULL) {
         return CRDT_ERROR;
     }
@@ -393,7 +398,7 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         return RedisModule_ReplyWithError(ctx, "ERR syntax error");
     }
     CrdtMeta meta = {.gid=0}; 
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSet);
     if (moduleKey == NULL) {
         return CRDT_ERROR;
     }
@@ -458,7 +463,7 @@ int saddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
     int result = 0;
     CrdtMeta meta = {.gid=0};
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSet);
     if (moduleKey == NULL) {
         return CRDT_ERROR;
     }
@@ -545,7 +550,7 @@ int crdtSaddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(tombstone && isNullVectorClock(getCrdtSetTombstoneMaxDelVc(tombstone)) && getSetTombstoneDictSize(tombstone) == 0) {
         RedisModule_DeleteTombstone(moduleKey);
     }
-    updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
+    updateCrdtSetLastVcuByVectorClock(current, getMetaGid(&meta), getMetaVectorClock(&meta));
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
     if(result) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "sadd", argv[1]);
@@ -625,7 +630,7 @@ end:
 
 int crdtSismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSet);
     if (moduleKey == NULL) {
         RedisModule_IncrCrdtConflict(TYPECONFLICT | MODIFYCONFLICT);
         return CRDT_ERROR;
@@ -642,7 +647,7 @@ int crdtSismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
             num += 1;
         }
     } 
-    if(tombstone != NULL) {
+    if(tombstone != NULL && isCrdtSetTombstone(tombstone)) {
         tde = findSetTombstoneDict(tombstone, field);
         if(tde != NULL)  {
             num += 1;

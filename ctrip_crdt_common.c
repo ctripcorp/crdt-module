@@ -261,7 +261,7 @@ long long get_vcu(VectorClock vc, int gid) {
     return vcu;
 }
 
-long long getVcu(CrdtMeta* meta) {
+long long get_vcu_by_meta(CrdtMeta* meta) {
     int gid = getMetaGid(meta);
     long long vcu = get_vcu(getMetaVectorClock(meta), gid);
     return vcu;
