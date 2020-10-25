@@ -252,6 +252,21 @@ int getCrdtRdbType(long long crdtRdbHeader) {
     return (int) (crdtRdbHeader & ((1 << 8) - 1));
 }
 
+long long get_vcu(VectorClock vc, int gid) {
+    clk unit = getVectorClockUnit(vc, gid);
+    if(isNullVectorClockUnit(unit)) {
+        return 0;
+    }
+    long long vcu = get_logic_clock(unit);
+    return vcu;
+}
+
+long long get_vcu_by_meta(CrdtMeta* meta) {
+    int gid = getMetaGid(meta);
+    long long vcu = get_vcu(getMetaVectorClock(meta), gid);
+    return vcu;
+}
+
 #if defined(CRDT_COMMON_TEST_MAIN)
 #include <stdio.h>
 #include "testhelp.h"

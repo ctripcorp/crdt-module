@@ -70,6 +70,13 @@ int updateCrdtSetLastVc(CRDT_Set* data, VectorClock vc) {
     return setCrdtSetLastVc(data, now);
 }
 
+int updateCrdtSetLastVcuByVectorClock(CRDT_Set* data, int gid, VectorClock vc) {
+    CRDT_ORSET_SET* r = retrieveCrdtORSETSet(data);
+    mergeLogicClock(&(r->lastVc), &vc, gid);
+    return 1;
+}
+
+
 dict* getSetDict(CRDT_Set* data) {
     CRDT_ORSET_SET* set = retrieveCrdtORSETSet(data);
     return (dict*)(set->dict);

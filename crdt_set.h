@@ -4,7 +4,6 @@
 #include "ctrip_crdt_common.h"
 #include "include/redismodule.h"
 #include "crdt_util.h"
-#include "crdt_expire.h"
 
 #define CRDT_SET_DATATYPE_NAME "crdt_setr"
 #define CRDT_SET_TOMBSTONE_DATATYPE_NAME "crdt_sett"
@@ -38,6 +37,7 @@ void freeCrdtSetTombstone(void* set);
 CRDT_Set* createCrdtSet();
 CRDT_Set* dupCrdtSet(CRDT_Set* set);
 int updateCrdtSetLastVc(CRDT_Set* set, VectorClock vc);
+int updateCrdtSetLastVcuByVectorClock(CRDT_Set* set, int gid, VectorClock vc);
 int setCrdtSetLastVc(CRDT_Set* set, VectorClock);
 VectorClock getCrdtSetLastVc(CRDT_Set* set);
 dictEntry* findSetDict(CRDT_Set* set, sds field);
@@ -109,7 +109,7 @@ static inline int isCrdtSet(void* data) {
 }
 static inline int isCrdtSetTombstone(void *data) {
     CRDT_SetTombstone* tombstone = (CRDT_SetTombstone*)data;
-    if(tombstone != NULL && (getDataType((CrdtObject*)tombstone) ==  CRDT_SET_TYPE)) {
+    if(tombstone != NULL && (getDataType((CrdtObject*)tombstone) ==  CRDT_SET_TYPE) && getType((CrdtObject*)tombstone) == CRDT_TOMBSTONE) {
         return CRDT_OK;
     }
     return CRDT_NO;

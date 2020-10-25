@@ -199,7 +199,7 @@ CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index
 
 RedisModuleKey* getRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type, int mode) {
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv,
-                                    REDISMODULE_TOMBSTONE | REDISMODULE_WRITE);                      
+                                    mode);                      
     int type = RedisModule_KeyType(moduleKey);
     if (type != REDISMODULE_KEYTYPE_EMPTY && RedisModule_ModuleTypeGetType(moduleKey) != redismodule_type) {
         RedisModule_CloseKey(moduleKey);
