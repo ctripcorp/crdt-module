@@ -66,6 +66,7 @@ void scanGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
 // object utils
 int getLongLongFromObjectOrReply(RedisModuleCtx *ctx, RedisModuleString *o, long long *target, const char *msg);
 int getLongFromObjectOrReply(RedisModuleCtx *ctx, RedisModuleString *o, long *target, const char *msg);
+int getDoubleFromObjectOrReply();
 
 void replyEmptyScan(RedisModuleCtx *ctx);
 #endif //XREDIS_CRDT_CRDT_UTIL_H

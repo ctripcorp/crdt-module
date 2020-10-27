@@ -6,7 +6,7 @@
 #define NDEBUG
 #include <assert.h>
 
-typedef struct CRDT_LWW_Register {//26
+typedef struct CRDT_LWW_Register {
     unsigned long long type:8;
     unsigned long long gid:4;
     unsigned long long timestamp:52;
@@ -98,14 +98,6 @@ void initLWWReigster(CRDT_LWW_Register *r);
 void initRegister(CRDT_Register *r) {
     return initLWWReigster((CRDT_LWW_Register*)r);
 }
-// void setLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
-// void crdtRegisterSetValue(CRDT_Register* r, CrdtMeta* meta, sds value) {
-    // return setLWWCrdtRegister(r, meta, value);
-// }
-// int appendLWWCrdtRegister(CRDT_Register* r, CrdtMeta* meta, sds value);
-// int crdtRegisterTryUpdate(CRDT_Register* r, CrdtMeta* meta, sds value, int compare) {
-//     return appendLWWCrdtRegister(r, meta, value);
-// }
 
 void RdbSaveLWWCrdtRegisterTombstone(RedisModuleIO *rdb, void *value);
 CRDT_RegisterTombstone** filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time, long long maxsize, int* length);

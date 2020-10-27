@@ -37,14 +37,9 @@
 #include "ctrip_crdt_common.h"
 #include "include/redismodule.h"
 #include "crdt_util.h"
-#include "crdt_expire.h"
 
 #define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
 #define CRDT_REGISTER_TOMBSTONE_DATATYPE_NAME "crdt_regt"
-
-#define DELETED_TAG "deleted"
-
-#define DELETED_TAG_SIZE 7
 
 typedef CrdtObject CRDT_Register ;
 int getCrdtRegisterLastGid(CRDT_Register* r);
@@ -156,6 +151,7 @@ void *RdbLoadCrdtRegisterTombstone(RedisModuleIO *rdb, int encver) ;
 void AofRewriteCrdtRegisterTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
 
 CRDT_RegisterTombstone* createCrdtRegisterTombstone();
+int isRegisterTombstone(void *data);
 CRDT_RegisterTombstone* dupCrdtRegisterTombstone(CRDT_RegisterTombstone* target);
 CRDT_RegisterTombstone* mergeRegisterTombstone(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other, int* comapre);
 CRDT_RegisterTombstone** filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time,long long maxsize, int* length);
@@ -171,4 +167,5 @@ int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register
 size_t crdtRegisterMemUsageFunc(const void *value);
 VectorClock getCrdtRegisterTombstoneLastVc(CRDT_RegisterTombstone* t);
 CrdtMeta* getCrdtRegisterTombstoneMeta(CRDT_RegisterTombstone* t);
+CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, CRDT_RegisterTombstone* tombstone, CRDT_Register* current, CrdtMeta* meta, RedisModuleString* key,sds value);
 #endif //XREDIS_CRDT_CRDT_REGISTER_H
