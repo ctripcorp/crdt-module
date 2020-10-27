@@ -77,6 +77,8 @@ void* createGcounterMeta(int type);
 void freeGcounterMeta(void *counter);
 sds gcounterDelToSds(int gid, gcounter* g);
 
+void setGcounterStartClock(gcounter* target, long long start_clock);
+long long getGcounterStartClock(gcounter* target);
 int gcounterMetaFromSds(sds str, gcounter_meta* g);
 int update_del_counter(gcounter* target, gcounter* src);
 int update_add_counter(gcounter* target, gcounter* src);

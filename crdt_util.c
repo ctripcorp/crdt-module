@@ -287,6 +287,23 @@ int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock vectorClock, int version)
     return CRDT_OK;
 }
 
+long double rdbLoadLongDouble(RedisModuleIO *rdb, int version) {
+    size_t ldLength;
+    sds ldstr = RedisModule_LoadSds(rdb, &ldLength);
+    long double ld = 0;
+    assert(string2ld(ldstr, ldLength, &ld) == 1);
+    return ld;
+}
+
+#define MAX_LONG_DOUBLE_CHARS 5*1024
+int rdbSaveLongDouble(RedisModuleIO *rdb, long double ld) {
+    char buf[MAX_LONG_DOUBLE_CHARS];
+    int len = ld2string(buf,sizeof(buf),ld,1);
+    RedisModule_SaveStringBuffer(rdb, buf, len);
+    return 1;
+}
+
+
 uint64_t dictSdsHash(const void *key) {
     return dictGenHashFunction((unsigned char*)key, sdslen((char*)key));
 }

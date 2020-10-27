@@ -128,10 +128,19 @@ sds gcounterDelToSds(int gid, gcounter* c) {
     if(c->type == VALUE_TYPE_INTEGER) {
         str = sdscatprintf(str, "%d:%lld:%lld:%lld", gid, c->start_clock, c->del_end_clock, c->del_conv.i);
     } else if(c->type == VALUE_TYPE_FLOAT) {
-        str = sdscatprintf(str, "%d:%lld:%lld:%Lf", gid, c->start_clock, c->del_end_clock, c->del_conv.f);
+        str = sdscatprintf(str, "%d:%lld:%lld:%.17Lf", gid, c->start_clock, c->del_end_clock, c->del_conv.f);
     }
     return str;
 }
+
+void setGcounterStartClock(gcounter* target, long long start_clock) {
+    target->start_clock = start_clock;
+}
+
+long long getGcounterStartClock(gcounter* target) {
+    return target->start_clock;
+}
+
 gcounter_meta* sdsTogcounterMeta(sds str) {
     gcounter_meta* g = createGcounterMeta(0);
     int result = gcounterMetaFromSds(str, g);
@@ -141,6 +150,7 @@ gcounter_meta* sdsTogcounterMeta(sds str) {
     }
     return g;
 }
+
 int gcounterMetaFromSds(sds str, gcounter_meta* g) {
     int num;
     sds *vals = sdssplitlen(str, sdslen(str), ":", 1, &num);
@@ -199,6 +209,7 @@ int update_del_counter(gcounter* target, gcounter* src) {
 
 int update_add_counter(gcounter* target, gcounter* src) {
     if(target->end_clock < src->end_clock) {
+        target->start_clock = src->start_clock;
         target->end_clock = src->end_clock;
         if(src->type == VALUE_TYPE_FLOAT) {
             target->conv.f = src->conv.f;
@@ -214,6 +225,7 @@ int update_add_counter(gcounter* target, gcounter* src) {
 }
 int update_del_counter_by_meta(gcounter* target, gcounter_meta* src) {
     if(target->del_end_clock < src->end_clock) {
+        target->start_clock = src->start_clock;
         target->del_end_clock = src->end_clock;
         if(src->type == VALUE_TYPE_FLOAT) {
             target->del_conv.f = src->conv.f;

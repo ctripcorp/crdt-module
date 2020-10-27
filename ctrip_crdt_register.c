@@ -32,7 +32,9 @@
 #include "crdt.h"
 #include "crdt_register.h"
 #include "ctrip_crdt_register.h"
+#include "ctrip_crdt_expire.h"
 #include <strings.h>
+
 //    util function
 int isCrdtRcTombstone(CrdtTombstone* tom) {
     if(tom != NULL && getType(tom) == CRDT_TOMBSTONE && (getDataType(tom) ==  CRDT_RC_TYPE)) {
@@ -160,7 +162,7 @@ int getGeneric(RedisModuleCtx* ctx, RedisModuleString *key, int sendtype) {
             result = RedisModule_CreateStringFromLongLong(ctx, l);
         } else if(type == VALUE_TYPE_FLOAT) {
             long double f = getCrdtRcFloatValue(rc);
-            result = RedisModule_CreateStringPrintf(ctx, "%Lf", f);
+            result = RedisModule_CreateStringPrintf(ctx, "%.17Lf", f);
         }else{
             RedisModule_ReplyWithError(ctx, "[CRDT_RC][Get] type error");
             goto error;
@@ -249,7 +251,15 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     gcounter* g = addOrCreateCounter(current, &set_meta, type, increment);
     sds vc_info = vectorClockToSds(getMetaVectorClock(&set_meta));
     if (type == VALUE_TYPE_FLOAT) {
-        RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.COUNTER", "sllcllf", argv[1], getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vc_info, g->start_clock, g->end_clock, g->conv.f);
+        long double  f = g->conv.f;
+        char buf[5*1024];
+        int len = ld2string(buf, sizeof(buf), f, 1);
+        long double value = 0;
+        assert(string2ld(buf, len, &value) != 0);
+        g->conv.f = value;
+        // sds val_str = sdsnewlen((char*)&(g->conv.f), sizeof(g->conv.f));
+        RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.COUNTER", "sllcllc", argv[1], getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vc_info, g->start_clock, g->end_clock, buf);
+        // sdsfree(val_str);
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrbyfloat", argv[1]);
         RedisModule_ReplyWithLongDouble(ctx, getCrdtRcFloatValue(current));
     } else if(type == VALUE_TYPE_INTEGER) {
@@ -554,7 +564,11 @@ int CRDT_CounterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
             RedisModule_DeleteKey(moduleKey);
         }
     }
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrby", argv[1]);
+    if(val_type == VALUE_TYPE_FLOAT) {
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrbyfloat", argv[1]);
+    } else if(val_type == VALUE_TYPE_INTEGER) {
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrby", argv[1]);
+    }
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
     status = CRDT_OK;
 end:

@@ -2,6 +2,7 @@
 #include "../ctrip_vector_clock.h"
 #include "../ctrip_crdt_register.h"
 #include "../crdt.h"
+#include "../include/redismodule.h"
 typedef struct {
     unsigned char type;
     long long unit;
