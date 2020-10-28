@@ -32,14 +32,15 @@
 
 #include "include/redismodule.h"
 #include "include/rmutil/sds.h"
-
-#include "crdt_register.h"
-#include "ctrip_vector_clock.h"
+#include "include/rmutil/dict.h"
 #include "utils.h"
 #include "crdt.h"
-#include <strings.h>
-#include "include/rmutil/dict.h"
+#include "ctrip_vector_clock.h"
 #include "crdt_statistics.h"
+#include "crdt_register.h"
+#include "ctrip_crdt_expire.h"
+#include <strings.h>
+
 /**
  * ==============================================Pre-defined functions=========================================================*/
 

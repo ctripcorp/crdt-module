@@ -21,7 +21,8 @@ else
 	SHOBJ_CFLAGS ?= -dynamic -fno-common -g -ggdb
 	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup
 endif
-CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -O0 -g -fPIC -lc -lm -std=gnu99  -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API $(REDIS_CFLAGS)
+CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -O0 -g -fPIC -std=gnu99  -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API $(REDIS_CFLAGS)
+DEBUG = -lc -lm
 ifeq ($(uname_S),Darwin)
 	CFLAGS+= -DTCL_TEST
 endif
