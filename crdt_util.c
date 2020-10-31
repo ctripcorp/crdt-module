@@ -1,4 +1,5 @@
 #include "crdt_util.h"
+#include "include/redismodule.h"
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -46,20 +47,28 @@ size_t feedValStrLen(char *buf, int num) {
     len += _feedLongLong(buf + len, (long long)num);
     return len;
 }
-size_t feedValFromString(char *buf, const char* str) {
+
+size_t feedVal(char* buf, const char* str, size_t len) {
+    memcpy(buf, str, len);
+    return len;
+}
+
+size_t feedValFromString(char *buf, const char* str, size_t size) {
     // return sprintf(buf, "%s\r\n",str);
     size_t len = 0;
-    len += feedBuf(buf + len, str);
+    len += feedVal(buf + len, str, size);
     buf[len++]='\r';
     buf[len++]='\n';
     return len;
     // return strlen(src) + 2;
 }
 
+
+
 size_t feedStr2Buf(char *buf, const char* str, size_t strlen) {
     size_t len = 0;
     len += feedValStrLen(buf + len, strlen);
-    len += feedValFromString(buf + len , str);
+    len += feedValFromString(buf + len , str, strlen);
     // return sprintf(buf, str_template, strlen, str);
     return len;
 }
@@ -229,8 +238,7 @@ void* getTombstone(RedisModuleKey *moduleKey) {
 // insteadof a string 09/03/2020
 VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version) {
     if(version == 0) {
-        size_t vcLength;
-        sds vcStr = RedisModule_LoadSds(rdb, &vcLength);
+        sds vcStr = RedisModule_LoadSds(rdb);
         VectorClock result = stringToVectorClock(vcStr);
         sdsfree(vcStr);
         return result;
@@ -287,22 +295,44 @@ int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock vectorClock, int version)
     return CRDT_OK;
 }
 
+// long double rdbLoadLongDouble(RedisModuleIO *rdb, int version) {
+//     size_t ldLength = 0;
+//     sds ldstr = RedisModule_LoadSds(rdb);
+//     long double ld = 0;
+//     RedisModule_Debug(logLevel, "load long double: %s",ldstr);
+//     assert(string2ld(ldstr, sdslen(ldstr), &ld) == 1);
+//     RedisModule_Debug(logLevel, "load long double over");
+//     sdsfree(ldstr);
+//     return ld;
+// }
+
+// #define MAX_LONG_DOUBLE_CHARS 5*1024
+// int rdbSaveLongDouble(RedisModuleIO *rdb, long double ld) {
+//     char buf[MAX_LONG_DOUBLE_CHARS];
+//     int len = ld2string(buf,sizeof(buf),ld,1);
+//     sds s = sdsnewlen(buf, (size_t)len);
+//     RedisModule_Debug(logLevel, "save long double %.33Lf %s", ld, s);
+//     RedisModule_SaveStringBuffer(rdb, s, sdslen(s));
+//     sdsfree(s);
+//     return 1;
+// }
 long double rdbLoadLongDouble(RedisModuleIO *rdb, int version) {
-    size_t ldLength;
-    sds ldstr = RedisModule_LoadSds(rdb, &ldLength);
-    long double ld = 0;
-    assert(string2ld(ldstr, ldLength, &ld) == 1);
+    sds ldstr = RedisModule_LoadSds(rdb);
+    // assert(string2ld(ldstr, sdslen(ldstr), &ld) == 1);
+    long double ld = *(long double*)(ldstr);
+    sdsfree(ldstr);
     return ld;
 }
 
-#define MAX_LONG_DOUBLE_CHARS 5*1024
 int rdbSaveLongDouble(RedisModuleIO *rdb, long double ld) {
-    char buf[MAX_LONG_DOUBLE_CHARS];
-    int len = ld2string(buf,sizeof(buf),ld,1);
-    RedisModule_SaveStringBuffer(rdb, buf, len);
+    //  char buf[MAX_LONG_DOUBLE_CHARS];
+    // int len = ld2string(buf,sizeof(buf),ld,1);
+    sds s = sdsnewlen((char*)&ld, sizeof(long double));
+    // RedisModule_Debug(logLevel, "save long double %.33Lf %s", ld, s);
+    RedisModule_SaveStringBuffer(rdb, s, sdslen(s));
+    sdsfree(s);
     return 1;
 }
-
 
 uint64_t dictSdsHash(const void *key) {
     return dictGenHashFunction((unsigned char*)key, sdslen((char*)key));
