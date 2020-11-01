@@ -21,9 +21,13 @@ int ll2str(char* s, long long value, int len) {
     return len;
 }
 
-size_t feedBuf(char* buf, const char* src) {
-    strcpy(buf, src);
-    return strlen(src);
+// size_t feedBuf(char* buf, const char* src) {
+//     strcpy(buf, src);
+//     return strlen(src);
+// }
+size_t feedBuf(char* buf, const char* src, size_t len) {
+    memcpy(buf, src, len);
+    return len;
 }
 size_t _feedLongLong(char *buf, long long ll) {
     size_t len = 0;
@@ -45,10 +49,10 @@ size_t feedValStrLen(char *buf, int num) {
     len += _feedLongLong(buf + len, (long long)num);
     return len;
 }
-size_t feedValFromString(char *buf, const char* str) {
+size_t feedValFromString(char *buf, const char* str, size_t size) {
     // return sprintf(buf, "%s\r\n",str);
     size_t len = 0;
-    len += feedBuf(buf + len, str);
+    len += feedBuf(buf + len, str, size);
     buf[len++]='\r';
     buf[len++]='\n';
     return len;
@@ -58,7 +62,7 @@ size_t feedValFromString(char *buf, const char* str) {
 size_t feedStr2Buf(char *buf, const char* str, size_t strlen) {
     size_t len = 0;
     len += feedValStrLen(buf + len, strlen);
-    len += feedValFromString(buf + len , str);
+    len += feedValFromString(buf + len , str, strlen);
     // return sprintf(buf, str_template, strlen, str);
     return len;
 }
@@ -73,10 +77,10 @@ size_t feedGid2Buf(char *buf, int gid) {
     size_t len = 0;
     // len += feedValStrLen(buf + len, gid > 9 ? 2:1);
     if(gid > 9) {
-        len += feedBuf(buf +len, gidlen2);
+        len += feedBuf(buf +len, gidlen2, strlen(gidlen2));
         len += ll2str(buf + len, (long long)gid, 2);
     } else {
-        len += feedBuf(buf +len, gidlen1);
+        len += feedBuf(buf +len, gidlen1, strlen(gidlen1));
         buf[len++] = '0' + gid;
     }
     buf[len++] = '\r';
