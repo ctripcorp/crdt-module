@@ -376,7 +376,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         RedisModule_Log(ctx, "warning", "counter module -- counter failed");
         return REDISMODULE_ERR;
     }
-
+    if(initCrdtSSModule(ctx) != REDISMODULE_OK) {
+        RedisModule_Log(ctx, "warning", "zset module -- zset failed");
+        return REDISMODULE_ERR;
+    }
     if (RedisModule_CreateCommand(ctx,"del",
                                   delCommand,"write",1,-1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
