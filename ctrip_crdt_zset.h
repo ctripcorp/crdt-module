@@ -1,6 +1,7 @@
 #include "./ctrip_vector_clock.h"
 #include "./include/redismodule.h"
 #include "./ctrip_crdt_common.h"
+#include "./ctrip_zskiplist.h"
 
 
 
@@ -9,21 +10,7 @@
 typedef CrdtObject CRDT_SS;
 typedef CrdtTombstone CRDT_SSTombstone;
 /* ZSETs use a specialized version of Skiplists */
-typedef struct zskiplistNode {
-    sds ele;
-    double score;
-    struct zskiplistNode *backward;
-    struct zskiplistLevel {
-        struct zskiplistNode *forward;
-        unsigned int span;
-    } level[];
-} zskiplistNode;
 
-typedef struct zskiplist {
-    struct zskiplistNode *header, *tail;
-    unsigned long length;
-    int level;
-} zskiplist;
 
 struct crdt_sorted_set {
     char type;
@@ -76,3 +63,4 @@ int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, doubl
 long long getZSetSize(CRDT_SS* ss);
 zskiplist* getZSetSkipList(CRDT_SS* ss);
 int incrTagCounter(CRDT_SS* current, CrdtMeta* zadd_meta, sds field, double score);
+double getScore(CRDT_SS* current, sds field);

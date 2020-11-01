@@ -3,6 +3,7 @@
 #include "../ctrip_vector_clock.h"
 #include "../include/rmutil/zskiplist.h"
 #include "../crdt_util.h"
+
 #define TAG_BASE 1
 #define TAG_ADD_COUNTER 2
 #define TAG_DEL_COUNTER 4

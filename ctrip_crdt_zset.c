@@ -50,11 +50,12 @@ int feedSendZaddCommand(RedisModuleCtx* ctx, CrdtMeta* meta, RedisModuleString *
 //zadd <key> <sorted> <field>
 int zaddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     int result = 0;
-    double *scores = NULL;
+    
     CrdtMeta zadd_meta = {.gid = 0};
     int scoreidx = 2;
     int elements = (argc - scoreidx)/2;
-    scores = RedisModule_Alloc(sizeof(double)*elements);
+    // scores = RedisModule_Alloc(sizeof(double)*elements);
+    double scores[elements];
     for(int i = 0; i < elements; i+=2) {
         if(RedisModule_StringToDouble(argv[i * 2 + scoreidx], &scores[i]) != REDISMODULE_OK) {
             RedisModule_WrongArity(ctx);
@@ -74,20 +75,37 @@ int zaddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtSS, current);
     } 
     for(int i = 0; i < elements; i++) {
-        zsetAdd(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[i*2 + scoreidx + 1]), scores[i]);
+        result += zsetAdd(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[i*2 + scoreidx + 1]), scores[i]);
     }
     sds vc_info = vectorClockToSds(getMetaVectorClock(&zadd_meta));
     feedSendZaddCommand(ctx, &zadd_meta, argv);
     // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.zadd", "sllc", argv[1], getMetaGid(&zadd_meta), getMetaTimestamp(&zadd_meta), vc_info);
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "zadd", argv[1]);
 error:
-    if(scores != NULL) RedisModule_ZFree(scores);
+    // if(scores != NULL) RedisModule_ZFree(scores);
     if(zadd_meta.gid != 0) freeIncrMeta(&zadd_meta);
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
+    RedisModule_ReplyWithLongLong(ctx, result);
     return result;
 }
+/**
+ * ZSCORE <key> <field>
+*/
+int zscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], CrdtSS);
+    double result = 0;
+    if(moduleKey == NULL) {
+        goto end;
+    }
+    CRDT_SS* current = getCurrentValue(moduleKey);
+    if(current) {
+        result = getScore(current, RedisModule_GetSds(argv[2]));
+    } 
+end:
+    return RedisModule_ReplyWithDouble(ctx, result);
+    
 
-
+}
 
 int initCrdtSSModule(RedisModuleCtx *ctx) {
     RedisModuleTypeMethods tm = {
@@ -119,9 +137,9 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
     // if (RedisModule_CreateCommand(ctx,"CRDT.zadd",
     //                               CRDT_ZaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
     //     return REDISMODULE_ERR;
-    // if (RedisModule_CreateCommand(ctx,"GET",
-    //                               getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
-    //     return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"ZSCORE",
+                                  zscoreCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
     // if (RedisModule_CreateCommand(ctx,"CRDT.GET",
     //                               CRDT_GetCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
     //     return REDISMODULE_ERR;
