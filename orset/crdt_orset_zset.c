@@ -424,3 +424,8 @@ double getScore(CRDT_SS* ss, sds field) {
     crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
     return getScoreByElement(el);
 }
+
+size_t getZSetSize(CRDT_SS* ss) {
+    crdt_zset* zset = retrieveCrdtSS(ss);
+    return dictSize(zset->dict);
+}

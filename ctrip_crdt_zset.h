@@ -60,7 +60,7 @@ void freeCrdtSST(void* ss);
 void crdtSSTDigestFunc(RedisModuleDigest *md, void *value);
 // functions
 int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, double sorted);
-long long getZSetSize(CRDT_SS* ss);
+size_t getZSetSize(CRDT_SS* ss);
 zskiplist* getZSetSkipList(CRDT_SS* ss);
 int incrTagCounter(CRDT_SS* current, CrdtMeta* zadd_meta, sds field, double score);
 double getScore(CRDT_SS* current, sds field);

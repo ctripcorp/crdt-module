@@ -64,6 +64,9 @@ int zaddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     //get value
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSS);
+    if(moduleKey == NULL) {
+        goto error; 
+    }
     CRDT_SS* current = getCurrentValue(moduleKey);
     CrdtTombstone* tombstone = getTombstone(moduleKey);
     if(tombstone != NULL && !isCrdtSSTombstone(tombstone) ) {
@@ -81,11 +84,11 @@ int zaddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     feedSendZaddCommand(ctx, &zadd_meta, argv);
     // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.zadd", "sllc", argv[1], getMetaGid(&zadd_meta), getMetaTimestamp(&zadd_meta), vc_info);
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "zadd", argv[1]);
+    RedisModule_ReplyWithLongLong(ctx, result);
 error:
     // if(scores != NULL) RedisModule_ZFree(scores);
     if(zadd_meta.gid != 0) freeIncrMeta(&zadd_meta);
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
-    RedisModule_ReplyWithLongLong(ctx, result);
     return result;
 }
 /**
@@ -103,9 +106,34 @@ int zscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     } 
 end:
     return RedisModule_ReplyWithDouble(ctx, result);
-    
-
 }
+
+int zcardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], CrdtSS);
+    long long result = 0;
+    if(moduleKey == NULL) {
+        goto end;
+    }
+    CRDT_SS* current = getCurrentValue(moduleKey);
+    if(current) {
+        result = getZSetSize(current);
+    } 
+end:
+    return RedisModule_ReplyWithLongLong(ctx, result);
+}
+
+// int zcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+//     robj *key = c->argv[1];
+//     robj *zobj;
+//     zrangespec range;
+//     int count = 0;
+
+//     /* Parse the range arguments */
+//     if (zslParseRange(c->argv[2],c->argv[3],&range) != C_OK) {
+//         addReplyError(c,"min or max is not a float");
+//         return;
+//     }
+// }
 
 int initCrdtSSModule(RedisModuleCtx *ctx) {
     RedisModuleTypeMethods tm = {
@@ -140,9 +168,9 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx,"ZSCORE",
                                   zscoreCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
-    // if (RedisModule_CreateCommand(ctx,"CRDT.GET",
-    //                               CRDT_GetCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
-    //     return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"ZCARD",
+                                  zcardCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
 
     // if (RedisModule_CreateCommand(ctx,"CRDT.DEL_Rc",
     //                               CRDT_DelRcCommand,"write",1,1,1) == REDISMODULE_ERR)

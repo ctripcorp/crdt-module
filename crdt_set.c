@@ -59,9 +59,8 @@ int sismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 int scardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
     if (moduleKey == NULL) {
-        RedisModule_ReplyWithLongLong(ctx, 0);
         return CRDT_ERROR;
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
@@ -74,7 +73,7 @@ int scardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 int smembersCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ);
+    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
     if (moduleKey == NULL) {
         RedisModule_ReplyWithArray(ctx, 0);
         return CRDT_ERROR;
