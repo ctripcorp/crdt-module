@@ -498,10 +498,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             RedisModule_IncrCrdtConflict(SET_DEL_CONFLICT | MODIFYCONFLICT);
         }
         if(result > COMPARE_META_EQUAL) {
-            //to do
-            // getCRDTHash(tombstone);
             CRDT_RegisterTombstone* tkv = createCrdtRegisterTombstone();
-            appendCrdtMeta(meta, getMaxDelCrdtHashTombstone(tombstone));
             int r = 0;
             addRegisterTombstone(tkv, meta, &r);
             sds field = RedisModule_GetSds(argv[6]);
