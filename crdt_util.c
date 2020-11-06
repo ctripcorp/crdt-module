@@ -76,11 +76,16 @@ const char* gidlen2 = "$2\r\n";
 size_t feedGid2Buf(char *buf, int gid) {
     size_t len = 0;
     // len += feedValStrLen(buf + len, gid > 9 ? 2:1);
+    static size_t gidlen1_str_len = 0, gidlen2_str_len = 0;
+    if(gidlen1_str_len == 0) {
+        gidlen1_str_len = strlen(gidlen1);
+        gidlen2_str_len = strlen(gidlen2);
+    }
     if(gid > 9) {
-        len += feedBuf(buf +len, gidlen2, strlen(gidlen2));
+        len += feedBuf(buf +len, gidlen2, gidlen2_str_len);
         len += ll2str(buf + len, (long long)gid, 2);
     } else {
-        len += feedBuf(buf +len, gidlen1, strlen(gidlen1));
+        len += feedBuf(buf +len, gidlen1, gidlen1_str_len);
         buf[len++] = '0' + gid;
     }
     buf[len++] = '\r';

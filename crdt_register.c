@@ -379,10 +379,16 @@ const char* crdt_set_no_expire_head = "*6\r\n$8\r\nCRDT.SET\r\n";
 const size_t crdt_set_basic_str_len = 18 + 2 *REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + REPLICATION_MAX_LONGLONG_LEN;
 size_t replicationFeedCrdtSetCommand(RedisModuleCtx *ctx,char* cmdbuf, const char* keystr, size_t keylen,const char* valstr, size_t vallen, CrdtMeta* meta, VectorClock vc, long long expire_time) {
     size_t cmdlen = 0;
+    static size_t crdt_set_head_str_len = 0;
+    static size_t crdt_set_no_expire_head_str_len = 0;
+    if(crdt_set_head_str_len == 0) {
+        crdt_set_head_str_len = strlen(crdt_set_head);
+        crdt_set_no_expire_head_str_len = strlen(crdt_set_no_expire_head);
+    }
     if(expire_time > -2) {
-        cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_set_head, strlen(crdt_set_head));
+        cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_set_head, crdt_set_head_str_len);
     }else{
-        cmdlen += feedBuf(cmdbuf + cmdlen, crdt_set_no_expire_head, strlen(crdt_set_no_expire_head));
+        cmdlen += feedBuf(cmdbuf + cmdlen, crdt_set_no_expire_head, crdt_set_no_expire_head_str_len);
     }
     cmdlen += feedKV2Buf(cmdbuf + cmdlen, keystr, keylen, valstr, vallen);
     cmdlen += feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(meta), getMetaTimestamp(meta), vc);
@@ -398,7 +404,11 @@ const size_t crdt_mset_basic_str_len = REPLICATION_ARGC_LEN + 15 + REPLICATION_M
 int replicationFeedCrdtMSetCommand(RedisModuleCtx *ctx, RedisModuleString** argv, char *cmdbuf, CrdtMeta* mset_meta, int argc, CRDT_Register** vals, const char**datas, size_t* datalens) {
     size_t cmdlen = 0;
     cmdlen += feedArgc(cmdbuf + cmdlen, argc * 3  + 3);
-    cmdlen += feedBuf(cmdbuf + cmdlen, crdt_mset_head, strlen(crdt_mset_head));
+    static size_t crdt_mset_head_str_len = 0;
+    if(crdt_mset_head_str_len == 0) {
+        crdt_mset_head_str_len = strlen(crdt_mset_head);
+    }
+    cmdlen += feedBuf(cmdbuf + cmdlen, crdt_mset_head, crdt_mset_head_str_len);
     cmdlen += feedGid2Buf(cmdbuf+ cmdlen, getMetaGid(mset_meta));
     cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, getMetaTimestamp(mset_meta));
     for(int i = 0, len = argc; i < len; i+=1) {
@@ -466,7 +476,7 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         meta.gid = gid;
         meta.timestamp = timestamp;
         meta.vectorClock = vclock;
-        current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, &meta, argv[1], RedisModule_GetSds(argv[i+1]));
+        current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, &meta, argv[i], RedisModule_GetSds(argv[i+1]));
         RedisModule_MergeVectorClock(gid, VC2LL(meta.vectorClock));
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
         RedisModule_CloseKey(moduleKey);

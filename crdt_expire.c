@@ -14,7 +14,11 @@ const char* crdt_expireat_head = "*6\r\n$11\r\nCRDT.EXPIRE\r\n";
 const size_t crdt_expireat_basic_str_len = 23 + REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN * 3; 
 size_t replicationFeedCrdtExpireAtCommand(RedisModuleCtx* ctx, char* cmdbuf, const char* keystr, size_t keylen, int gid, long long nowTime, long long expireTime, int dataType) {
     size_t cmdlen = 0;
-    cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_expireat_head, strlen(crdt_expireat_head));
+    static size_t crdt_expireat_head_str_len = 0;
+    if(crdt_expireat_head_str_len == 0) {
+        crdt_expireat_head_str_len = strlen(crdt_expireat_head);
+    }
+    cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_expireat_head, crdt_expireat_head_str_len);
     cmdlen += feedStr2Buf(cmdbuf + cmdlen, keystr, keylen);
     cmdlen += feedGid2Buf(cmdbuf + cmdlen, gid);
     cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, nowTime);
