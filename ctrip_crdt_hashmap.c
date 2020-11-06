@@ -209,7 +209,11 @@ const size_t crdt_hset_basic_str_len = 15 + REPLICATION_ARGC_LEN + REPLICATION_M
 size_t replicationFeedCrdtHsetCommand(RedisModuleCtx *ctx,char* cmdbuf,const char* keystr, size_t keylen, CrdtMeta* meta, VectorClock vc,int argc, const char** fieldAndValStr, int* fieldAndValStrLen) {
     size_t cmdlen = 0;
     cmdlen +=  feedArgc(cmdbuf, argc + 6);
-    cmdlen += feedBuf(cmdbuf+ cmdlen, crdt_hset_head, strlen(crdt_hset_head));
+    static size_t crdt_hset_head_str_len = 0;
+    if(crdt_hset_head_str_len == 0) {
+        crdt_hset_head_str_len = strlen(crdt_hset_head);
+    }
+    cmdlen += feedBuf(cmdbuf+ cmdlen, crdt_hset_head, crdt_hset_head_str_len);
     cmdlen += feedStr2Buf(cmdbuf + cmdlen, keystr, keylen);//$%d\r\n%s\r\n
     cmdlen += feedMeta2Buf(cmdbuf + cmdlen ,getMetaGid(meta),  getMetaTimestamp(meta), vc);
     cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, (long long) (argc));
