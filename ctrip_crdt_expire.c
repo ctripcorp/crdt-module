@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include "ctrip_crdt_expire.h"
-// #include "ctrip_crdt_register.h"
+#include "../crdt_register.h"
 int setExpire(RedisModuleKey *key, long long expiteTime) {
     if(expiteTime == REDISMODULE_NO_EXPIRE) {
         RedisModule_SetExpire(key, REDISMODULE_NO_EXPIRE); 

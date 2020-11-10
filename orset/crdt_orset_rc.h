@@ -2,6 +2,7 @@
 #include "../ctrip_vector_clock.h"
 #include "../ctrip_crdt_register.h"
 #include "../crdt.h"
+#include "../include/redismodule.h"
 typedef struct {
     unsigned char type;
     long long unit;
@@ -48,7 +49,7 @@ typedef struct {
 //========================= rc element functions =========================
 rc_element* createRcElement(int gid);
 rc_element* dupRcElement(rc_element* el);
-void assign_max_rc_element(rc_element* target, rc_element* src);
+void assign_max_rc_element(long long target_vcu, long long src_vcu, rc_element* target, rc_element* src);
 void freeRcElement(void* element);
 int setCrdtRcType(CRDT_RC* rc, int type);
 rc_element* findRcElement(crdt_orset_rc* rc, int gid);
@@ -65,6 +66,6 @@ int resetElementBase(rc_base* base, CrdtMeta* meta, int val_type, void* v);
 // ======================== tombstone elements =============================
 rc_tombstone_element* createRcTombstoneElement(int gid);
 rc_tombstone_element* dupCrdtRcTombstoneElement(rc_tombstone_element* rt);
-void assign_max_rc_tombstone_element(rc_tombstone_element* target, rc_tombstone_element* src);
+void assign_max_rc_tombstone_element(long long target_vcu, long long src_vcu, rc_tombstone_element* target, rc_tombstone_element* src);
 int appendRcTombstoneElement(crdt_rc_tombstone* rt, rc_tombstone_element* el);
 rc_tombstone_element* findRcTombstoneElement(crdt_rc_tombstone* rt, int gid);

@@ -40,6 +40,8 @@ CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other);
 
 VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version);
 int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock clock, int version);
+long double rdbLoadLongDouble(RedisModuleIO *rdb, int version);
+int rdbSaveLongDouble(RedisModuleIO *rdb, long double ld);
 
 size_t feedBuf(char* buf,const char* src);
 size_t feedStr2Buf(char *buf, const char* str, size_t strlen);

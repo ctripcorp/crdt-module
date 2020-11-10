@@ -222,8 +222,7 @@ void *RdbLoadLWWCrdtRegister(RedisModuleIO *rdb, int version, int encver) {
     setCrdtLWWRegisterTimestamp(crdtRegister, RedisModule_LoadSigned(rdb));
     setCrdtLWWRegisterVectorClock(crdtRegister, rdbLoadVectorClock(rdb, version));
 
-    size_t sdsLength;
-    sds val = RedisModule_LoadSds(rdb, &sdsLength);
+    sds val = RedisModule_LoadSds(rdb);
     setCrdtLWWRegisterValue(crdtRegister, val);
     return crdtRegister;
 }

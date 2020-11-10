@@ -4,6 +4,7 @@
 #include "../crdt_util.h"
 #include "../crdt_set.h"
 #include "../include/rmutil/dict.h"
+#include "../include/redismodule.h"
 #if defined(TCL_TEST)
 typedef struct CRDT_ORSET_SET {
     unsigned char  type;

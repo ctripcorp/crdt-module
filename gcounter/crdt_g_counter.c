@@ -42,7 +42,7 @@ void* createGcounter(int type) {
 #else
     gcounter *counter = RedisModule_Alloc(sizeof(gcounter));
 #endif
-    setCounterType(counter, type);
+    counter->type = type;
     // counter->logic_clock = 0;
     counter->conv.i = 0;
     counter->conv.f = 0;
@@ -82,7 +82,7 @@ void assign_max_rc_counter(gcounter* target, gcounter* src) {
     assert(target->start_clock == src->start_clock);
     if(target->end_clock < src->end_clock) {
         target->end_clock = src->end_clock;
-        if(target->type == VALUE_TYPE_FLOAT) {
+        if(src->type == VALUE_TYPE_FLOAT) {
             target->conv.f = src->conv.f;
         } else if(target->type == VALUE_TYPE_INTEGER) {
             target->conv.i = src->conv.i;
@@ -123,41 +123,68 @@ void freeGcounterMeta(void *counter) {
 #endif
 }
 
-sds gcounterDelToSds(int gid, gcounter* c) {
+sds gcounterDelStatusToSds(int gid, gcounter* c) {
     sds str = sdsempty();
-    if(c->type == VALUE_TYPE_INTEGER) {
-        str = sdscatprintf(str, "%d:%lld:%lld:%lld", gid, c->start_clock, c->del_end_clock, c->del_conv.i);
-    } else if(c->type == VALUE_TYPE_FLOAT) {
-        str = sdscatprintf(str, "%d:%lld:%lld:%Lf", gid, c->start_clock, c->del_end_clock, c->del_conv.f);
+    // if(c->type == VALUE_TYPE_INTEGER) {
+        
+    // } else if(c->type == VALUE_TYPE_FLOAT) {
+    //     str = sdscatprintf(str, "%d:%lld:%lld:%.17Lf", gid, c->start_clock, c->del_end_clock, c->del_conv.f);
+    // }
+    //
+    str = sdscatprintf(str, "%d:%lld:%lld:%zu", gid, c->start_clock, c->del_end_clock, (size_t)c->type);
+    return str;
+}
+
+sds gcounterDelValueToSds(gcounter* c) {
+    sds str = NULL;
+    if(c->type == VALUE_TYPE_FLOAT) {
+        printf("del value float: %.17Lf\n", c->del_conv.f);
+        long double f = (c->del_conv.f);
+        str = sdsnewlen((char*)&f, sizeof(long double));
+    } else if(c->type == VALUE_TYPE_INTEGER){
+        str = sdsfromlonglong(c->del_conv.i);
+    } else {
+        assert(1 == 0);
     }
     return str;
 }
-gcounter_meta* sdsTogcounterMeta(sds str) {
-    gcounter_meta* g = createGcounterMeta(0);
-    int result = gcounterMetaFromSds(str, g);
-    if(result == 0) {
-        freeGcounterMeta(g);
-        return NULL;
-    }
-    return g;
+
+void setGcounterStartClock(gcounter* target, long long start_clock) {
+    target->start_clock = start_clock;
 }
-int gcounterMetaFromSds(sds str, gcounter_meta* g) {
+
+long long getGcounterStartClock(gcounter* target) {
+    return target->start_clock;
+}
+
+// gcounter_meta* sdsTogcounterMeta(sds str, sds value) {
+//     gcounter_meta* g = createGcounterMeta(0);
+//     int result = gcounterMetaFromSds(str,value, g);
+//     if(result == 0) {
+//         freeGcounterMeta(g);
+//         return NULL;
+//     }
+//     return g;
+// }
+
+int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g) {
     int num;
     sds *vals = sdssplitlen(str, sdslen(str), ":", 1, &num);
     if(num != 4) {
         return 0;
     }
-    long long ll = 0;
-    long double ld= 0;
-    int val_type = -1;
+    long long val_type = -1;
+    // long long val_type = -1;
     
-    if(string2ll(vals[num-1], sdslen(vals[num - 1]), &ll)) {
-        val_type = VALUE_TYPE_INTEGER;
-    } else if(string2ld(vals[num -1], sdslen(vals[num - 1]), &ld)) {
-        val_type = VALUE_TYPE_FLOAT;
-    } else {
+    if(!string2ll(vals[num-1], sdslen(vals[num - 1]), &val_type)) {
         return 0;
-    } 
+    }
+    // val_type = VALUE_TYPE_INTEGER;
+    // } else if(string2ld(vals[num -1], sdslen(vals[num - 1]), &ld)) {
+    //     val_type = VALUE_TYPE_FLOAT;
+    // } else {
+    //     return 0;
+    // } 
     long long gid = 0;
     if(!string2ll(vals[0], sdslen(vals[0]), &gid)) {
         return 0;
@@ -175,8 +202,12 @@ int gcounterMetaFromSds(sds str, gcounter_meta* g) {
     g->start_clock = start_clock;
     g->end_clock = end_clock;
     if(val_type == VALUE_TYPE_INTEGER) { 
+        long long ll = 0;
+        string2ll(value, sdslen(value), &ll);
         g->conv.i = ll;
-    } else {
+    } else if(val_type == VALUE_TYPE_FLOAT) {
+        long double ld = *(long double*)(value);
+        printf("???? %.17Lf\n", ld);
         g->conv.f = ld;
     }
     return 1;
@@ -199,6 +230,7 @@ int update_del_counter(gcounter* target, gcounter* src) {
 
 int update_add_counter(gcounter* target, gcounter* src) {
     if(target->end_clock < src->end_clock) {
+        target->start_clock = src->start_clock;
         target->end_clock = src->end_clock;
         if(src->type == VALUE_TYPE_FLOAT) {
             target->conv.f = src->conv.f;
@@ -214,6 +246,7 @@ int update_add_counter(gcounter* target, gcounter* src) {
 }
 int update_del_counter_by_meta(gcounter* target, gcounter_meta* src) {
     if(target->del_end_clock < src->end_clock) {
+        target->start_clock = src->start_clock;
         target->del_end_clock = src->end_clock;
         if(src->type == VALUE_TYPE_FLOAT) {
             target->del_conv.f = src->conv.f;
@@ -243,7 +276,20 @@ int counter_del(gcounter* target, gcounter* src) {
 }
 
 void setCounterType(gcounter* gcounter, int type) {
+    if(gcounter->type == VALUE_TYPE_INTEGER && type == VALUE_TYPE_FLOAT) {
+        if(gcounter->end_clock > 0) {
+            long long i = gcounter->conv.i;
+            gcounter->conv.i = 0;
+            gcounter->conv.f = (long double)(i);
+        }
+        if(gcounter->del_end_clock > 0) {
+            long long i = gcounter->del_conv.i;
+            gcounter->del_conv.i = 0;
+            gcounter->del_conv.f = (long double)(i);
+        }
+    }
     gcounter->type = type;
+    
 }
 
 int getCounterType(gcounter* gcounter) {
@@ -290,9 +336,12 @@ int testFreeGcounter(void) {
 int testSdsToGCounterMini(void) {
     printf("========[testSdsToGCounterMini]==========\r\n");
     sds str = sdsnew("1:2:2:1");
+    long double ld = 1.123124123123123123;
+    sds v = sdsnewlen(ld, sizeof(long double));
     gcounter_meta *counter = createGcounterMeta(0);
-    gcounterMetaFromSds(str, counter);
+    gcounterMetaFromSds(str, v ,counter);
     test_cond("[countermini gid]", 1 == counter->gid);
+    test_cond("[countermini gid]", ld == counter->conv.f);
     return 0;
 }
 

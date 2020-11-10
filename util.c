@@ -430,7 +430,6 @@ int string2ld(const char *s, size_t slen, long double *dp) {
     char buf[256];
     long double value;
     char *eptr;
-
     if (slen >= sizeof(buf)) return 0;
     memcpy(buf,s,slen);
     buf[slen] = '\0';
@@ -441,9 +440,9 @@ int string2ld(const char *s, size_t slen, long double *dp) {
         (errno == ERANGE &&
             (value == HUGE_VAL || value == -HUGE_VAL || value == 0)) ||
         errno == EINVAL ||
-        isnan(value))
+        isnan(value)) {
         return 0;
-
+    }
     if (dp) *dp = value;
     return 1;
 }

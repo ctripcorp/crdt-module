@@ -75,14 +75,16 @@ void assign_max_rc_counter(gcounter* target, gcounter* src);
 //about gcounter_meta
 void* createGcounterMeta(int type);
 void freeGcounterMeta(void *counter);
-sds gcounterDelToSds(int gid, gcounter* g);
-
-int gcounterMetaFromSds(sds str, gcounter_meta* g);
+sds gcounterDelStatusToSds(int gid, gcounter* g);
+sds gcounterDelValueToSds(gcounter* g);
+void setGcounterStartClock(gcounter* target, long long start_clock);
+long long getGcounterStartClock(gcounter* target);
+int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g);
 int update_del_counter(gcounter* target, gcounter* src);
 int update_add_counter(gcounter* target, gcounter* src);
 int update_del_counter_by_meta(gcounter* target, gcounter_meta* meta);
 int counter_del(gcounter* target, gcounter* src);
-gcounter_meta* sdsTogcounterMeta(sds str);
+// gcounter_meta* sdsTogcounterMeta(sds str);
 //================ utils ==================
 void setCounterType(gcounter* gcounter, int type);
 int getCounterType(gcounter* gcounter);

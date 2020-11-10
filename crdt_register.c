@@ -40,6 +40,7 @@
 #include <strings.h>
 #include "include/rmutil/dict.h"
 #include "crdt_statistics.h"
+#include "ctrip_crdt_expire.h"
 /**
  * ==============================================Pre-defined functions=========================================================*/
 
