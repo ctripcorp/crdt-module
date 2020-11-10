@@ -357,31 +357,6 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
 #define UNIT_SECONDS 0
 #define UNIT_MILLISECONDS 1
 
-const char* crdt_set_head = "*7\r\n$8\r\nCRDT.SET\r\n";
-const char* crdt_set_no_expire_head = "*6\r\n$8\r\nCRDT.SET\r\n";
-//CRDT.SET key value gid time vc expire
-const size_t crdt_set_basic_str_len = 18 + 2 *REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + REPLICATION_MAX_LONGLONG_LEN;
-size_t replicationFeedCrdtSetCommand(RedisModuleCtx *ctx,char* cmdbuf, const char* keystr, size_t keylen,const char* valstr, size_t vallen, CrdtMeta* meta, VectorClock vc, long long expire_time) {
-    size_t cmdlen = 0;
-    static size_t crdt_set_head_str_len = 0;
-    static size_t crdt_set_no_expire_head_str_len = 0;
-    if(crdt_set_head_str_len == 0) {
-        crdt_set_head_str_len = strlen(crdt_set_head);
-        crdt_set_no_expire_head_str_len = strlen(crdt_set_no_expire_head);
-    }
-    if(expire_time > -2) {
-        cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_set_head, crdt_set_head_str_len);
-    }else{
-        cmdlen += feedBuf(cmdbuf + cmdlen, crdt_set_no_expire_head, crdt_set_no_expire_head_str_len);
-    }
-    cmdlen += feedKV2Buf(cmdbuf + cmdlen, keystr, keylen, valstr, vallen);
-    cmdlen += feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(meta), getMetaTimestamp(meta), vc);
-    if(expire_time > -2) {
-        cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, expire_time);
-    }
-    RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
-    return cmdlen;
-}
 
 const char* crdt_mset_head = "$9\r\nCRDT.MSET\r\n";
 const size_t crdt_mset_basic_str_len = REPLICATION_ARGC_LEN + 15 + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN;

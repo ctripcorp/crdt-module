@@ -23,14 +23,11 @@ int ll2str(char* s, long long value, int len) {
     return len;
 }
 
-// size_t feedBuf(char* buf, const char* src) {
-//     strcpy(buf, src);
-//     return strlen(src);
-// }
 size_t feedBuf(char* buf, const char* src, size_t len) {
     memcpy(buf, src, len);
     return len;
 }
+
 size_t _feedLongLong(char *buf, long long ll) {
     size_t len = 0;
     len += sdsll2str(buf + len, ll);
