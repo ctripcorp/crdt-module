@@ -305,6 +305,7 @@ typedef struct zlentry {
     if ((encoding) < ZIP_STR_MASK) (encoding) &= ZIP_STR_MASK; \
 } while(0)
 
+
 /* Return bytes needed to store integer encoded by 'encoding'. */
 unsigned int zipIntSize(unsigned char encoding) {
     switch(encoding) {

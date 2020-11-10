@@ -33,8 +33,7 @@
 
 #define ZIPLIST_HEAD 0
 #define ZIPLIST_TAIL 1
-#include <redismodule.h>
-
+#include "../redismodule.h"
 #define zskiplist_malloc(size) RedisModule_Alloc(size)
 #define zskiplist_calloc(count) RedisModule_Calloc(count, 1)
 #define zskiplist_realloc(ptr, size) RedisModule_Realloc(ptr, size)

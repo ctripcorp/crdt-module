@@ -188,6 +188,7 @@
 #include "util.h"
 #include "endianconv.h"
 #include "redisassert.h"
+#include <assert.h>
 
 #define ZIP_END 255         /* Special "end of ziplist" entry. */
 #define ZIP_BIG_PREVLEN 254 /* Max number of bytes of the previous entry, for
@@ -576,7 +577,7 @@ void zipEntry(unsigned char *p, zlentry *e) {
 /* Create a new empty ziplist. */
 unsigned char *ziplistNew(void) {
     unsigned int bytes = ZIPLIST_HEADER_SIZE+1;
-    unsigned char *zl = zmalloc(bytes);
+    unsigned char *zl = zskiplist_malloc(bytes);
     ZIPLIST_BYTES(zl) = intrev32ifbe(bytes);
     ZIPLIST_TAIL_OFFSET(zl) = intrev32ifbe(ZIPLIST_HEADER_SIZE);
     ZIPLIST_LENGTH(zl) = 0;
@@ -586,7 +587,7 @@ unsigned char *ziplistNew(void) {
 
 /* Resize the ziplist. */
 unsigned char *ziplistResize(unsigned char *zl, unsigned int len) {
-    zl = zrealloc(zl,len);
+    zl = zskiplist_realloc(zl,len);
     ZIPLIST_BYTES(zl) = intrev32ifbe(len);
     zl[len-1] = ZIP_END;
     return zl;
@@ -902,7 +903,7 @@ unsigned char *ziplistMerge(unsigned char **first, unsigned char **second) {
     size_t second_offset = intrev32ifbe(ZIPLIST_TAIL_OFFSET(*second));
 
     /* Extend target to new zlbytes then append or prepend source. */
-    target = zrealloc(target, zlbytes);
+    target = zskiplist_realloc(target, zlbytes);
     if (append) {
         /* append == appending to target */
         /* Copy source after target (copying over original [END]):
@@ -941,11 +942,11 @@ unsigned char *ziplistMerge(unsigned char **first, unsigned char **second) {
 
     /* Now free and NULL out what we didn't realloc */
     if (append) {
-        zfree(*second);
+        zskiplist_free(*second);
         *second = NULL;
         *first = target;
     } else {
-        zfree(*first);
+        zskiplist_free(*first);
         *first = NULL;
         *second = target;
     }

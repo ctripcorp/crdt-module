@@ -22,3 +22,7 @@ typedef struct zskiplist {
 } zskiplist;
 
 zskiplist *zslCreate(void);
+zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele);
+void zslFreeNode(zskiplistNode *node);
+int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node);
+void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update);

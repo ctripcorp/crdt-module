@@ -56,7 +56,7 @@ typedef struct {
 typedef struct {
     int gid;
     unsigned long long start_clock: 60;
-    unsigned long long type: 1; //integer, float
+    unsigned long long type: 1; //integer, float, double
     unsigned long long opt: 3; // optional bytes for further use
     long long end_clock;
     union {
@@ -64,8 +64,7 @@ typedef struct {
         long double f;
     }conv;
 } gcounter_meta;
-#define get_int_counter(gcounter) (counter->conv.i)
-#define get_float_counter(gcounter) (counter->conv.f)
+
 
 void* createGcounter(int type);
 gcounter* dupGcounter(gcounter* g);
@@ -88,4 +87,6 @@ int counter_del(gcounter* target, gcounter* src);
 //================ utils ==================
 void setCounterType(gcounter* gcounter, int type);
 int getCounterType(gcounter* gcounter);
+
+
 #endif //CRDT_MODULE_CRDT_G_COUNTER_H

@@ -207,7 +207,6 @@ int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g) {
         g->conv.i = ll;
     } else if(val_type == VALUE_TYPE_FLOAT) {
         long double ld = *(long double*)(value);
-        printf("???? %.17Lf\n", ld);
         g->conv.f = ld;
     }
     return 1;
@@ -292,6 +291,8 @@ void setCounterType(gcounter* gcounter, int type) {
     
 }
 
+
+
 int getCounterType(gcounter* gcounter) {
     return (int)gcounter->type;
 }
@@ -303,7 +304,8 @@ int getCounterType(gcounter* gcounter) {
 
 #include "../tests/testhelp.h"
 #include "limits.h"
-
+#define get_int_counter(gcounter) (gcounter->conv.i)
+#define get_float_counter(gcounter) (gcounter->conv.f)
 int testBasicGcounter(void) {
     printf("========[testBasicGcounter]==========\r\n");
 

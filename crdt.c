@@ -41,6 +41,7 @@
 #include "ctrip_crdt_common.h"
 #include "crdt_statistics.h"
 #include "crdt_set.h"
+#include "ctrip_crdt_zset.h"
 #include <stdlib.h>
 #include <stdio.h>
 #define CRDT_API_VERSION 1
@@ -262,6 +263,8 @@ CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
             return &SetDataMethod;
         case CRDT_RC_TYPE:
             return &RcDataMethod;
+        case CRDT_ZSET_TYPE:
+            return &ZSetDataMethod;
         default:
             return NULL;
     }
