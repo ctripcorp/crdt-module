@@ -41,6 +41,7 @@
 #include "include/rmutil/dict.h"
 #include "crdt_statistics.h"
 #include "ctrip_crdt_expire.h"
+#include <string.h>
 /**
  * ==============================================Pre-defined functions=========================================================*/
 
@@ -362,7 +363,11 @@ const size_t crdt_mset_basic_str_len = REPLICATION_ARGC_LEN + 15 + REPLICATION_M
 int replicationFeedCrdtMSetCommand(RedisModuleCtx *ctx, RedisModuleString** argv, char *cmdbuf, CrdtMeta* mset_meta, int argc, CRDT_Register** vals, const char**datas, size_t* datalens) {
     size_t cmdlen = 0;
     cmdlen += feedArgc(cmdbuf + cmdlen, argc * 3  + 3);
-    cmdlen += feedBuf(cmdbuf + cmdlen, crdt_mset_head);
+    static size_t crdt_mset_head_str_len = 0;
+    if(crdt_mset_head_str_len == 0) {
+        crdt_mset_head_str_len = strlen(crdt_mset_head);
+    }
+    cmdlen += feedBuf(cmdbuf + cmdlen, crdt_mset_head, crdt_mset_head_str_len);
     cmdlen += feedGid2Buf(cmdbuf+ cmdlen, getMetaGid(mset_meta));
     cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, getMetaTimestamp(mset_meta));
     for(int i = 0, len = argc; i < len; i+=1) {
@@ -430,7 +435,7 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         meta.gid = gid;
         meta.timestamp = timestamp;
         meta.vectorClock = vclock;
-        current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, &meta, argv[1], RedisModule_GetSds(argv[i+1]));
+        current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, &meta, argv[i], RedisModule_GetSds(argv[i+1]));
         RedisModule_MergeVectorClock(gid, VC2LL(meta.vectorClock));
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
         RedisModule_CloseKey(moduleKey);
