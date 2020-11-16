@@ -609,7 +609,45 @@ int zrevrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
     return genericZrangebylexCommand(ctx,argv, argc, 1);
 }
 
+int zlexcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    zlexrangespec range;
+    int count = 0;
+    /* Parse the range arguments */
+    if (!zslParseLexRange(RedisModule_GetSds(argv[2]),RedisModule_GetSds(argv[3]),&range)) {
+        return RedisModule_ReplyWithError(ctx,"min or max not valid string range item");
+    }
+    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+    if(moduleKey == NULL) {
+        zslFreeLexRange(&range);
+        return 1;
+    }
+    CRDT_SS* current = getCurrentValue(moduleKey);
 
+    zskiplistNode *zn;
+    unsigned long rank;
+
+    /* Find first element in range */
+    zn = zslInLexRange(current, &range, 0);
+    crdt_zset* zset = (crdt_zset*)current;
+    size_t length = getZSetSize(current);
+
+    /* Use rank of first element, if any, to determine preliminary count */
+    if (zn != NULL) {
+        rank = zslGetRank(zset->zsl, zn->score, zn->ele);
+        count = (length - (rank - 1));
+
+        /* Find last element in range */
+        zn = zslInLexRange(current, &range, 1);
+
+        /* Use rank of last element, if any, to determine the actual count */
+        if (zn != NULL) {
+            rank = zslGetRank(zset->zsl, zn->score, zn->ele);
+            count -= (length - rank);
+        }
+    }
+    zslFreeLexRange(&range);
+    return RedisModule_ReplyWithLongLong(ctx, count);
+}
 
 int initCrdtSSModule(RedisModuleCtx *ctx) {
     initZsetShard();
@@ -680,6 +718,9 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zrevrangebylex",
                                 zrevrangebylexCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "zlexcount",
+                                zlexcountCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
