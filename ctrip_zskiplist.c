@@ -1,6 +1,9 @@
 /* Create a new skiplist. */
 #include "ctrip_zskiplist.h"
+#include "assert.h"
 #include <stdlib.h>
+#include <string.h>
+#include <math.h>
 /* Create a skiplist node with the specified number of levels.
  * The SDS string 'ele' is referenced by the node after the call. */
 zskiplistNode *zslCreateNode(int level, double score, sds ele) {
@@ -164,4 +167,297 @@ void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     while(zsl->level > 1 && zsl->header->level[zsl->level-1].forward == NULL)
         zsl->level--;
     zsl->length--;
+}
+
+
+int zslValueGteMin(double value, zrangespec *spec) {
+    return spec->minex ? (value > spec->min) : (value >= spec->min);
+}
+
+int zslValueLteMax(double value, zrangespec *spec) {
+    return spec->maxex ? (value < spec->max) : (value <= spec->max);
+}
+
+
+/* Populate the rangespec according to the objects min and max. */
+int zslParseRange(sds min, sds max, zrangespec *spec) {
+    char *eptr;
+    spec->minex = spec->maxex = 0;
+    long long m = 0;
+    /* Parse the min-max interval. If one of the values is prefixed
+     * by the "(" character, it's considered "open". For instance
+     * ZRANGEBYSCORE zset (1.5 (2.5 will match min < x < max
+     * ZRANGEBYSCORE zset 1.5 2.5 will instead match min <= x <= max */
+    if (string2ll(min, sdslen(min), &m)) {
+        spec->min = m;
+    } else {
+        if (((char*)min)[0] == '(') {
+            spec->min = strtod((char*)min+1,&eptr);
+            if (eptr[0] != '\0' || isnan(spec->min)) return 0;
+            spec->minex = 1;
+        } else {
+            spec->min = strtod((char*)min,&eptr);
+            if (eptr[0] != '\0' || isnan(spec->min)) return 0;
+        }
+    }
+    
+    if (string2ll(max, sdslen(max), &m)) {
+        spec->max = m;
+    } else {
+        if (((char*)max)[0] == '(') {
+            spec->max = strtod((char*)max+1,&eptr);
+            if (eptr[0] != '\0' || isnan(spec->max)) return 0;
+            spec->maxex = 1;
+        } else {
+            spec->max = strtod((char*)max,&eptr);
+            if (eptr[0] != '\0' || isnan(spec->max)) return 0;
+        }
+    }
+
+    return 1;
+}
+
+/* Find the last node that is contained in the specified range.
+ * Returns NULL when no element is contained in the range. */
+zskiplistNode *zslLastInRange(zskiplist *zsl, zrangespec *range) {
+    zskiplistNode *x;
+    int i;
+
+    /* If everything is out of range, return early. */
+    if (!zslIsInRange(zsl,range)) return NULL;
+
+    x = zsl->header;
+    for (i = zsl->level-1; i >= 0; i--) {
+        /* Go forward while *IN* range. */
+        while (x->level[i].forward &&
+            zslValueLteMax(x->level[i].forward->score,range))
+                x = x->level[i].forward;
+    }
+
+    /* This is an inner range, so this node cannot be NULL. */
+    assert(x != NULL);
+
+    /* Check if score >= min. */
+    if (!zslValueGteMin(x->score,range)) return NULL;
+    return x;
+}
+
+
+/* Find the first node that is contained in the specified range.
+ * Returns NULL when no element is contained in the range. */
+zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec *range) {
+    zskiplistNode *x;
+    int i;
+
+    /* If everything is out of range, return early. */
+    if (!zslIsInRange(zsl,range)) return NULL;
+
+    x = zsl->header;
+    for (i = zsl->level-1; i >= 0; i--) {
+        /* Go forward while *OUT* of range. */
+        while (x->level[i].forward &&
+            !zslValueGteMin(x->level[i].forward->score,range))
+                x = x->level[i].forward;
+    }
+
+    /* This is an inner range, so the next node cannot be NULL. */
+    x = x->level[0].forward;
+    assert(x != NULL);
+
+    /* Check if score <= max. */
+    if (!zslValueLteMax(x->score,range)) return NULL;
+    return x;
+}
+
+/* Find the rank for an element by both score and key.
+ * Returns 0 when the element cannot be found, rank otherwise.
+ * Note that the rank is 1-based due to the span of zsl->header to the
+ * first element. */
+unsigned long zsetGetRank(zskiplist* zsl, double score, sds ele) {
+    zskiplistNode *x;
+    unsigned long rank = 0;
+    int i;
+
+    x = zsl->header;
+    for (i = zsl->level-1; i >= 0; i--) {
+        while (x->level[i].forward &&
+            (x->level[i].forward->score < score ||
+                (x->level[i].forward->score == score &&
+                sdscmp(x->level[i].forward->ele,ele) <= 0))) {
+            rank += x->level[i].span;
+            x = x->level[i].forward;
+        }
+
+        /* x might be equal to zsl->header, so test if obj is non-NULL */
+        if (x->ele && sdscmp(x->ele,ele) == 0) {
+            return rank;
+        }
+    }
+    return 0;
+}
+
+
+/* Parse max or min argument of ZRANGEBYLEX.
+  * (foo means foo (open interval)
+  * [foo means foo (closed interval)
+  * - means the min string possible
+  * + means the max string possible
+  *
+  * If the string is valid the *dest pointer is set to the redis object
+  * that will be used for the comparision, and ex will be set to 0 or 1
+  * respectively if the item is exclusive or inclusive. C_OK will be
+  * returned.
+  *
+  * If the string is not a valid range C_ERR is returned, and the value
+  * of *dest and *ex is undefined. */
+int zslParseLexRangeItem(sds value, sds *dest, int *ex) {
+    char *c = value;
+
+    switch(c[0]) {
+    case '+':
+        if (c[1] != '\0') return 0;
+        *ex = 1;
+        *dest = zset_shared.maxstring;
+        return 1;
+    case '-':
+        if (c[1] != '\0') return 0;
+        *ex = 1;
+        *dest = zset_shared.minstring;
+        return 1;
+    case '(':
+        *ex = 1;
+        *dest = sdsnewlen(c+1,sdslen(c)-1);
+        return 1;
+    case '[':
+        *ex = 0;
+        *dest = sdsnewlen(c+1,sdslen(c)-1);
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+/* Populate the lex rangespec according to the objects min and max.
+ *
+ * Return C_OK on success. On error C_ERR is returned.
+ * When OK is returned the structure must be freed with zslFreeLexRange(),
+ * otherwise no release is needed. */
+int zslParseLexRange(sds min, sds max, zlexrangespec *spec) {
+    /* The range can't be valid if objects are integer encoded.
+     * Every item must start with ( or [. */
+
+    spec->min = spec->max = NULL;
+    if (!zslParseLexRangeItem(min, &spec->min, &spec->minex) ||
+        !zslParseLexRangeItem(max, &spec->max, &spec->maxex)) {
+        zslFreeLexRange(spec);
+        return 0;
+    } else {
+        return 1;
+    }
+}
+
+/* This is just a wrapper to sdscmp() that is able to
+ * handle shared.minstring and shared.maxstring as the equivalent of
+ * -inf and +inf for strings */
+int sdscmplex(sds a, sds b) {
+    if (a == b) return 0;
+    if (a == zset_shared.minstring || b == zset_shared.maxstring) return -1;
+    if (a == zset_shared.maxstring || b == zset_shared.minstring) return 1;
+    return sdscmp(a,b);
+}
+
+
+int zslLexValueGteMin(sds value, zlexrangespec *spec) {
+    return spec->minex ?
+        (sdscmplex(value,spec->min) > 0) :
+        (sdscmplex(value,spec->min) >= 0);
+}
+
+int zslLexValueLteMax(sds value, zlexrangespec *spec) {
+    return spec->maxex ?
+        (sdscmplex(value,spec->max) < 0) :
+        (sdscmplex(value,spec->max) <= 0);
+}
+
+
+/* Returns if there is a part of the zset is in the lex range. */
+int zslIsInLexRange(zskiplist *zsl, zlexrangespec *range) {
+    zskiplistNode *x;
+
+    /* Test for ranges that will always be empty. */
+    int cmp = sdscmplex(range->min,range->max);
+    if (cmp > 0 || (cmp == 0 && (range->minex || range->maxex)))
+        return 0;
+    x = zsl->tail;
+    if (x == NULL || !zslLexValueGteMin(x->ele,range))
+        return 0;
+    x = zsl->header->level[0].forward;
+    if (x == NULL || !zslLexValueLteMax(x->ele,range))
+        return 0;
+    return 1;
+}
+
+/* Find the first node that is contained in the specified lex range.
+ * Returns NULL when no element is contained in the range. */
+zskiplistNode *zslFirstInLexRange(zskiplist *zsl, zlexrangespec *range) {
+    zskiplistNode *x;
+    int i;
+
+    /* If everything is out of range, return early. */
+    if (!zslIsInLexRange(zsl,range)) return NULL;
+
+    x = zsl->header;
+    for (i = zsl->level-1; i >= 0; i--) {
+        /* Go forward while *OUT* of range. */
+        while (x->level[i].forward &&
+            !zslLexValueGteMin(x->level[i].forward->ele,range))
+                x = x->level[i].forward;
+    }
+
+    /* This is an inner range, so the next node cannot be NULL. */
+    x = x->level[0].forward;
+    assert(x != NULL);
+
+    /* Check if score <= max. */
+    if (!zslLexValueLteMax(x->ele,range)) return NULL;
+    return x;
+}
+
+/* Find the last node that is contained in the specified range.
+ * Returns NULL when no element is contained in the range. */
+zskiplistNode *zslLastInLexRange(zskiplist *zsl, zlexrangespec *range) {
+    zskiplistNode *x;
+    int i;
+
+    /* If everything is out of range, return early. */
+    if (!zslIsInLexRange(zsl,range)) return NULL;
+
+    x = zsl->header;
+    for (i = zsl->level-1; i >= 0; i--) {
+        /* Go forward while *IN* range. */
+        while (x->level[i].forward &&
+            zslLexValueLteMax(x->level[i].forward->ele,range))
+                x = x->level[i].forward;
+    }
+
+    /* This is an inner range, so this node cannot be NULL. */
+    assert(x != NULL);
+
+    /* Check if score >= min. */
+    if (!zslLexValueGteMin(x->ele,range)) return NULL;
+    return x;
+}
+
+/* Free a lex range structure, must be called only after zelParseLexRange()
+ * populated the structure with success (C_OK returned). */
+void zslFreeLexRange(zlexrangespec *spec) {
+    if (spec->min != zset_shared.minstring &&
+        spec->min != zset_shared.maxstring) sdsfree(spec->min);
+    if (spec->max != zset_shared.minstring &&
+        spec->max != zset_shared.maxstring) sdsfree(spec->max);
+}
+
+void initZsetShard() {
+    zset_shared.minstring = sdsnew("minstring");
+    zset_shared.maxstring = sdsnew("maxstring");
 }

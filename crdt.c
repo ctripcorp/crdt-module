@@ -298,6 +298,8 @@ CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
                 return &SetTombstoneCommonMethod;
             case CRDT_RC_TYPE:
                 return &RcTombstoneCommonMethod;
+            case CRDT_ZSET_TYPE:
+                return &ZsetTombstoneCommonMethod;
             default:
                 return NULL;
         }
