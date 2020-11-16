@@ -62,10 +62,13 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     int nx = (flags & ZADD_NX) != 0;
     int xx = (flags & ZADD_XX) != 0;
     int ch = (flags & ZADD_CH) != 0;
-    if((argc - scoreidx) % 2 != 0) {
+     /* After the options, we expect to have an even number of args, since
+     * we expect any number of score-element pairs. */
+    int elements = argc - scoreidx;
+    if(elements % 2 || !elements) {
         return RedisModule_ReplyWithError(ctx, "ERR syntax error");
     }
-    int elements = (argc - scoreidx)/2;
+    elements /= 2; /* Now this holds the number of score-element pairs. */
     if (nx && xx) {
         return RedisModule_ReplyWithError(ctx,
             "ERR XX and NX options at the same time are not compatible");
@@ -140,6 +143,13 @@ int zaddCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     return zaddGenericCommand(ctx, argv, argc, ZADD_NONE);
 }
 /**
+ * ZINCRBY <key> <score> <field>
+ */ 
+int zincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {    
+    if(argc != 4) {return RedisModule_WrongArity(ctx);}
+    return zaddGenericCommand(ctx, argv, argc, ZADD_INCR);
+}
+/**
  * ZSCORE <key> <field>
 */
 int zscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -172,38 +182,6 @@ int zcardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     } 
 end:
     return RedisModule_ReplyWithLongLong(ctx, result);
-}
-/**
- * ZINCRBY <key> <score> <field>
- */ 
-int zincrbyCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-     double result = 0;
-    if(argc != 4) { return RedisModule_WrongArity(ctx);}
-    CrdtMeta zadd_meta = {.gid = 0};
-    double score = 0;
-    if(RedisModule_StringToDouble(argv[2], &score) != REDISMODULE_OK) {
-        return RedisModule_ReplyWithError(ctx, "ERR value is not a valid float");
-    }
-    RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSS);
-    if(moduleKey == NULL) {
-        goto error;
-    }
-    CRDT_SS* current = getCurrentValue(moduleKey);
-    CrdtTombstone* tombstone = getTombstone(moduleKey);
-    if(tombstone != NULL && !isCrdtSSTombstone(tombstone) ) {
-        tombstone = NULL;
-    }
-    initIncrMeta(&zadd_meta);
-    if(current == NULL) {
-        current = create_crdt_zset();
-        RedisModule_ModuleTypeSetValue(moduleKey, CrdtSS, current);
-    } 
-    result = zsetIncr(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[3]), score);
-    RedisModule_ReplyWithDouble(ctx, result);
-error:
-    if(zadd_meta.gid != 0) freeIncrMeta(&zadd_meta);
-    if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
-    return REDISMODULE_OK;
 }
 
 
@@ -689,11 +667,20 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx,"zincrby",
                                   zincrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "zcount",
+                            zcountCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+    return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"ZRANGE",
                                   zrangeCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zrevrange",
                                   zrevrangeCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "zrangebyscore", 
+                                zrangebyscoreCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "zrevrangebyscore", 
+                                zrevrangebyscoreCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zrank",
                                   zrankCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
@@ -704,23 +691,23 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx, "zrem", 
                                   zremCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
-    if (RedisModule_CreateCommand(ctx, "zrangebyscore", 
-                                zrangebyscoreCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
-    if (RedisModule_CreateCommand(ctx, "zrevrangebyscore", 
-                                zrevrangebyscoreCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
-    if (RedisModule_CreateCommand(ctx, "zcount",
-                                zcountCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
+    // if (RedisModule_CreateCommand(ctx, "zremrangebyrank", 
+    //                               zremrangebyrankCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+    // if (RedisModule_CreateCommand(ctx, "zremrangebyscore", 
+    //                               zremrangebyscoreCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
+    //     return REDISMODULE_ERR;
+    
+    
     if (RedisModule_CreateCommand(ctx, "zrangebylex",
                                 zrangebylexCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
-    if (RedisModule_CreateCommand(ctx, "zrevrangebylex",
-                                zrevrangebylexCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zlexcount",
                                 zlexcountCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "zrevrangebylex",
+                                zrevrangebylexCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    
     return REDISMODULE_OK;
 }
