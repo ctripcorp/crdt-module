@@ -188,8 +188,7 @@ int tryUpdateCounter(CRDT_RC* rc, CRDT_RCTombstone* tom, int gid, long long time
     if(e->counter == NULL) {
         e->counter = createGcounter(type);
         e->counter->start_clock = start_clock;
-    } else {
-        assert(e->counter->start_clock == start_clock);
+    } else {  
         if(e->counter->type != type) {
             setCounterType(e->counter, type);
         }
@@ -501,7 +500,6 @@ int crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds* gs, CrdtTombstone* tomb
             freeBase(r->elements[i]->base);
             r->elements[i]->base = NULL;
         }
-        
         if(r->elements[i]->counter) {
             r->elements[i]->counter->del_end_clock = r->elements[i]->counter->end_clock;
             if(r->elements[i]->counter->type == VALUE_TYPE_FLOAT) {
@@ -515,7 +513,6 @@ int crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds* gs, CrdtTombstone* tomb
             }
         }
     }
-    
     if(added == 0) {
         rc_element* e =  createRcElement(gid);
         e->base = createRcElementBase();

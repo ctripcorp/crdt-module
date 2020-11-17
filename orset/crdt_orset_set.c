@@ -27,7 +27,7 @@ CRDT_ORSET_SET* retrieveCrdtORSETSet(void* t) {
         return NULL;
     }
     CRDT_ORSET_SET* result = (CRDT_ORSET_SET*)t;
-    assert(result->map != NULL);
+    assert(result->dict != NULL);
     return result;
 }
 CRDT_Set* createCrdtSet() {
@@ -684,7 +684,7 @@ VectorClock getCrdtSetTombstoneMaxDelVc(CRDT_SetTombstone* t) {
 int updateCrdtSetTombstoneMaxDel(CRDT_SetTombstone* t, VectorClock vc) {
     CRDT_ORSET_SETTOMBSTONE* tom = retrieveCrdtORSETSetTombstone(t);
     VectorClock now = vectorClockMerge(tom->maxDelvectorClock,vc);
-    return setCrdtSetTombstoneMaxDel((CRDT_SetTombstone*)tom, now);
+    return setCrdtSetTombstoneMaxDel(t, now);
 }
 
 

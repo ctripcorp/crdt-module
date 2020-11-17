@@ -88,14 +88,15 @@ void assign_max_rc_counter(gcounter* target, gcounter* src) {
             target->conv.i = src->conv.i;
         }
     } 
-    if(target->del_end_clock < src->del_end_clock) {
-        target->del_end_clock = src->del_end_clock;
-        if(target->type == VALUE_TYPE_FLOAT) {
-            target->del_conv.f = src->del_conv.f;
-        } else if(target->type == VALUE_TYPE_INTEGER) {
-            target->del_conv.i = src->del_conv.i;
-        }
-    }
+    update_del_counter(target, src);
+    // if(target->del_end_clock < src->del_end_clock) {
+    //     target->del_end_clock = src->del_end_clock;
+    //     if(target->type == VALUE_TYPE_FLOAT) {
+    //         target->del_conv.f = src->del_conv.f;
+    //     } else if(target->type == VALUE_TYPE_INTEGER) {
+    //         target->del_conv.i = src->del_conv.i;
+    //     }
+    // }
 }
 
 
@@ -215,6 +216,7 @@ int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g) {
 
 int update_del_counter(gcounter* target, gcounter* src) {
     if(target->del_end_clock < src->del_end_clock) {
+        target->del_end_clock = src->del_end_clock;
         if(src->type == VALUE_TYPE_FLOAT) {
             target->del_conv.f = src->del_conv.f;
         } else if(src->type == VALUE_TYPE_INTEGER) {
@@ -253,6 +255,7 @@ int update_del_counter_by_meta(gcounter* target, gcounter_meta* src) {
         } else if(src->type == VALUE_TYPE_INTEGER) {
             target->del_conv.i = src->conv.i;
         } else {
+            assert(1 == 0);
             return 0;
         }
     } else {

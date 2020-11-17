@@ -34,6 +34,8 @@
 #include "ctrip_crdt_register.h"
 #include "ctrip_crdt_expire.h"
 #include <strings.h>
+#include <limits.h>
+#include <math.h>
 
 //    util function
 int isCrdtRcTombstone(CrdtTombstone* tom) {
@@ -104,6 +106,7 @@ size_t replicationFeedCrdtRCCommand(RedisModuleCtx *ctx,char* cmdbuf, const char
     for(int i = 0; i < eslen; i++) {
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, del_strs[i], sdslen(del_strs[i]));
     }
+    // RedisModule_Debug(logLevel, "replicationFeedCrdtRCCommand: %s", cmdbuf);
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
@@ -231,6 +234,7 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     CRDT_RC* current = NULL;
     moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
     RedisModuleType* mtype= RedisModule_ModuleTypeGetType(moduleKey) ;
+    long long ll = 0;
     if (mtype == getCrdtRegister()) {
         RedisModule_ReplyWithError(ctx, "ERR value is not an integer or out of range");
         goto error;
@@ -248,16 +252,53 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         tom = NULL;
     }
     if (current == NULL) {
+        long long ll = 0;
+        if (RedisModule_String2LongLong(argv[2], &ll) == REDISMODULE_OK) {
+            type = VALUE_TYPE_INTEGER;
+            increment = &ll;
+        }
         current = createCrdtRc();
         initCrdtRcFromTombstone(current, tom);
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, current);
         RedisModule_DeleteTombstone(moduleKey);
     } else {
-        if(type == VALUE_TYPE_INTEGER && getCrdtRcType(current) != VALUE_TYPE_INTEGER) {
+        //check 
+        int data_value_type = getCrdtRcType(current);
+        if(type == VALUE_TYPE_INTEGER &&  data_value_type != VALUE_TYPE_INTEGER) {
             RedisModule_ReplyWithError(ctx, "ERR value is not an integer or out of range");
             goto error;
         }
+        if (data_value_type == VALUE_TYPE_INTEGER && type == VALUE_TYPE_FLOAT) {
+            if (RedisModule_String2LongLong(argv[2], &ll) == REDISMODULE_OK) {
+                type = VALUE_TYPE_INTEGER;
+                increment = &ll;
+            }
+        }
+        if(data_value_type == VALUE_TYPE_INTEGER && type == VALUE_TYPE_INTEGER) {
+            long long oldvalue = getCrdtRcIntValue(current);
+            long long incr = *(long long*)increment;
+            if ((incr < 0 && oldvalue < 0 && incr < (LLONG_MIN-oldvalue)) ||
+                (incr > 0 && oldvalue > 0 && incr > (LLONG_MAX-oldvalue))) {
+                RedisModule_ReplyWithError(ctx, "increment or decrement would overflow");
+                goto error;
+            }
+        }
+        if(type == VALUE_TYPE_FLOAT) {
+            long double ld = *(long double*)increment;
+            if(data_value_type == VALUE_TYPE_INTEGER) {
+                ld += getCrdtRcIntValue(current);
+            } else {
+                ld += getCrdtRcFloatValue(current);
+            }
+            if (isnan(ld) || isinf(ld)) {
+                RedisModule_ReplyWithError(ctx, "increment would produce NaN or Infinity");
+                goto error;
+            }
+        }   
+        
     }
+    
+    
     gcounter* g = addOrCreateCounter(current, &set_meta, type, increment);
     sds vc_info = vectorClockToSds(getMetaVectorClock(&set_meta));
     if (type == VALUE_TYPE_FLOAT) {
@@ -289,12 +330,15 @@ error:
 
 int incrbyfloatCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
-    long double increment = 0;
-    if ((RedisModule_StringToLongDouble(argv[2],&increment) != REDISMODULE_OK)) {
+    long double ld = 0;
+    if ((RedisModule_StringToLongDouble(argv[2],&ld) != REDISMODULE_OK)) {
         RedisModule_ReplyWithError(ctx,"ERR value is not an float or out of range");
         return 0;
+    } else {
+        return incrbyGenericCommand(ctx, argv, argc, VALUE_TYPE_FLOAT, &ld);
     }
-    return incrbyGenericCommand(ctx, argv, argc, VALUE_TYPE_FLOAT, &increment);
+    
+    
 }
 
 int incrbyCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -415,10 +459,13 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
         replicationCrdtRcCommand(ctx, key, val, &set_meta,rc, expire_time, len, gs);
         for(int i = 0; i < len; i++) {
-            RedisModule_Debug(logLevel, "free %s", RedisModule_GetSds(key));
             sdsfree(gs[i]);
         }
     } else if((tombstone && isCrdtRcTombstone(tombstone)) || (!tombstone && (val_type == VALUE_TYPE_INTEGER || val_type == VALUE_TYPE_FLOAT) )) {
+        if(val_type == VALUE_TYPE_SDS) { 
+            RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+            goto error;
+        }
         rc = createCrdtRc();
         if(tombstone) {
             appendVCForMeta(&set_meta, getCrdtRegisterTombstoneLastVc(tombstone));
@@ -430,7 +477,7 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
         replicationCrdtRcCommand(ctx, key, val, &set_meta, rc, expire_time, 0, NULL);
         if(tombstone) { RedisModule_DeleteTombstone(moduleKey);}
-    } else if((tombstone && isRegisterTombstone(tombstone)) || (!tombstone  && val_type == VALUE_TYPE_SDS)) {
+    } else if((tombstone && isRegisterTombstone(tombstone)) || (!tombstone)) {
         reg = createCrdtRegister();
         if(tombstone) {
             appendVCForMeta(&set_meta, getCrdtRegisterTombstoneLastVc(tombstone));
@@ -568,6 +615,7 @@ int CRDT_CounterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     //     goto end;
     // }
     moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtRC);
+    RedisModule_Debug(logLevel, "counter-7");
     if (moduleKey == NULL) {
         return 0;
     }   
@@ -575,32 +623,39 @@ int CRDT_CounterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     if(tombstone != NULL && !isCrdtRcTombstone(tombstone)) {
         tombstone = NULL;
     }
+    RedisModule_Debug(logLevel, "counter-8");
     CRDT_RC* rc = RedisModule_ModuleTypeGetValue(moduleKey);
     int need_add = 0;
     if(rc == NULL) {
         need_add = 1;
         rc = createCrdtRc();
     }
+    RedisModule_Debug(logLevel, "counter-9");
     int result = tryUpdateCounter(rc, tombstone, meta.gid, meta.timestamp, start_clock , end_clock, val_type, val_type == VALUE_TYPE_FLOAT? (void*)&ld: (void*)&l );
     if(result == PURGE_TOMBSTONE) {
+        RedisModule_Debug(logLevel, "counter-10-1");
         if(tombstone != NULL) {
             RedisModule_DeleteTombstone(moduleKey);
         }
         if(need_add) RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, rc);
     } else {
+        RedisModule_Debug(logLevel, "counter-10-2");
         if(need_add) {
             freeCrdtRc(rc);
         } else {
             RedisModule_DeleteKey(moduleKey);
         }
     }
+    RedisModule_Debug(logLevel, "counter-11");
     if(val_type == VALUE_TYPE_FLOAT) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrbyfloat", argv[1]);
     } else if(val_type == VALUE_TYPE_INTEGER) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrby", argv[1]);
     }
+    RedisModule_Debug(logLevel, "counter-12");
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
     status = CRDT_OK;
+    RedisModule_Debug(logLevel, "counter-13");
 end:
     RedisModule_CrdtReplicateVerbatim(meta.gid, ctx);
     if(meta.gid != 0) {
