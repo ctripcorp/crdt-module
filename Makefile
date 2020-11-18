@@ -62,7 +62,7 @@ ctrip_zskiplist.o:  ctrip_zskiplist.c
 	$(CC) $(CFLAGS) -c -o $@ ctrip_zskiplist.c
 ctrip_crdt_zset.o: ctrip_crdt_zset.c utils.c ctrip_zskiplist.o crdt_util.o crdt_statistics.o
 	$(CC) $(CFLAGS) -c -o $@ ctrip_crdt_zset.c
-crdt_orset_zset.o: orset/crdt_orset_zset.c ctrip_zskiplist.o  ctrip_crdt_zset.o crdt_util.o crdt_statistics.o
+crdt_orset_zset.o: orset/crdt_orset_zset.c ctrip_zskiplist.o  ctrip_crdt_zset.o crdt_util.o crdt_statistics.o 
 	$(CC) $(CFLAGS) -c -o $@ orset/crdt_orset_zset.c
 ctrip_rdt_expire.o:  ctrip_crdt_expire.c 
 	$(CC) $(CFLAGS) -c -o $@ ctrip_crdt_expire.c

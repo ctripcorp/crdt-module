@@ -302,7 +302,7 @@ CrdtObject** crdtRcTombstoneFilter(CrdtTombstone* target, int gid, long long log
 }
 
 void freeCrdtRcTombstoneFilter(CrdtTombstone** filters, int num) {
-    RedisModule_ZFree(filters);
+    RedisModule_Free(filters);
 }
 int comp_rc_tombstone_element(const void* a, const void* b) {
     return (*(rc_tombstone_element**)a)->gid > (*(rc_tombstone_element**)b)->gid? 1: 0;
@@ -1146,7 +1146,7 @@ CrdtObject** crdtRcFilter(CrdtObject* target, int gid, long long logic_time, lon
 }
 
 void freeRcFilter(CrdtObject** filters, int num) {
-    RedisModule_ZFree(filters);
+    RedisModule_Free(filters);
 }
 
 //======== info =======

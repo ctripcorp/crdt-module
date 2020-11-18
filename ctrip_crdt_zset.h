@@ -3,6 +3,7 @@
 #include "./ctrip_crdt_common.h"
 #include "./ctrip_zskiplist.h"
 #include "./gcounter/crdt_g_counter.h"
+#include "./include/rmutil/sds.h"
 
 /* Input flags. */
 #define ZADD_NONE 0
@@ -102,7 +103,7 @@ size_t crdtSSTMemUsageFunc(const void *value);
 void freeCrdtSST(void* ss);
 void crdtSSTDigestFunc(RedisModuleDigest *md, void *value);
 // functions
-int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* flags, double score, double* newscore);
+int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* flags, double score, double* newscore, sds* callback_items, int* callback_len, int* callback_byte_size);
 double zsetIncr(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, double score);
 sds zsetDel(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* stats);
 size_t getZSetSize(CRDT_SS* ss);
@@ -112,7 +113,10 @@ int incrTagCounter(CRDT_SS* current, CrdtMeta* zadd_meta, sds field, double scor
 double getScore(CRDT_SS* current, sds field);
 zskiplistNode* zset_get_zsl_element_by_rank(CRDT_SS* current, int reverse, long start);
 VectorClock getCrdtSSLastVc(CRDT_SS* data);
+void updateCrdtSSLastVc(CRDT_SS* data, VectorClock vc);
 zskiplistNode* zslInRange(CRDT_SS* current, zrangespec* range, int reverse);
 zskiplistNode* zslInLexRange(CRDT_SS* current, zrangespec* range, int reverse);
 int initSSTombstoneFromSS(CRDT_SSTombstone* tombstone,CrdtMeta* del_meta, CRDT_SS* value, sds* del_counters);
 zskiplist* zsetGetZsl(CRDT_SS* current);
+int zsetTryAdd(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMeta* meta, sds info);
+

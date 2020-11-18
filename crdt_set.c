@@ -446,12 +446,17 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     vectorClockToString(buf, getMetaVectorClock(&meta));
     RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Srem", "sllca", argv[1], getMetaGid(&meta),getMetaTimestamp(&meta), buf, fields, num);
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-    RedisModule_ReplyWithArray(ctx, num);
-    for(int i = 0; i < num; i++) {
-        sds field = fields[i];
-        RedisModule_ReplyWithStringBuffer(ctx, field, sdslen(field));
-        sdsfree(field);
+    if(num == 1) {
+        RedisModule_ReplyWithStringBuffer(ctx, fields[0], sdslen(fields[0]));
+    } else {
+        RedisModule_ReplyWithArray(ctx, num);
+        for(int i = 0; i < num; i++) {
+            sds field = fields[i];
+            RedisModule_ReplyWithStringBuffer(ctx, field, sdslen(field));
+            sdsfree(field);
+        }
     }
+    
     return CRDT_OK;
 }
 

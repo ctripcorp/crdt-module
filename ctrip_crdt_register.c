@@ -415,7 +415,6 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
         replicationCrdtRcCommand(ctx, key, val, &set_meta,rc, expire_time, len, gs);
         for(int i = 0; i < len; i++) {
-            RedisModule_Debug(logLevel, "free %s", RedisModule_GetSds(key));
             sdsfree(gs[i]);
         }
     } else if((tombstone && isCrdtRcTombstone(tombstone)) || (!tombstone && (val_type == VALUE_TYPE_INTEGER || val_type == VALUE_TYPE_FLOAT) )) {

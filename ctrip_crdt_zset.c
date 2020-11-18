@@ -2,9 +2,11 @@
 #include "util.h"
 #include "crdt_util.h"
 #include "include/rmutil/ziplist.h"
+#include "include/rmutil/sds.h"
 #include <assert.h>
 #include <math.h>
 #include <string.h>
+
 
 
 
@@ -28,7 +30,47 @@ int isCrdtSSTombstone(CrdtTombstone* tom) {
 /*-----------------------------------------------------------------------------
  * Sorted set commands
  *----------------------------------------------------------------------------*/
-int feedSendZaddCommand(RedisModuleCtx* ctx, CrdtMeta* meta, RedisModuleString **argv) {
+//crdt.zadd key gid time  vc  field <field score del_counter>
+const char* crdt_zadd_head = "$9\r\nCRDT.ZADD\r\n";
+
+int replicationFeedCrdtZaddCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta* meta, sds key, sds* callback, int callback_len) {
+    // sds vcSds = vectorClockToSds(getMetaVectorClock(meta));
+    // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.zadd", "sllca", key,  getMetaGid(set_meta), getMetaTimestamp(set_meta), vcSds, callback, callback_len);
+    // sdsfree(vcSds);
+    static size_t crdt_zadd_head_size = 0;
+    if(crdt_zadd_head_size == 0) {
+        crdt_zadd_head_size = strlen(crdt_zadd_head);
+    }
+
+    size_t cmdlen = 0;
+    cmdlen += feedArgc(cmdbuf + cmdlen, callback_len + 5);
+    cmdlen += feedBuf(cmdbuf + cmdlen, crdt_zadd_head);
+    // cmdlen += feedBuf(cmdbuf + cmdlen, crdt_zadd_head, crdt_zadd_head_size);
+    cmdlen += feedStr2Buf(cmdbuf + cmdlen, key, sdslen(key));
+    cmdlen += feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(meta), getMetaTimestamp(meta), getMetaVectorClock(meta));
+    for(int i = 0; i<callback_len; i++) {
+        cmdlen += feedStr2Buf(cmdbuf + cmdlen, callback[i], sdslen(callback[i]));
+        sdsfree(callback[i]);
+    }
+    RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
+    return cmdlen;
+}
+int replicationCrdtZaddCommand(RedisModuleCtx* ctx, CrdtMeta* meta, sds key, sds* callback, int callback_len, int callback_byte_size) {
+    size_t alllen = strlen(crdt_zadd_head)  
+    + (callback_len + 1) * (REPLICATION_MAX_LONGLONG_LEN + 2) 
+    + callback_byte_size ;
+    if(alllen > MAXSTACKSIZE) {
+        char* cmdbuf = RedisModule_Alloc(alllen);
+        replicationFeedCrdtZaddCommand(ctx, cmdbuf, meta, key, callback, callback_len);
+        RedisModule_Free(cmdbuf);
+    } else {
+        char cmdbuf[alllen]; 
+        replicationFeedCrdtZaddCommand(ctx, cmdbuf, meta, key, callback, callback_len);
+    }
+    return 1;
+}
+
+int feedSendZincrCommand(RedisModuleCtx* ctx, CrdtMeta* meta, RedisModuleString **argv, sds* callback, size_t len) {
     return 1;
 }
 
@@ -69,6 +111,9 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
         return RedisModule_ReplyWithError(ctx, "ERR syntax error");
     }
     elements /= 2; /* Now this holds the number of score-element pairs. */
+    sds callback_items[elements*2];
+    int callback_len = 0;
+    int callback_byte_size = 0;
     if (nx && xx) {
         return RedisModule_ReplyWithError(ctx,
             "ERR XX and NX options at the same time are not compatible");
@@ -81,7 +126,6 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     // double scores[elements];
     for(int i = 0; i < elements; i+=1) {
         if(RedisModule_StringToDouble(argv[i * 2 + scoreidx], &scores[i]) != REDISMODULE_OK) {
-            // RedisModule_WrongArity(ctx);
             return RedisModule_ReplyWithError(ctx, "ERR value is not a valid float");
         }
     }
@@ -101,10 +145,12 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
         current = create_crdt_zset();
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtSS, current);
     } 
+    
+    appendVCForMeta(&zadd_meta, getCrdtSSLastVc(current));
     for(int i = 0; i < elements; i++) {
         int retflags = flags;
         score = scores[i];
-        int retval = zsetAdd(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[i*2 + scoreidx + 1]), &retflags, score, &newscore);
+        int retval = zsetAdd(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[i*2 + scoreidx + 1]), &retflags, score, &newscore, callback_items, &callback_len, &callback_byte_size);
         if (retval == 0) {
             RedisModule_ReplyWithError(ctx, nanerr);
             goto cleanup;
@@ -114,8 +160,13 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
         if (!(retflags & ZADD_NOP)) processed++;
         score = newscore;
     }
+    updateCrdtSSLastVc(current, getMetaVectorClock(&zadd_meta));
     // sds vc_info = vectorClockToSds(getMetaVectorClock(&zadd_meta));
-    feedSendZaddCommand(ctx, &zadd_meta, argv);
+    if (incr) {
+        feedSendZincrCommand(ctx, &zadd_meta, RedisModule_GetSds(argv[1]), callback_items, callback_len);
+    } else {
+        replicationCrdtZaddCommand(ctx, &zadd_meta, RedisModule_GetSds(argv[1]), callback_items, callback_len, callback_byte_size);
+    }
     // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.zadd", "sllc", argv[1], getMetaGid(&zadd_meta), getMetaTimestamp(&zadd_meta), vc_info);
     
     // RedisModule_ReplyWithLongLong(ctx, result);
@@ -142,12 +193,66 @@ cleanup:
 int zaddCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     return zaddGenericCommand(ctx, argv, argc, ZADD_NONE);
 }
+
 /**
  * ZINCRBY <key> <score> <field>
  */ 
 int zincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {    
     if(argc != 4) {return RedisModule_WrongArity(ctx);}
     return zaddGenericCommand(ctx, argv, argc, ZADD_INCR);
+}
+
+//crdt.zadd key gid time vc  field <score del_counter> 
+int crdtZaddCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
+    if (argc < 7 || argc % 2 == 0) return RedisModule_WrongArity(ctx);
+    RedisModule_Debug(logLevel, "key: %s, field: %s, v: %s", RedisModule_GetSds(argv[1]), RedisModule_GetSds(argv[1]),RedisModule_GetSds(argv[1]));
+    CrdtMeta meta = {.gid = 0};
+    int status = CRDT_OK;
+    if (readMeta(ctx, argv, 2, &meta) != CRDT_OK) {
+        return 0;
+    }
+    RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSS);
+    if(moduleKey == NULL) {
+        RedisModule_IncrCrdtConflict(TYPECONFLICT | MODIFYCONFLICT);
+        status = CRDT_ERROR;
+        goto end;
+    }
+    CrdtTombstone* tombstone = getTombstone(moduleKey);
+    if(tombstone != NULL && !isCrdtSSTombstone(tombstone)) {
+        tombstone = NULL;
+    }
+    CRDT_SS* current = getCurrentValue(moduleKey);
+    if(current == NULL) {
+        current = create_crdt_zset();
+        RedisModule_ModuleTypeSetValue(moduleKey, CrdtSS, current);
+    } 
+    int result = 0;
+    for(int i = 5; i < argc; i += 2) {
+        sds field = RedisModule_GetSds(argv[i]);
+        sds info = RedisModule_GetSds(argv[i+1]);
+        // dictEntry* de = findSetDict(current, field);
+        result += zsetTryAdd(current, tombstone, field, &meta, info);
+    }
+    if(result == 0 && getZSetSize(current) == 0) {
+        RedisModule_DeleteTombstone(moduleKey);
+    } else {
+        updateCrdtSSLastVc(current, getMetaVectorClock(&meta));
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "zadd", argv[1]);
+    }
+    RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
+    
+end:
+    if (meta.gid != 0) {
+        RedisModule_CrdtReplicateVerbatim(getMetaGid(&meta), ctx);
+        freeVectorClock(meta.vectorClock);
+    }
+    if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
+    // sds cmdname = RedisModule_GetSds(argv[0]);
+    if(status == CRDT_OK) {
+        return RedisModule_ReplyWithOk(ctx); 
+    }else{
+        return CRDT_ERROR;
+    }
 }
 /**
  * ZSCORE <key> <field>
@@ -655,9 +760,9 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx,"zadd",
                                   zaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
-    // if (RedisModule_CreateCommand(ctx,"CRDT.zadd",
-    //                               CRDT_ZaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
-    //     return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"CRDT.zadd",
+                                  crdtZaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"ZSCORE",
                                   zscoreCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;

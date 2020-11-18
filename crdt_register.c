@@ -406,6 +406,7 @@ int replicationFeedCrdtMSetCommand(RedisModuleCtx *ctx, RedisModuleString** argv
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
+
 int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 6) return RedisModule_WrongArity(ctx);
     if (argc % 3 != 0) return RedisModule_WrongArity(ctx);
@@ -572,8 +573,8 @@ CRDT_Register* addRegister(void *data, CrdtMeta* meta, sds value) {
 }
 
 void freeRegisterFilter(CrdtObject** filters, int num) {
-    RedisModule_ZFree(filters);
+    RedisModule_Free(filters);
 }
 void freeRegisterTombstoneFilter(CrdtObject** filters, int num) {
-    RedisModule_ZFree(filters);
+    RedisModule_Free(filters);
 }

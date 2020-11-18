@@ -24,7 +24,7 @@
 /* Flags only used by the ZADD command but not by zsetAdd() API: */
 #define ZADD_CH (1<<16)      /* Return num of elements added or updated. */
 
-
+#define DEL_TIME -1
 //tag = tag* when len = 1
 //tag = tag** when len > 1
 typedef struct crdt_zset_element

@@ -175,7 +175,7 @@ void *RdbLoadCrdtORSETSet(RedisModuleIO *rdb, int version, int encver) {
         VectorClock vc = rdbLoadVectorClock(rdb, version);
         /* Add pair to hash table */
         dictAddVectorClock(map, field, vc);
-        RedisModule_ZFree(str);
+        RedisModule_Free(str);
     }
     return set;
 }
@@ -336,7 +336,7 @@ void *RdbLoadCrdtORSETSetTombstone(RedisModuleIO *rdb, int version, int encver) 
         VectorClock vc = rdbLoadVectorClock(rdb, version);
         /* Add pair to hash table */
         dictAddVectorClock(map, field, vc);
-        RedisModule_ZFree(str);
+        RedisModule_Free(str);
     }
     setCrdtSetTombstoneMaxDel((CRDT_SetTombstone*)tom, maxdel);
     setCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom, lastvc);
