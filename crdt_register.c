@@ -304,8 +304,6 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
         current = createCrdtRegister();
         crdtRegisterSetValue(current, meta, value);
         RedisModule_ModuleTypeSetValue(moduleKey, getCrdtRegister(), current);
-        //delete different tombstone
-        RedisModule_DeleteTombstone(moduleKey);
     }else{
         if(!isRegister(current)) {
             RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
