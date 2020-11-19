@@ -226,7 +226,6 @@ size_t replicationFeedCrdtHsetCommand(RedisModuleCtx *ctx,char* cmdbuf,const cha
 }
 //hset key f1 v2 f2 v2 ..
 int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    // RedisModule_AutoMemory(ctx);
     if (argc < 4) return RedisModule_WrongArity(ctx);
     if ((argc % 2) == 1) {
         return RedisModule_WrongArity(ctx);
@@ -308,7 +307,6 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         fieldAndValStrLen[i-1] = valstrlen;
         fieldAndValAllStrLen += fieldstrlen + valstrlen + 2 * REPLICATION_MAX_STR_LEN;
     }
-
     setCrdtHashLastVc(current, getMetaVectorClock(&meta));
     #if defined(HSET_STATISTICS) 
         send_event_start();

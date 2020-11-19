@@ -88,14 +88,7 @@ void assign_max_rc_counter(gcounter* target, gcounter* src) {
             target->conv.i = src->conv.i;
         }
     } 
-    if(target->del_end_clock < src->del_end_clock) {
-        target->del_end_clock = src->del_end_clock;
-        if(target->type == VALUE_TYPE_FLOAT) {
-            target->del_conv.f = src->del_conv.f;
-        } else if(target->type == VALUE_TYPE_INTEGER) {
-            target->del_conv.i = src->del_conv.i;
-        }
-    }
+    update_del_counter(target, src);
 }
 
 
@@ -106,7 +99,6 @@ void* createGcounterMeta(int type) {
     gcounter_meta *counter = RedisModule_Alloc(sizeof(gcounter_meta));
 #endif
     counter->type = type;
-    // counter->logic_clock = 0;
     counter->conv.i = 0;
     counter->conv.f = 0;
     counter->start_clock = 0;
@@ -125,12 +117,6 @@ void freeGcounterMeta(void *counter) {
 
 sds gcounterDelStatusToSds(int gid, gcounter* c) {
     sds str = sdsempty();
-    // if(c->type == VALUE_TYPE_INTEGER) {
-        
-    // } else if(c->type == VALUE_TYPE_FLOAT) {
-    //     str = sdscatprintf(str, "%d:%lld:%lld:%.17Lf", gid, c->start_clock, c->del_end_clock, c->del_conv.f);
-    // }
-    //
     str = sdscatprintf(str, "%d:%lld:%lld:%zu", gid, c->start_clock, c->del_end_clock, (size_t)c->type);
     return str;
 }
@@ -138,7 +124,6 @@ sds gcounterDelStatusToSds(int gid, gcounter* c) {
 sds gcounterDelValueToSds(gcounter* c) {
     sds str = NULL;
     if(c->type == VALUE_TYPE_FLOAT) {
-        printf("del value float: %.17Lf\n", c->del_conv.f);
         long double f = (c->del_conv.f);
         str = sdsnewlen((char*)&f, sizeof(long double));
     } else if(c->type == VALUE_TYPE_INTEGER){
@@ -157,16 +142,6 @@ long long getGcounterStartClock(gcounter* target) {
     return target->start_clock;
 }
 
-// gcounter_meta* sdsTogcounterMeta(sds str, sds value) {
-//     gcounter_meta* g = createGcounterMeta(0);
-//     int result = gcounterMetaFromSds(str,value, g);
-//     if(result == 0) {
-//         freeGcounterMeta(g);
-//         return NULL;
-//     }
-//     return g;
-// }
-
 int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g) {
     int num;
     sds *vals = sdssplitlen(str, sdslen(str), ":", 1, &num);
@@ -174,17 +149,10 @@ int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g) {
         return 0;
     }
     long long val_type = -1;
-    // long long val_type = -1;
     
     if(!string2ll(vals[num-1], sdslen(vals[num - 1]), &val_type)) {
         return 0;
     }
-    // val_type = VALUE_TYPE_INTEGER;
-    // } else if(string2ld(vals[num -1], sdslen(vals[num - 1]), &ld)) {
-    //     val_type = VALUE_TYPE_FLOAT;
-    // } else {
-    //     return 0;
-    // } 
     long long gid = 0;
     if(!string2ll(vals[0], sdslen(vals[0]), &gid)) {
         return 0;
@@ -207,7 +175,6 @@ int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g) {
         g->conv.i = ll;
     } else if(val_type == VALUE_TYPE_FLOAT) {
         long double ld = *(long double*)(value);
-        printf("???? %.17Lf\n", ld);
         g->conv.f = ld;
     }
     return 1;
@@ -215,6 +182,7 @@ int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g) {
 
 int update_del_counter(gcounter* target, gcounter* src) {
     if(target->del_end_clock < src->del_end_clock) {
+        target->del_end_clock = src->del_end_clock;
         if(src->type == VALUE_TYPE_FLOAT) {
             target->del_conv.f = src->del_conv.f;
         } else if(src->type == VALUE_TYPE_INTEGER) {

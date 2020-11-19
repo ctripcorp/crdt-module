@@ -189,7 +189,6 @@ int tryUpdateCounter(CRDT_RC* rc, CRDT_RCTombstone* tom, int gid, long long time
         e->counter = createGcounter(type);
         e->counter->start_clock = start_clock;
     } else {
-        assert(e->counter->start_clock == start_clock);
         if(e->counter->type != type) {
             setCounterType(e->counter, type);
         }
@@ -240,7 +239,6 @@ gcounter*  addOrCreateCounter(CRDT_RC* rc,  CrdtMeta* meta, int type, void* val)
             assert(1 == 0);
         }
     }
-    
     crdtRcUpdateLastVC(rc, getMetaVectorClock(meta));
     return e->counter;
 }

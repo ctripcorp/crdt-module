@@ -447,11 +447,16 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     vectorClockToString(buf, getMetaVectorClock(&meta));
     RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Srem", "sllca", argv[1], getMetaGid(&meta),getMetaTimestamp(&meta), buf, fields, num);
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-    RedisModule_ReplyWithArray(ctx, num);
-    for(int i = 0; i < num; i++) {
-        sds field = fields[i];
-        RedisModule_ReplyWithStringBuffer(ctx, field, sdslen(field));
-        sdsfree(field);
+    if(num == 1) {
+        RedisModule_ReplyWithStringBuffer(ctx, fields[0], sdslen(fields[0]));
+        sdsfree(fields[0]);
+    } else if(num > 1) {
+        RedisModule_ReplyWithArray(ctx, num);
+        for(int i = 0; i < num; i++) {
+            sds field = fields[i];
+            RedisModule_ReplyWithStringBuffer(ctx, field, sdslen(field));
+            sdsfree(field);
+        }
     }
     return CRDT_OK;
 }
@@ -695,6 +700,10 @@ int crdtDelSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         tombstone = retrieveCrdtSetTombstone(t);
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
+    if(current == NULL) {
+        goto end;
+    }
+
     if(tombstone == NULL) {
         tombstone = createCrdtSetTombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
@@ -706,6 +715,8 @@ int crdtDelSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     updateCrdtSetTombstoneLastVc(tombstone, getMetaVectorClock(&meta));
     if(getSetDictSize(current) == 0) {
         RedisModule_DeleteKey(moduleKey);
+    } else {
+        updateCrdtSetLastVcuByVectorClock(current, getMetaGid(&meta), getMetaVectorClock(&meta));
     }
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
 
