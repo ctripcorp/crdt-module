@@ -53,17 +53,20 @@ void* createGcounter(int type) {
     counter->del_end_clock = 0;
     return counter;
 }
-
+#define VALUE_TYPE_LONGLONG 0
+#define VALUE_TYPE_LONGDOUBLE   1
+#define VALUE_TYPE_DOUBLE     2
+#define VALUE_TYPE_SDS 3
 gcounter* dupGcounter(gcounter* g) {
     if(g == NULL) { return g; }
     gcounter* dup = createGcounter(g->type);
     dup->start_clock = g->start_clock;
     dup->end_clock = g->end_clock;
     dup->del_end_clock = g->del_end_clock;
-    if(g->type == VALUE_TYPE_FLOAT) {
+    if(g->type == VALUE_TYPE_LONGDOUBLE) {
         dup->conv.f = g->conv.f;
         dup->del_conv.f = g->del_conv.f;
-    } else if(g->type == VALUE_TYPE_INTEGER) {
+    } else if(g->type == VALUE_TYPE_LONGLONG) {
         dup->conv.i = g->conv.i;
         dup->del_conv.i = g->del_conv.i;
     }
@@ -82,17 +85,17 @@ void assign_max_rc_counter(gcounter* target, gcounter* src) {
     assert(target->start_clock == src->start_clock);
     if(target->end_clock < src->end_clock) {
         target->end_clock = src->end_clock;
-        if(src->type == VALUE_TYPE_FLOAT) {
+        if(src->type == VALUE_TYPE_LONGDOUBLE) {
             target->conv.f = src->conv.f;
-        } else if(target->type == VALUE_TYPE_INTEGER) {
+        } else if(target->type == VALUE_TYPE_LONGLONG) {
             target->conv.i = src->conv.i;
         }
     } 
     if(target->del_end_clock < src->del_end_clock) {
         target->del_end_clock = src->del_end_clock;
-        if(target->type == VALUE_TYPE_FLOAT) {
+        if(target->type == VALUE_TYPE_LONGDOUBLE) {
             target->del_conv.f = src->del_conv.f;
-        } else if(target->type == VALUE_TYPE_INTEGER) {
+        } else if(target->type == VALUE_TYPE_LONGLONG) {
             target->del_conv.i = src->del_conv.i;
         }
     }
@@ -125,9 +128,9 @@ void freeGcounterMeta(void *counter) {
 
 sds gcounterDelStatusToSds(int gid, gcounter* c) {
     sds str = sdsempty();
-    // if(c->type == VALUE_TYPE_INTEGER) {
+    // if(c->type == VALUE_TYPE_LONGLONG) {
         
-    // } else if(c->type == VALUE_TYPE_FLOAT) {
+    // } else if(c->type == VALUE_TYPE_LONGDOUBLE) {
     //     str = sdscatprintf(str, "%d:%lld:%lld:%.17Lf", gid, c->start_clock, c->del_end_clock, c->del_conv.f);
     // }
     //
@@ -137,11 +140,11 @@ sds gcounterDelStatusToSds(int gid, gcounter* c) {
 
 sds gcounterDelValueToSds(gcounter* c) {
     sds str = NULL;
-    if(c->type == VALUE_TYPE_FLOAT) {
+    if(c->type == VALUE_TYPE_LONGDOUBLE) {
         printf("del value float: %.17Lf\n", c->del_conv.f);
         long double f = (c->del_conv.f);
         str = sdsnewlen((char*)&f, sizeof(long double));
-    } else if(c->type == VALUE_TYPE_INTEGER){
+    } else if(c->type == VALUE_TYPE_LONGLONG){
         str = sdsfromlonglong(c->del_conv.i);
     } else {
         assert(1 == 0);
@@ -179,9 +182,9 @@ int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g) {
     if(!string2ll(vals[num-1], sdslen(vals[num - 1]), &val_type)) {
         return 0;
     }
-    // val_type = VALUE_TYPE_INTEGER;
+    // val_type = VALUE_TYPE_LONGLONG;
     // } else if(string2ld(vals[num -1], sdslen(vals[num - 1]), &ld)) {
-    //     val_type = VALUE_TYPE_FLOAT;
+    //     val_type = VALUE_TYPE_LONGDOUBLE;
     // } else {
     //     return 0;
     // } 
@@ -201,11 +204,11 @@ int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g) {
     g->type = val_type;
     g->start_clock = start_clock;
     g->end_clock = end_clock;
-    if(val_type == VALUE_TYPE_INTEGER) { 
+    if(val_type == VALUE_TYPE_LONGLONG) { 
         long long ll = 0;
         string2ll(value, sdslen(value), &ll);
         g->conv.i = ll;
-    } else if(val_type == VALUE_TYPE_FLOAT) {
+    } else if(val_type == VALUE_TYPE_LONGDOUBLE) {
         long double ld = *(long double*)(value);
         g->conv.f = ld;
     }
@@ -214,9 +217,9 @@ int gcounterMetaFromSds(sds str, sds value, gcounter_meta* g) {
 
 int update_del_counter(gcounter* target, gcounter* src) {
     if(target->del_end_clock < src->del_end_clock) {
-        if(src->type == VALUE_TYPE_FLOAT) {
+        if(src->type == VALUE_TYPE_LONGDOUBLE) {
             target->del_conv.f = src->del_conv.f;
-        } else if(src->type == VALUE_TYPE_INTEGER) {
+        } else if(src->type == VALUE_TYPE_LONGLONG) {
             target->del_conv.i = src->del_conv.i;
         } else {
             return 0;
@@ -231,9 +234,9 @@ int update_add_counter(gcounter* target, gcounter* src) {
     if(target->end_clock < src->end_clock) {
         target->start_clock = src->start_clock;
         target->end_clock = src->end_clock;
-        if(src->type == VALUE_TYPE_FLOAT) {
+        if(src->type == VALUE_TYPE_LONGDOUBLE) {
             target->conv.f = src->conv.f;
-        } else if(src->type == VALUE_TYPE_INTEGER) {
+        } else if(src->type == VALUE_TYPE_LONGLONG) {
             target->conv.i = src->conv.i;
         } else {
             return 0;
@@ -247,9 +250,9 @@ int update_del_counter_by_meta(gcounter* target, gcounter_meta* src) {
     if(target->del_end_clock < src->end_clock) {
         target->start_clock = src->start_clock;
         target->del_end_clock = src->end_clock;
-        if(src->type == VALUE_TYPE_FLOAT) {
+        if(src->type == VALUE_TYPE_LONGDOUBLE) {
             target->del_conv.f = src->conv.f;
-        } else if(src->type == VALUE_TYPE_INTEGER) {
+        } else if(src->type == VALUE_TYPE_LONGLONG) {
             target->del_conv.i = src->conv.i;
         } else {
             return 0;
@@ -263,9 +266,9 @@ int update_del_counter_by_meta(gcounter* target, gcounter_meta* src) {
 int counter_del(gcounter* target, gcounter* src) {
     if(target->del_end_clock < src->end_clock) {
         target->del_end_clock = src->end_clock;
-        if(target->type == VALUE_TYPE_FLOAT) {
+        if(target->type == VALUE_TYPE_LONGDOUBLE) {
             target->del_conv.f = src->conv.f;
-        } else if(target->type == VALUE_TYPE_INTEGER) {
+        } else if(target->type == VALUE_TYPE_LONGLONG) {
             target->del_conv.i = src->conv.i;
         }else{
             return 0;
@@ -275,7 +278,7 @@ int counter_del(gcounter* target, gcounter* src) {
 }
 
 void setCounterType(gcounter* gcounter, int type) {
-    if(gcounter->type == VALUE_TYPE_INTEGER && type == VALUE_TYPE_FLOAT) {
+    if(gcounter->type == VALUE_TYPE_LONGLONG && type == VALUE_TYPE_LONGDOUBLE) {
         if(gcounter->end_clock > 0) {
             long long i = gcounter->conv.i;
             gcounter->conv.i = 0;
@@ -313,7 +316,7 @@ int testBasicGcounter(void) {
     counter->conv.i = 10;
     test_cond("[basic counter int]", 10 == get_int_counter(counter));
 
-    counter->type = VALUE_TYPE_FLOAT;
+    counter->type = VALUE_TYPE_LONGDOUBLE;
     counter->conv.f = 1.3f;
     test_cond("[basic counter float]", 1.3f == get_float_counter(counter));
     return 0;
@@ -328,7 +331,7 @@ int testFreeGcounter(void) {
     freeGcounter(counter);
 
     counter = createGcounter(0);
-    counter->type = VALUE_TYPE_FLOAT;
+    counter->type = VALUE_TYPE_LONGDOUBLE;
     counter->conv.f = 1.3f;
     test_cond("[basic counter float]", 1.3f == get_float_counter(counter));
     freeGcounter(counter);

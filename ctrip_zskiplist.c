@@ -145,7 +145,7 @@ int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
             *node = x;
         return 1;
     }
-    printf("no find %d \n", i);
+    printf("no find %s %.17f %d \n", ele, score, zsl->length);
     return 0; /* not found */
 }
 

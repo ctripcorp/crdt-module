@@ -42,7 +42,7 @@ void* createLwwElement() {
 #else
     lww_element *ele = RedisModule_Alloc(sizeof(lww_element));
 #endif
-    ele->type = VALUE_TYPE_INTEGER;
+    ele->type = VALUE_TYPE_LONGLONG;
     ele->val.s = NULL;
     return ele;
 }
@@ -96,11 +96,11 @@ int testBasicLwwElement(void) {
     printf("[basic lww sds] %s\r\n", ele->val.s);
     test_cond("[basic lww sds type]", ele->type == VALUE_TYPE_SDS);
 
-    ele->type = VALUE_TYPE_FLOAT;
+    ele->type = VALUE_TYPE_LONGDOUBLE;
     ele->val.f = 1.3f;
     test_cond("[basic lww float]", 1.3f == ele->val.f);
 
-    ele->type = VALUE_TYPE_INTEGER;
+    ele->type = VALUE_TYPE_LONGLONG;
     ele->val.i = 10000;
     test_cond("[basic lww float]", 10000 == ele->val.i);
     return 0;
@@ -117,13 +117,13 @@ int testFreeLwwElement(void) {
 //    freeLwwElement(ele);
 
     ele = createLwwElement();
-    ele->type = VALUE_TYPE_FLOAT;
+    ele->type = VALUE_TYPE_LONGDOUBLE;
     ele->val.f = 1.3f;
     test_cond("[basic lww float]", 1.3f == ele->val.f);
     freeLwwElement(ele);
 
     ele = createLwwElement();
-    ele->type = VALUE_TYPE_INTEGER;
+    ele->type = VALUE_TYPE_LONGLONG;
     ele->val.i = 10000;
     test_cond("[basic lww float]", 10000 == ele->val.i);
     freeLwwElement(ele);

@@ -16,9 +16,10 @@
 #include "../include/rmutil/sds.h"
 #include "../include/redismodule.h"
 #include "../include/util.h"
-#define VALUE_TYPE_INTEGER 0
-#define VALUE_TYPE_FLOAT   1
+#define VALUE_TYPE_LONGLONG 0
+#define VALUE_TYPE_LONGDOUBLE   1
 #define VALUE_TYPE_DOUBLE     2
+#define VALUE_TYPE_SDS 3
 typedef struct g_counter_meta {
     unsigned long long gid:4;
     unsigned long long data_type:4;
@@ -27,7 +28,9 @@ typedef struct g_counter_meta {
         long long i;
         long double f;
         double d;
+        sds v;
     } conv;
+    sds v;
 } g_counter_meta;
 g_counter_meta* create_g_counter_meta(long long gid, long long type, long long vcu);
 void free_g_counter_meta(g_counter_meta* meta);
@@ -37,3 +40,4 @@ sds g_counter_metas_to_sds(void* data, GetGMetaFunc fun, int size);
 int sds_to_g_counter_meta(sds data, g_counter_meta** ds);
 int str_to_g_counter_meta(char* data, int data_size, g_counter_meta** ds);
 int array_get_g_counter_meta(void* data, int index, g_counter_meta* value);
+int gcounter_meta_set_value(g_counter_meta* meta, int type, void* d, int parse);

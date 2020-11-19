@@ -119,4 +119,4 @@ zskiplistNode* zslInLexRange(CRDT_SS* current, zrangespec* range, int reverse);
 int initSSTombstoneFromSS(CRDT_SSTombstone* tombstone,CrdtMeta* del_meta, CRDT_SS* value, sds* del_counters);
 zskiplist* zsetGetZsl(CRDT_SS* current);
 int zsetTryAdd(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMeta* meta, sds info);
-
+int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMeta* meta, sds info);

@@ -1,5 +1,6 @@
 #include "./crdt_orset_rc.h"
 #include "../crdt_util.h"
+#include "../gcounter/g_counter.h"
 //  generic function
 crdt_rc_tombstone* retrieveCrdtRcTombstone(CRDT_RCTombstone* rt) {
     return (crdt_rc_tombstone*)rt;
@@ -29,17 +30,17 @@ int getCrdtRcType(CRDT_RC* rc) {
     crdt_orset_rc* r = retrieveCrdtRc(rc);
     for(int i = 0; i< r->len; i++) {
         if(r->elements[i]->base) {
-            if(r->elements[i]->base->type == VALUE_TYPE_FLOAT) {
-                return VALUE_TYPE_FLOAT;
+            if(r->elements[i]->base->type == VALUE_TYPE_LONGDOUBLE) {
+                return VALUE_TYPE_LONGDOUBLE;
             }
         }
         if(r->elements[i]->counter) {
-            if(r->elements[i]->counter->type == VALUE_TYPE_FLOAT) {
-                return VALUE_TYPE_FLOAT;
+            if(r->elements[i]->counter->type == VALUE_TYPE_LONGDOUBLE) {
+                return VALUE_TYPE_LONGDOUBLE;
             }
         }
     }
-    return VALUE_TYPE_INTEGER;
+    return VALUE_TYPE_LONGLONG;
 }
 
 CrdtMeta* getCrdtRcLastMeta(CRDT_RC*rc) {
@@ -62,9 +63,9 @@ long double getCrdtRcBaseFloatValue(CRDT_RC* rc, CrdtMeta* lastMeta) {
     crdt_orset_rc* r = retrieveCrdtRc(rc);
     rc_element* el = findRcElement(r, gid);
     assert(el != NULL);
-    if(el->base->type == VALUE_TYPE_INTEGER) {
+    if(el->base->type == VALUE_TYPE_LONGLONG) {
         return (long double)(el->base->conv.i);
-    } else if(el->base->type == VALUE_TYPE_FLOAT) {
+    } else if(el->base->type == VALUE_TYPE_LONGDOUBLE) {
         return el->base->conv.f;
     } else {
         assert(1 == 0);
@@ -76,7 +77,7 @@ long long getCrdtRcBaseIntValue(CRDT_RC* rc, CrdtMeta* lastMeta) {
     int gid = getMetaGid(lastMeta);
     crdt_orset_rc* r = retrieveCrdtRc(rc);
     rc_element* el = findRcElement(r, gid);
-    assert(el->base->type == VALUE_TYPE_INTEGER);
+    assert(el->base->type == VALUE_TYPE_LONGLONG);
     return el->base->conv.i;
 }
 long double getCrdtRcCouanterFloatValue(CRDT_RC* rc) {
@@ -84,9 +85,9 @@ long double getCrdtRcCouanterFloatValue(CRDT_RC* rc) {
     long double counter = 0; 
     for(int i = 0; i < r->len; i++) {
         if(r->elements[i]->counter) {
-            if(r->elements[i]->counter->type == VALUE_TYPE_INTEGER) {
+            if(r->elements[i]->counter->type == VALUE_TYPE_LONGLONG) {
                 counter += (long double)(r->elements[i]->counter->conv.i - r->elements[i]->counter->del_conv.i);
-            } else if(r->elements[i]->counter->type == VALUE_TYPE_FLOAT) {
+            } else if(r->elements[i]->counter->type == VALUE_TYPE_LONGDOUBLE) {
                 counter += r->elements[i]->counter->conv.f - r->elements[i]->counter->del_conv.f;
             } else {
                 assert(1 == 0);
@@ -101,7 +102,7 @@ long long getCrdtRcCouanterIntValue(CRDT_RC* rc) {
     long long counter = 0; 
     for(int i = 0; i < r->len; i++) {
         if(r->elements[i]->counter) {
-            assert(r->elements[i]->counter->type == VALUE_TYPE_INTEGER);
+            assert(r->elements[i]->counter->type == VALUE_TYPE_LONGLONG);
             counter += r->elements[i]->counter->conv.i - r->elements[i]->counter->del_conv.i;
         }
     }
@@ -135,17 +136,17 @@ long double getCrdtRcFloatValue(CRDT_RC* rc) {
         rc_base* b = r->elements[i]->base;
         if(b && b->timespace > base_time) {
             base_time = b->timespace;
-            if(b->type == VALUE_TYPE_FLOAT) {
+            if(b->type == VALUE_TYPE_LONGDOUBLE) {
                 base = b->conv.f;
-            } else if(b->type == VALUE_TYPE_INTEGER) {
+            } else if(b->type == VALUE_TYPE_LONGLONG) {
                 base = (long double)b->conv.i;
             }
             
         }
         if(r->elements[i]->counter) {
-            if(r->elements[i]->counter->type == VALUE_TYPE_FLOAT) {
+            if(r->elements[i]->counter->type == VALUE_TYPE_LONGDOUBLE) {
                 counter += r->elements[i]->counter->conv.f - r->elements[i]->counter->del_conv.f;
-            } else if(r->elements[i]->counter->type == VALUE_TYPE_INTEGER) {
+            } else if(r->elements[i]->counter->type == VALUE_TYPE_LONGLONG) {
                 long long v = (r->elements[i]->counter->conv.i - r->elements[i]->counter->del_conv.i);
                 counter += (long double)v;
             } else {
@@ -168,9 +169,9 @@ int tryUpdateCounter(CRDT_RC* rc, CRDT_RCTombstone* tom, int gid, long long time
             assert(el->counter->type == type);
             if(el->counter->end_clock < end_clock) {
                 el->counter->end_clock = end_clock;
-                if(type == VALUE_TYPE_FLOAT) {
+                if(type == VALUE_TYPE_LONGDOUBLE) {
                     el->counter->conv.f = *(long double*)val;
-                } else if(type == VALUE_TYPE_INTEGER) {
+                } else if(type == VALUE_TYPE_LONGLONG) {
                     el->counter->conv.i = *(long long*)val;
                 }
             }
@@ -195,9 +196,9 @@ int tryUpdateCounter(CRDT_RC* rc, CRDT_RCTombstone* tom, int gid, long long time
         }
     }
     e->counter->end_clock = end_clock;
-    if(type == VALUE_TYPE_FLOAT) {
+    if(type == VALUE_TYPE_LONGDOUBLE) {
         e->counter->conv.f = *(long double*)val;
-    } else if(type == VALUE_TYPE_INTEGER) {
+    } else if(type == VALUE_TYPE_LONGLONG) {
         e->counter->conv.i = *(long long*)val;
     }
     e->counter->type = type;
@@ -225,16 +226,16 @@ gcounter*  addOrCreateCounter(CRDT_RC* rc,  CrdtMeta* meta, int type, void* val)
     if(e->counter->type != type) {
          setCounterType(e->counter, type);
         // float can't to int
-        if(type == VALUE_TYPE_FLOAT) {
+        if(type == VALUE_TYPE_LONGDOUBLE) {
             long double v = (*(long double*)val);
             e->counter->conv.f += v ;
         } else {
             assert(1 == 0);
         }
     } else {
-        if(type == VALUE_TYPE_FLOAT) {
+        if(type == VALUE_TYPE_LONGDOUBLE) {
             e->counter->conv.f += (*(long double*)val);
-        } else if(type == VALUE_TYPE_INTEGER) {
+        } else if(type == VALUE_TYPE_LONGLONG) {
             e->counter->conv.i += (*(long long*)val);
         } else {
             assert(1 == 0);
@@ -317,10 +318,10 @@ sds crdtRcTombstoneInfo(void* t) {
         rc_tombstone_element* el = rt->elements[i];
         result = sdscatprintf(result, "   %d) gid: %d, unit: %lld\r\n", i, el->gid, el->del_unit);
         if(el->counter) {
-            if(el->counter->type == VALUE_TYPE_FLOAT) {
+            if(el->counter->type == VALUE_TYPE_LONGDOUBLE) {
                 result = sdscatprintf(result, "       counter: { start: %lld, end: %lld, value: %.17Lf}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.f);
                 result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %.17Lf}\r\n",el->counter->del_end_clock, el->counter->del_conv.f);
-            } else if(el->counter->type == VALUE_TYPE_INTEGER) {
+            } else if(el->counter->type == VALUE_TYPE_LONGLONG) {
                 result = sdscatprintf(result, "       counter: { start: %lld, end: %lld, value: %lld}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.i);
                 result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %lld}\r\n",el->counter->del_end_clock, el->counter->del_conv.i);
             } else {
@@ -390,19 +391,19 @@ sds crdtRcInfo(void* value) {
         rc_element* el = rc->elements[i];
         result = sdscatprintf(result, "  %d) gid: %d\r\n", i, (int)el->gid);
         if(el->base) {
-            if(el->base->type == VALUE_TYPE_FLOAT) {
+            if(el->base->type == VALUE_TYPE_LONGDOUBLE) {
                 result = sdscatprintf(result, "     base: { type: float, clock: %lld, timespace: %lld, value: %.17Lf} \r\n", el->base->unit, el->base->timespace, el->base->conv.f);
-            } else if(el->base->type == VALUE_TYPE_INTEGER) {
+            } else if(el->base->type == VALUE_TYPE_LONGLONG) {
                 result = sdscatprintf(result, "     base: { type: int, clock: %lld, timespace: %lld, value: %lld} \r\n", el->base->unit, el->base->timespace, el->base->conv.i);
             } else {
                 assert(1 == 0);
             }
         }
         if(el->counter) {
-            if(el->counter->type == VALUE_TYPE_FLOAT) {
+            if(el->counter->type == VALUE_TYPE_LONGDOUBLE) {
                 result = sdscatprintf(result, "       counter: { type: float, start: %lld, end: %lld, value: %.17Lf}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.f);
                 if(el->counter->del_end_clock != 0) result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %.17Lf}\r\n",el->counter->del_end_clock, el->counter->del_conv.f);
-            } else if(el->counter->type == VALUE_TYPE_INTEGER) {
+            } else if(el->counter->type == VALUE_TYPE_LONGLONG) {
                 result = sdscatprintf(result, "       counter: { type: int, start: %lld, end: %lld, value: %lld}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.i);
                 if(el->counter->del_end_clock != 0) result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %lld}\r\n",el->counter->del_end_clock, el->counter->del_conv.i);
             } else {
@@ -504,7 +505,7 @@ int crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds* gs, CrdtTombstone* tomb
         
         if(r->elements[i]->counter) {
             r->elements[i]->counter->del_end_clock = r->elements[i]->counter->end_clock;
-            if(r->elements[i]->counter->type == VALUE_TYPE_FLOAT) {
+            if(r->elements[i]->counter->type == VALUE_TYPE_LONGDOUBLE) {
                 r->elements[i]->counter->del_conv.f = r->elements[i]->counter->conv.f;
             } else {
                 r->elements[i]->counter->del_conv.i = r->elements[i]->counter->conv.i;
@@ -699,9 +700,9 @@ void assign_max_rc_base(rc_base* target, rc_base* src) {
     if(target->unit < src->unit) {
         target->timespace = src->timespace;
         target->type = src->type;
-        if (src->type == VALUE_TYPE_FLOAT) {
+        if (src->type == VALUE_TYPE_LONGDOUBLE) {
             target->conv.f = src->conv.f;
-        } else if(src->type == VALUE_TYPE_INTEGER) {
+        } else if(src->type == VALUE_TYPE_LONGLONG) {
             target->conv.i = src->conv.i;
         }
     }
@@ -713,18 +714,18 @@ rc_base* dupRcBase(rc_base* base) {
     dup->type = base->type;
     dup->timespace = base->timespace;
     dup->unit = base->unit;
-    if(dup->type == VALUE_TYPE_FLOAT) {
+    if(dup->type == VALUE_TYPE_LONGDOUBLE) {
         dup->conv.f = base->conv.f;
-    } else if (dup->type == VALUE_TYPE_INTEGER) {
+    } else if (dup->type == VALUE_TYPE_LONGLONG) {
         dup->conv.i = base->conv.i;
     }
     return dup;
 }
 
 int resetElementBase(rc_base* base, CrdtMeta* meta, int val_type, void* v) {
-    if (val_type == VALUE_TYPE_FLOAT) {
+    if (val_type == VALUE_TYPE_LONGDOUBLE) {
         base->conv.f = *(long double*)v;
-    } else if (val_type == VALUE_TYPE_INTEGER) {
+    } else if (val_type == VALUE_TYPE_LONGLONG) {
         base->conv.i = *(long long*)v;
     } else {
         assert( 1 == 0);
@@ -926,17 +927,17 @@ gcounter* load_counter(RedisModuleIO* rdb, int version) {
     int flags = RedisModule_LoadSigned(rdb);
     if(flags & ADD) {
         counter->end_clock = RedisModule_LoadSigned(rdb);
-        if(counter->type == VALUE_TYPE_FLOAT) {
+        if(counter->type == VALUE_TYPE_LONGDOUBLE) {
             counter->conv.f = rdbLoadLongDouble(rdb, version);
-        } else if(counter->type == VALUE_TYPE_INTEGER) {
+        } else if(counter->type == VALUE_TYPE_LONGLONG) {
             counter->conv.i = RedisModule_LoadSigned(rdb);
         }  
     }
     if(flags & DEL) {
         counter->del_end_clock = RedisModule_LoadSigned(rdb);
-        if(counter->type == VALUE_TYPE_FLOAT) {
+        if(counter->type == VALUE_TYPE_LONGDOUBLE) {
             counter->del_conv.f = rdbLoadLongDouble(rdb, version);
-        } else if(counter->type == VALUE_TYPE_INTEGER) {
+        } else if(counter->type == VALUE_TYPE_LONGLONG) {
             counter->del_conv.i = RedisModule_LoadSigned(rdb);
         }  
     }
@@ -952,18 +953,18 @@ void save_counter(RedisModuleIO* rdb, gcounter* counter) {
     RedisModule_SaveSigned(rdb, flags);
     if(counter->end_clock != 0) {
         RedisModule_SaveSigned(rdb, counter->end_clock);
-        if(counter->type == VALUE_TYPE_FLOAT) {
+        if(counter->type == VALUE_TYPE_LONGDOUBLE) {
             rdbSaveLongDouble(rdb, counter->conv.f);
             // RedisModule_SaveFloat(rdb, counter->conv.f);
-        } else if(counter->type == VALUE_TYPE_INTEGER) {
+        } else if(counter->type == VALUE_TYPE_LONGLONG) {
             RedisModule_SaveSigned(rdb, counter->conv.i);
         }    
     }
     if(counter->del_end_clock != 0) {
         RedisModule_SaveSigned(rdb, counter->del_end_clock);
-        if(counter->type == VALUE_TYPE_FLOAT) {
+        if(counter->type == VALUE_TYPE_LONGDOUBLE) {
             rdbSaveLongDouble(rdb, counter->del_conv.f);
-        } else if(counter->type == VALUE_TYPE_INTEGER) {
+        } else if(counter->type == VALUE_TYPE_LONGLONG) {
             RedisModule_SaveSigned(rdb, counter->del_conv.i);
         }    
     }
@@ -975,9 +976,9 @@ rc_base* load_base(RedisModuleIO* rdb, int version) {
     base->unit = RedisModule_LoadSigned(rdb);
     base->timespace = RedisModule_LoadSigned(rdb);
     base->type = RedisModule_LoadUnsigned(rdb);
-    if(base->type == VALUE_TYPE_FLOAT) {
+    if(base->type == VALUE_TYPE_LONGDOUBLE) {
         base->conv.f = rdbLoadLongDouble(rdb, version);
-    } else if(base->type == VALUE_TYPE_INTEGER) {
+    } else if(base->type == VALUE_TYPE_LONGLONG) {
         base->conv.i = RedisModule_LoadSigned(rdb);
     }
     return base;
@@ -988,9 +989,9 @@ void save_base(RedisModuleIO* rdb, rc_base* base) {
     RedisModule_SaveSigned(rdb, base->timespace);
     unsigned long long  type = (base->type);
     RedisModule_SaveUnsigned(rdb, type);
-    if(base->type == VALUE_TYPE_FLOAT) {
+    if(base->type == VALUE_TYPE_LONGDOUBLE) {
         rdbSaveLongDouble(rdb, base->conv.f);
-    } else if(base->type == VALUE_TYPE_INTEGER) {
+    } else if(base->type == VALUE_TYPE_LONGLONG) {
         RedisModule_SaveSigned(rdb, base->conv.i);
     }
 }
@@ -1154,15 +1155,15 @@ RedisModuleString* element_info(RedisModuleCtx* ctx,rc_element* el) {
     sds base_info = sdsempty();
     sds counter_info = sdsempty();
     if(el->base) {
-        if(el->base->type == VALUE_TYPE_FLOAT) {
+        if(el->base->type == VALUE_TYPE_LONGDOUBLE) {
             base_info = sdscatprintf(base_info, "base: {type: float, gid: %d, unit: %lld, time: %lld,value: %.17Lf}",el->gid, el->base->unit, el->base->timespace, el->base->conv.f);
-        } else if(el->base->type == VALUE_TYPE_INTEGER){
+        } else if(el->base->type == VALUE_TYPE_LONGLONG){
             base_info = sdscatprintf(base_info, "base: {type: int, gid: %d, unit: %lld, time: %lld,value: %lld}",el->gid, el->base->unit, el->base->timespace, el->base->conv.i);
         }
     }
     if(el->counter) {
         gcounter* g = el->counter;
-        if(el->counter->type == VALUE_TYPE_FLOAT) {
+        if(el->counter->type == VALUE_TYPE_LONGDOUBLE) {
             counter_info = sdscatprintf(counter_info, "counter: {type: float, start_clock: %lld, end_clock: %lld, value: %.17Lf, del_clock: %lld, del_value: %.17Lf}", g->start_clock, g->end_clock, g->conv.f, g->del_end_clock, g->del_conv.f);
         } else {
             counter_info = sdscatprintf(counter_info, "counter: {type: int, start_clock: %lld, end_clock: %lld, value: %lld, del_clock: %lld, del_value: %lld}", g->start_clock, g->end_clock, g->conv.i, g->del_end_clock, g->del_conv.i);
