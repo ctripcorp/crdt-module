@@ -59,7 +59,7 @@ sds g_counter_metas_to_sds(void* data, GetGMetaFunc fun, int size) {
         }
     }
     if(len == 0) {
-        return sdsempty();
+        return NULL;
     }
     return sdsnewlen(buf, len);
 }
