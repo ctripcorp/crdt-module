@@ -464,6 +464,59 @@ int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
     return CRDT_OK;
 }
 
+//crdt.del_ss key gid timespace vc <field,gid:vcu:type:value>...
+int crdtDelSSCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc < 5) return RedisModule_WrongArity(ctx);
+    CrdtMeta meta = {.gid = 0};
+    int status = CRDT_OK;
+    if (readMeta(ctx, argv, 2, &meta) != CRDT_OK) {
+        return 0;
+    }
+    RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSS);
+    if(moduleKey == NULL) {
+        RedisModule_IncrCrdtConflict(TYPECONFLICT | MODIFYCONFLICT);
+        status = CRDT_ERROR;
+        goto end;
+    }
+    CrdtTombstone* tombstone = getTombstone(moduleKey);
+    if(tombstone != NULL && !isCrdtSSTombstone(tombstone)) {
+        tombstone = NULL;
+    }
+    if(tombstone == NULL) {
+        tombstone = create_crdt_zset_tombstone();
+        RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSST, tombstone);
+    }
+    CRDT_SS* current = getCurrentValue(moduleKey);
+    for(int i = 5; i < argc; i += 1) {
+        sds field_and_del_counter_info = RedisModule_GetSds(argv[i]);
+        // dictEntry* de = findSetDict(current, field);
+        zsetTryRem(tombstone, current, field_and_del_counter_info, &meta);
+    }
+    zsetTryDel(current, tombstone, &meta);
+    updateCrdtSSTLastVc(tombstone, getMetaVectorClock(&meta));
+    if(current) {
+        if(getZSetSize(current) == 0) {
+            RedisModule_DeleteKey(moduleKey);
+        } else {
+            updateCrdtSSLastVc(current, getMetaVectorClock(&meta));
+        }
+    } 
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "del", argv[1]);
+    RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
+end:
+    if (meta.gid != 0) {
+        RedisModule_CrdtReplicateVerbatim(getMetaGid(&meta), ctx);
+        freeVectorClock(meta.vectorClock);
+    }
+    if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
+    // sds cmdname = RedisModule_GetSds(argv[0]);
+    if(status == CRDT_OK) {
+        return RedisModule_ReplyWithOk(ctx); 
+    }else{
+        return CRDT_ERROR;
+    }
+}
+
 //zrange key start end 
 int zrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int reverse) {
     long long start;
@@ -1027,6 +1080,9 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.zrem",
                                   crdtZremCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"CRDT.del_ss",
+                                crdtDelSSCommand  ,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     // if (RedisModule_CreateCommand(ctx, "zremrangebyrank", 
     //                               zremrangebyrankCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)

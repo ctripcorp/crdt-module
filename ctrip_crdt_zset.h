@@ -116,6 +116,7 @@ zskiplistNode* zset_get_zsl_element_by_rank(CRDT_SS* current, int reverse, long 
 VectorClock getCrdtSSLastVc(CRDT_SS* data);
 void updateCrdtSSLastVc(CRDT_SS* data, VectorClock vc);
 VectorClock getCrdtSSTLastVc(CRDT_SSTombstone* data);
+void updateCrdtSSTMaxDel(CRDT_SSTombstone* tombstone, VectorClock vc);
 zskiplistNode* zslInRange(CRDT_SS* current, zrangespec* range, int reverse);
 zskiplistNode* zslInLexRange(CRDT_SS* current, zrangespec* range, int reverse);
 int initSSTombstoneFromSS(CRDT_SSTombstone* tombstone,CrdtMeta* del_meta, CRDT_SS* value, sds* del_counters);
@@ -123,5 +124,5 @@ zskiplist* zsetGetZsl(CRDT_SS* current);
 int zsetTryAdd(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMeta* meta, sds info);
 int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMeta* meta, sds info);
 int zsetTryRem(CRDT_SSTombstone* tombstone,CRDT_SS* current, sds info, CrdtMeta* meta);
-
+int zsetTryDel(CRDT_SS* current,CRDT_SSTombstone* tombstone, CrdtMeta* meta);
 void updateCrdtSSTLastVc(CRDT_SSTombstone* data, VectorClock vc);
