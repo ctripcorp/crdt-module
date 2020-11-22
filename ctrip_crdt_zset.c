@@ -1104,3 +1104,10 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
     
     return REDISMODULE_OK;
 }
+
+RedisModuleType* getCrdtSS() {
+    return CrdtSS;
+}
+RedisModuleType* getCrdtSST() {
+    return CrdtSST;
+}

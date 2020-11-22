@@ -129,132 +129,102 @@ VectorClock getCrdtSSTLastVc(CRDT_SSTombstone* data) {
     return crdt_zset_tombstone->lastvc;
 }
 
-
-// redismodule
-// ===== sorted set ========
-void *RdbLoadCrdtSS(RedisModuleIO *rdb, int encver) {
-    return NULL;
+//create_null_tag
+crdt_zset_tag_add_counter* create_null_add_counter_tag(int gid) {
+    crdt_zset_tag_add_counter* a = RedisModule_Alloc(sizeof(crdt_zset_tag_add_counter));
+    a->gid = gid;
+    a->type = TAG_ADD_COUNTER;
+    a->add_counter = 0;
+    a->add_vcu = 0;
+    return a;
 }
-
-void RdbSaveCrdtSS(RedisModuleIO *rdb, void *value) {
+crdt_zset_tag_base_and_add_del_counter* create_null_base_add_del_counter_tag(int gid) {
+    crdt_zset_tag_base_and_add_del_counter* bad = RedisModule_Alloc(sizeof(crdt_zset_tag_base_and_add_del_counter));
+    bad->gid = gid;
+    bad->type = BAD;
+    bad->base_timespace = 0;
+    bad->base_vcu = 0;
+    bad->score = 0;
     
-} 
-
-void AofRewriteCrdtSS(RedisModuleIO *aof, RedisModuleString *key, void *value) {
+    bad->add_counter = 0;
+    bad->add_vcu = 0;
     
+    bad->del_counter = 0;
+    bad->del_vcu = 0;
+    return bad;
 }
 
-size_t crdtSSMemUsageFunc(const void *value) {
-    return 1;
+crdt_zset_tag_add_del_counter* create_add_del_tag(int gid) {
+    crdt_zset_tag_add_del_counter* ad = RedisModule_Alloc(sizeof(crdt_zset_tag_add_del_counter));
+    ad->gid = gid;
+    ad->type = AD;
+    ad->add_counter = 0;
+    ad->add_vcu = 0;
+    ad->del_counter = 0;
+    ad->del_vcu = 0;
+    return ad;
 }
 
-void freeCrdtSS(void* ss) {
-
+crdt_zset_tag_base_and_add_counter* create_base_and_add_tag(int gid) {
+    crdt_zset_tag_base_and_add_counter* ba = RedisModule_Alloc(sizeof(crdt_zset_tag_base_and_add_counter));
+    ba->gid = gid;
+    ba->type = BA;
+    ba->base_vcu = 0;
+    ba->base_timespace = 0;
+    ba->score = 0;
+    ba->add_vcu = 0;
+    ba->add_counter = 0;
+    return ba;
 }
 
-void crdtSSDigestFunc(RedisModuleDigest *md, void *value) {
-
-}
-// ====== sorted set tombstone ========
-void *RdbLoadCrdtSST(RedisModuleIO *rdb, int encver) {
-    return NULL;
-}
-
-void RdbSaveCrdtSST(RedisModuleIO *rdb, void *value) {
-    
-} 
-
-void AofRewriteCrdtSST(RedisModuleIO *aof, RedisModuleString *key, void *value) {
-    
+crdt_zset_tag_base* create_null_base_tag(int gid) {
+    crdt_zset_tag_base* b = RedisModule_Alloc(sizeof(crdt_zset_tag_base));
+    b->gid = gid;
+    b->type = TAG_BASE;
+    b->base_timespace = 0;
+    b->base_vcu = 0;
+    b->score = 0;
+    return b;
 }
 
-size_t crdtSSTMemUsageFunc(const void *value) {
-    return 1;
-}
-
-void freeCrdtSST(void* ss) {
-
-}
-
-void crdtSSTDigestFunc(RedisModuleDigest *md, void *value) {
-
-}
-
-size_t get_el_len(crdt_zset_element el) {
-    return el.len;
-}
-
-int is_deleted_tag(crdt_zset_tag* tag) {
-    crdt_zset_tag_add_del_counter* ad;
-    crdt_zset_tag_base_and_add_del_counter* bad;
-    crdt_zset_tag_base* b;
-    switch (tag->type)
-    {
-    case AD:
-        ad = (crdt_zset_tag_add_del_counter*)tag;
-        if(ad->add_vcu == ad->del_vcu) {
-            return 1;
-        }
-        break;
-    case TAG_BASE:
-        b = (crdt_zset_tag_base*)tag;
-        if(b->base_timespace == DEL_TIME) {
-            assert(b->score == 0);
-            return 1;
-        }
-        break;
-    case BAD:
-        bad = (crdt_zset_tag_base_and_add_del_counter*)tag;
-        if(bad->add_vcu == bad->del_vcu && bad->base_timespace == DEL_TIME) {
-            assert(bad->score == 0);
-            return 1;
-        }
-        break;    
-    case BA:
-    case TAG_ADD_COUNTER:
+static int sort_tag_by_gid(const void *a, const void *b) {
+    const crdt_zset_tag *tag_a = *(crdt_zset_tag**)a, *tag_b = *(crdt_zset_tag**)b;
+    /* We sort the vector clock unit by gid*/
+    if (tag_a->gid > tag_b->gid)
+        return 1;
+    else if (tag_a->gid == tag_b->gid)
         return 0;
-    default:
-        printf("[is_deleted_tag]tag type is error\n");
-        assert(1==0);
-        break;
-    }
-    return 0;
+    else
+        return -1;
 }
 
-crdt_zset_tag* element_get_tag_by_index(crdt_zset_element el, int index) {
-    assert(el.len > index && index >= 0);
+crdt_zset_element add_tag_by_element(crdt_zset_element el, crdt_zset_tag* tag) {
+    if(tag == NULL) {return el;}
     if(el.len == 0) {
-        return NULL;
+        crdt_zset_element e = {.len = 1, .tags = *(long long*)&tag};
+        return e;
+    } else if(el.len == 1) {
+        crdt_zset_tag** tags = RedisModule_Alloc(sizeof(crdt_zset_tag*) * 2);
+        long long a = el.tags;
+        tags[0] = *(crdt_zset_tag**)&a;
+        tags[1] = tag;
+        el.len = 2;
+        qsort(tags, 2, sizeof(crdt_zset_tag*), sort_tag_by_gid);
+        el.tags = *(long long*)&tags;
+        return el;
+    } else {
+        long long a = el.tags;
+        crdt_zset_tag* t = *(crdt_zset_tag**)(&a);
+        crdt_zset_tag** tags = RedisModule_Realloc(t, sizeof(crdt_zset_tag*) * (el.len + 1));
+        tags[el.len] = *tags;
+        el.len = el.len + 1;
+        qsort(tags, el.len, sizeof(crdt_zset_tag*), sort_tag_by_gid);
+        el.tags = *(long long*)&tags;
+        return el;
     }
-    if(el.len == 1) {
-        long long ll = el.tags;
-        return ll;
-    }
-    crdt_zset_tag** tags = (crdt_zset_tag**)(el.tags);
-    return tags[index];
+    
 }
 
-void element_set_tag_by_index(crdt_zset_element* el, int index, crdt_zset_tag* tag) {
-    assert(el->len > index && index >= 0);
-    assert(tag != NULL);
-    if(el->len == 1) {
-        el->tags = tag;
-        return;
-    }
-    crdt_zset_tag** tags = (crdt_zset_tag**)(el->tags);
-    tags[index] = tag;
-} 
-
-crdt_zset_tag* element_get_tag_by_gid(crdt_zset_element el, int gid, int* index) {
-    for(int i = 0; i < el.len; i++) {
-        crdt_zset_tag* tag = element_get_tag_by_index(el, i);
-        if(tag->gid == gid) {
-            if(index != NULL) *index = i;
-            return tag;
-        }
-    }
-    return NULL;
-}
 
 double get_base_score(crdt_zset_tag* tag, long long* time) {
     crdt_zset_tag_base* b;
@@ -316,6 +286,19 @@ double get_counter_score(crdt_zset_tag* tag) {
     }
 }
 
+crdt_zset_tag* element_get_tag_by_index(crdt_zset_element el, int index) {
+    assert(el.len > index && index >= 0);
+    if(el.len == 0) {
+        return NULL;
+    }
+    if(el.len == 1) {
+        long long ll = el.tags;
+        return ll;
+    }
+    crdt_zset_tag** tags = (crdt_zset_tag**)(el.tags);
+    return tags[index];
+}
+
 double get_score_by_element(crdt_zset_element el) {
     double base = 0;
     double counter = 0;
@@ -336,6 +319,320 @@ double get_score_by_element(crdt_zset_element el) {
     }
     return base + counter;
 }
+
+
+
+// redismodule
+// ===== sorted set ========
+crdt_zset_tag* load_tag(RedisModuleIO* rdb) {
+    uint64_t gid = RedisModule_LoadUnsigned(rdb);
+    uint64_t type = RedisModule_LoadUnsigned(rdb);
+    crdt_zset_tag_add_counter* a;
+    crdt_zset_tag_base* b;
+    crdt_zset_tag_base_and_add_counter* ba;
+    crdt_zset_tag_add_del_counter* ad;
+    crdt_zset_tag_base_and_add_del_counter* bad;
+    switch(type) {
+        case TAG_ADD_COUNTER:
+            a = create_null_add_counter_tag(gid);
+            a->add_vcu = RedisModule_LoadUnsigned(rdb);
+            a->add_counter = RedisModule_LoadDouble(rdb);
+            return a;
+        break;
+        case TAG_BASE:
+            b = create_null_base_tag(gid);
+            b->base_vcu = RedisModule_LoadUnsigned(rdb);
+            b->base_timespace = RedisModule_LoadUnsigned(rdb);
+            b->score = RedisModule_LoadDouble(rdb);
+            return b;
+        break;
+        case AD:
+            ad = create_add_del_tag(gid);
+            ad->add_vcu = RedisModule_LoadUnsigned(rdb);
+            ad->add_counter = RedisModule_LoadDouble(rdb);
+            ad->del_vcu = RedisModule_LoadUnsigned(rdb);
+            ad->del_counter = RedisModule_LoadDouble(rdb);
+            return ad;
+        break;
+        case BAD:
+            bad = create_null_base_add_del_counter_tag(gid);
+            bad->base_vcu = RedisModule_LoadUnsigned(rdb);
+            bad->base_timespace = RedisModule_LoadUnsigned(rdb);
+            bad->score = RedisModule_LoadDouble(rdb);
+            bad->add_vcu = RedisModule_LoadUnsigned(rdb);
+            bad->add_counter = RedisModule_LoadDouble(rdb);
+            bad->del_vcu = RedisModule_LoadUnsigned(rdb);
+            bad->del_counter = RedisModule_LoadDouble(rdb);
+            return bad;
+        break;
+        case BA:
+            ba = create_base_and_add_tag(gid);
+            ba->base_vcu = RedisModule_LoadUnsigned(rdb);
+            ba->base_timespace = RedisModule_LoadUnsigned(rdb);
+            ba->score = RedisModule_LoadDouble(rdb);
+            ba->add_vcu = RedisModule_LoadUnsigned(rdb);
+            ba->add_counter = RedisModule_LoadDouble(rdb);
+            return ba;
+        break;
+        default:
+            RedisModule_Debug(logLevel, "load tag error %d", type);
+            return NULL;
+            break;
+    }
+}
+crdt_zset_element load_element(RedisModuleIO *rdb) {
+    crdt_zset_element el = {.len = 0};
+    uint64_t len = RedisModule_LoadUnsigned(rdb);
+    for(int i = 0; i < len; i++) {
+        crdt_zset_tag* tag = load_tag(rdb);
+        el = add_tag_by_element(el, tag);
+    }
+    return el;
+}
+void *RdbLoadCrdtORSETSS(RedisModuleIO *rdb, int version, int encver) {
+    crdt_zset* set = create_crdt_zset();
+    VectorClock lastvc = rdbLoadVectorClock(rdb, version);
+    set->lastvc = lastvc;
+    uint64_t len = RedisModule_LoadUnsigned(rdb);
+    size_t strLength;
+    for(int i = 0; i < len; i++) {
+        char* str = RedisModule_LoadStringBuffer(rdb, &strLength);
+        sds field = sdsnewlen(str, strLength);
+        crdt_zset_element el = load_element(rdb);
+        dictEntry* entry = dictAddOrFind(set->dict, field);
+        dictSetSignedIntegerVal(entry, *(long long*)&el);
+        double score = get_score_by_element(el);
+        zslInsert(set->zsl, score, sdsdup(field));
+        RedisModule_ZFree(str);
+    }
+    return set;
+}
+void *RdbLoadCrdtSS(RedisModuleIO *rdb, int encver) {
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
+    if ( type == ORSET_TYPE ) {
+        return RdbLoadCrdtORSETSS(rdb, version, encver);
+    }
+    return NULL;
+}
+void save_tag_to_rdb(RedisModuleIO *rdb, crdt_zset_tag* tag) {
+    RedisModule_SaveUnsigned(rdb, tag->gid);
+    RedisModule_SaveUnsigned(rdb, tag->type);
+    crdt_zset_tag_add_counter* a;
+    crdt_zset_tag_base* b;
+    crdt_zset_tag_base_and_add_counter* ba;
+    crdt_zset_tag_base_and_add_del_counter* bad;
+    crdt_zset_tag_add_del_counter* ad;
+    switch (tag->type)
+    {
+    case TAG_ADD_COUNTER:
+        a = (crdt_zset_tag_add_counter*)tag;
+        RedisModule_SaveUnsigned(rdb, a->add_vcu);
+        RedisModule_SaveDouble(rdb, a->add_counter);
+        break;
+    case TAG_BASE:
+        b = (crdt_zset_tag_base*)tag;
+        RedisModule_SaveUnsigned(rdb, b->base_vcu);
+        RedisModule_SaveUnsigned(rdb, b->base_timespace);
+        RedisModule_SaveDouble(rdb, b->score);
+        break;
+    case BA:
+        ba = (crdt_zset_tag_base_and_add_counter*)tag;
+        RedisModule_SaveUnsigned(rdb, ba->base_vcu);
+        RedisModule_SaveUnsigned(rdb, ba->base_timespace);
+        RedisModule_SaveDouble(rdb, ba->score);
+        RedisModule_SaveUnsigned(rdb, ba->add_vcu);
+        RedisModule_SaveDouble(rdb, ba->add_counter);
+        break;
+    case AD:
+        ad = (crdt_zset_tag_add_del_counter*)tag;
+        RedisModule_SaveUnsigned(rdb, ad->add_vcu);
+        RedisModule_SaveDouble(rdb, ad->add_counter);
+        RedisModule_SaveUnsigned(rdb, ad->del_vcu);
+        RedisModule_SaveDouble(rdb, ad->del_counter);
+        break;
+    case BAD:
+        bad = (crdt_zset_tag_base_and_add_del_counter*)tag;
+        RedisModule_SaveUnsigned(rdb, bad->base_vcu);
+        RedisModule_SaveUnsigned(rdb, bad->base_timespace);
+        RedisModule_SaveDouble(rdb, bad->score);
+        RedisModule_SaveUnsigned(rdb, bad->add_vcu);
+        RedisModule_SaveDouble(rdb, bad->add_counter);
+        RedisModule_SaveUnsigned(rdb, bad->del_vcu);
+        RedisModule_SaveDouble(rdb, bad->del_counter);
+        break;
+    
+    default:
+        RedisModule_Debug(logLevel, "save rdb tag type error");
+        assert(1 == 0);
+        break;
+    }
+}
+void save_element_to_rdb(RedisModuleIO *rdb, crdt_zset_element el) {
+    RedisModule_SaveUnsigned(rdb, el.len);
+    for(int i = 0, len = el.len; i < len; i++) {
+        crdt_zset_tag* tag = element_get_tag_by_index(el, i);
+        save_tag_to_rdb(rdb, tag);
+    }
+}
+
+void save_zset_dict_to_rdb(RedisModuleIO *rdb, dict* d) {
+    RedisModule_SaveUnsigned(rdb, dictSize(d));
+    dictIterator *di = dictGetIterator(d);
+    dictEntry *de;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        RedisModule_SaveStringBuffer(rdb, field, sdslen(field));
+        save_element_to_rdb(rdb, el);
+    }
+    dictReleaseIterator(di);
+}
+
+void RdbSaveCrdtSS(RedisModuleIO *rdb, void *value) {
+    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+    crdt_zset* zset = retrieve_crdt_zset(value);
+    rdbSaveVectorClock(rdb, getCrdtSSLastVc(zset), CRDT_RDB_VERSION);
+    save_zset_dict_to_rdb(rdb, zset->dict);
+} 
+
+void AofRewriteCrdtSS(RedisModuleIO *aof, RedisModuleString *key, void *value) {
+    
+}
+
+size_t crdtSSMemUsageFunc(const void *value) {
+    return 1;
+}
+
+void freeCrdtSS(void* ss) {
+    // crdt_zset_set* set = retrieve_crdt_zset(ss);
+    // RedisModule_Free(set);
+    //to do
+}
+
+void crdtSSDigestFunc(RedisModuleDigest *md, void *value) {
+
+}
+// ====== sorted set tombstone ========
+void *RdbLoadCrdtORSETSST(RedisModuleIO *rdb, int version, int encver) {
+    crdt_zset_tombstone* zset_tombstone = create_crdt_zset_tombstone();
+    VectorClock lastvc = rdbLoadVectorClock(rdb, version);
+    zset_tombstone->lastvc = lastvc;
+    zset_tombstone->maxdelvc = rdbLoadVectorClock(rdb, version);
+    uint64_t len = RedisModule_LoadUnsigned(rdb);
+    size_t strLength;
+    for(int i = 0; i < len; i++) {
+        char* str = RedisModule_LoadStringBuffer(rdb, &strLength);
+        sds field = sdsnewlen(str, strLength);
+        crdt_zset_element el = load_element(rdb);
+        dictEntry* entry = dictAddOrFind(zset_tombstone->dict, field);
+        dictSetSignedIntegerVal(entry, *(long long*)&el);
+        RedisModule_ZFree(str);
+    }
+    return zset_tombstone;
+}
+void *RdbLoadCrdtSST(RedisModuleIO *rdb, int encver) {
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
+    if ( type == ORSET_TYPE ) {
+        return RdbLoadCrdtORSETSST(rdb, version, encver);
+    }
+    return NULL;
+}
+
+
+void RdbSaveCrdtSST(RedisModuleIO *rdb, void *value) {
+    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+    crdt_zset_tombstone* zset_tombstone = retrieve_crdt_zset_tombstone(value);
+    rdbSaveVectorClock(rdb, getCrdtSSTLastVc(zset_tombstone), CRDT_RDB_VERSION);
+    rdbSaveVectorClock(rdb, zset_tombstone->maxdelvc, CRDT_RDB_VERSION);
+    save_zset_dict_to_rdb(rdb, zset_tombstone->dict);
+} 
+
+void AofRewriteCrdtSST(RedisModuleIO *aof, RedisModuleString *key, void *value) {
+    
+}
+
+size_t crdtSSTMemUsageFunc(const void *value) {
+    return 1;
+}
+
+void freeCrdtSST(void* ss) {
+
+}
+
+void crdtSSTDigestFunc(RedisModuleDigest *md, void *value) {
+
+}
+
+size_t get_el_len(crdt_zset_element el) {
+    return el.len;
+}
+
+int is_deleted_tag(crdt_zset_tag* tag) {
+    crdt_zset_tag_add_del_counter* ad;
+    crdt_zset_tag_base_and_add_del_counter* bad;
+    crdt_zset_tag_base* b;
+    switch (tag->type)
+    {
+    case AD:
+        ad = (crdt_zset_tag_add_del_counter*)tag;
+        if(ad->add_vcu == ad->del_vcu) {
+            return 1;
+        }
+        break;
+    case TAG_BASE:
+        b = (crdt_zset_tag_base*)tag;
+        if(b->base_timespace == DEL_TIME) {
+            assert(b->score == 0);
+            return 1;
+        }
+        break;
+    case BAD:
+        bad = (crdt_zset_tag_base_and_add_del_counter*)tag;
+        if(bad->add_vcu == bad->del_vcu && bad->base_timespace == DEL_TIME) {
+            assert(bad->score == 0);
+            return 1;
+        }
+        break;    
+    case BA:
+    case TAG_ADD_COUNTER:
+        return 0;
+    default:
+        printf("[is_deleted_tag]tag type is error\n");
+        assert(1==0);
+        break;
+    }
+    return 0;
+}
+
+
+
+void element_set_tag_by_index(crdt_zset_element* el, int index, crdt_zset_tag* tag) {
+    assert(el->len > index && index >= 0);
+    assert(tag != NULL);
+    if(el->len == 1) {
+        el->tags = tag;
+        return;
+    }
+    crdt_zset_tag** tags = (crdt_zset_tag**)(el->tags);
+    tags[index] = tag;
+} 
+
+crdt_zset_tag* element_get_tag_by_gid(crdt_zset_element el, int gid, int* index) {
+    for(int i = 0; i < el.len; i++) {
+        crdt_zset_tag* tag = element_get_tag_by_index(el, i);
+        if(tag->gid == gid) {
+            if(index != NULL) *index = i;
+            return tag;
+        }
+    }
+    return NULL;
+}
+
+
 
 #define EMPTY_ELEMENT {.len=0,.tags=0} 
 
@@ -474,43 +771,9 @@ crdt_zset_tag_base_and_add_del_counter* B2BAD(crdt_zset_tag_base* b) {
     RedisModule_Free(b);
     return bad;
 }
-static int sort_tag_by_gid(const void *a, const void *b) {
-    const crdt_zset_tag *tag_a = *(crdt_zset_tag**)a, *tag_b = *(crdt_zset_tag**)b;
-    /* We sort the vector clock unit by gid*/
-    if (tag_a->gid > tag_b->gid)
-        return 1;
-    else if (tag_a->gid == tag_b->gid)
-        return 0;
-    else
-        return -1;
-}
 
-crdt_zset_element add_tag_by_element(crdt_zset_element el, crdt_zset_tag* tag) {
-    if(tag == NULL) {return el;}
-    if(el.len == 0) {
-        crdt_zset_element e = {.len = 1, .tags = *(long long*)&tag};
-        return e;
-    } else if(el.len == 1) {
-        crdt_zset_tag** tags = RedisModule_Alloc(sizeof(crdt_zset_tag*) * 2);
-        long long a = el.tags;
-        tags[0] = *(crdt_zset_tag**)&a;
-        tags[1] = tag;
-        el.len = 2;
-        qsort(tags, 2, sizeof(crdt_zset_tag*), sort_tag_by_gid);
-        el.tags = *(long long*)&tags;
-        return el;
-    } else {
-        long long a = el.tags;
-        crdt_zset_tag* t = *(crdt_zset_tag**)(&a);
-        crdt_zset_tag** tags = RedisModule_Realloc(t, sizeof(crdt_zset_tag*) * (el.len + 1));
-        tags[el.len] = *tags;
-        el.len = el.len + 1;
-        qsort(tags, el.len, sizeof(crdt_zset_tag*), sort_tag_by_gid);
-        el.tags = *(long long*)&tags;
-        return el;
-    }
-    
-}
+
+
 
 crdt_zset_tag* create_base_tag_by_meta(CrdtMeta* meta, double score) {
     crdt_zset_tag_base* base = RedisModule_Alloc(sizeof(crdt_zset_tag_base));
@@ -743,41 +1006,11 @@ crdt_zset_tag* update_tag_add_counter(crdt_zset_tag* tag, CrdtMeta* meta, double
     return NULL;
 }
 
-//create_null_tag
-crdt_zset_tag_add_counter* create_null_add_counter_tag(int gid) {
-    crdt_zset_tag_add_counter* a = RedisModule_Alloc(sizeof(crdt_zset_tag_add_counter));
-    a->gid = gid;
-    a->type = TAG_ADD_COUNTER;
-    a->add_counter = 0;
-    a->add_vcu = 0;
-    return a;
-}
 
-crdt_zset_tag_base_and_add_del_counter* create_null_base_add_del_counter_tag(int gid) {
-    crdt_zset_tag_base_and_add_del_counter* bad = RedisModule_Alloc(sizeof(crdt_zset_tag_base_and_add_del_counter));
-    bad->gid = gid;
-    bad->type = BAD;
-    bad->base_timespace = 0;
-    bad->base_vcu = 0;
-    bad->score = 0;
-    
-    bad->add_counter = 0;
-    bad->add_vcu = 0;
-    
-    bad->del_counter = 0;
-    bad->del_vcu = 0;
-    return bad;
-}
 
-crdt_zset_tag_base* create_null_base_tag(int gid) {
-    crdt_zset_tag_base* b = RedisModule_Alloc(sizeof(crdt_zset_tag_base));
-    b->gid = gid;
-    b->type = TAG_BASE;
-    b->base_timespace = 0;
-    b->base_vcu = 0;
-    b->score = 0;
-    return b;
-}
+
+
+
 crdt_zset_tag* create_add_counter_tag(CrdtMeta* meta, double sorted) {
     crdt_zset_tag_add_counter* add = create_null_add_counter_tag(getMetaGid(meta));
     add->add_counter = sorted;
@@ -1645,7 +1878,8 @@ int zsetTryAdd(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMet
             el = add_tag_by_element(el, tag);
         }
         dictSetSignedIntegerVal(de,  *(long long*)&el);
-        zslInsert(ss->zsl, score, sdsdup(field));
+        double n_score = get_score_by_element(el);
+        zslInsert(ss->zsl, n_score, sdsdup(field));
     }
     return 1;
 }
@@ -1686,9 +1920,10 @@ int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, Crdt
                 tel = add_tag_by_element(tel, a);
             }
             if(added) {
+                double n_score = get_score_by_element(tel);
                 dictEntry* de = dictAddOrFind(ss->dict, sdsdup(field));
                 dictSetSignedIntegerVal(de, *(long long*)&tel);
-                zslInsert(ss->zsl, score, sdsdup(field));
+                zslInsert(ss->zsl, n_score, sdsdup(field));
                 dictDelete(sst->dict, field);
             } else {
                 dictSetSignedIntegerVal(tde, *(long long*)&tel);
@@ -1710,13 +1945,15 @@ int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, Crdt
             tag = update_tag_add_counter(tag, meta, score, 0);
             element_set_tag_by_index(&el, index, tag);
         }
-        double new_score = get_score_by_element(el);
         dictSetSignedIntegerVal(de,  *(long long*)&el);
-        zskiplistNode *node;
-        assert(zslDelete(ss->zsl,old_score, field,&node));
-        zslInsert(ss->zsl, new_score, node->ele);
-        node->ele = NULL;
-        zslFreeNode(node);
+        double new_score = get_score_by_element(el);
+        if(new_score != old_score) {
+            zskiplistNode *node;
+            assert(zslDelete(ss->zsl,old_score, field,&node));
+            zslInsert(ss->zsl, new_score, node->ele);
+            node->ele = NULL;
+            zslFreeNode(node);
+        }
     } else {    
         de = dictAddOrFind(ss->dict, sdsdup(field));
         crdt_zset_element el = {.len =0};
@@ -1864,13 +2101,17 @@ int zsetTryRem(CRDT_SSTombstone* sst,CRDT_SS* ss, sds info, CrdtMeta* meta) {
             dictSetSignedIntegerVal(tde, *(long long*)&result_el);
             zslDelete(zset->zsl, old_score, field, NULL);
         } else {
-            double score = get_score_by_element(result_el);
             dictSetSignedIntegerVal(de, *(long long*)&result_el);
-            zskiplistNode* node;
-            assert(zslDelete(zset->zsl, old_score, field, &node));
-            zslInsert(zset->zsl, score, node->ele);
-            node->ele = NULL;
-            zslFreeNode(node);
+            double score = get_score_by_element(result_el);
+            if(score != old_score) {
+                 zskiplistNode* node;
+                assert(zslDelete(zset->zsl, old_score, field, &node));
+                zslInsert(zset->zsl, score, node->ele);
+                node->ele = NULL;
+                zslFreeNode(node);
+            }
+            
+           
         }
         
         return deleted;
@@ -1935,7 +2176,7 @@ int zsetTryDel(CRDT_SS* ss,CRDT_SSTombstone* sst, CrdtMeta* meta) {
                 crdt_zset_tag* tag = element_get_tag_by_index(el, i);
                 long long c_vcu = get_vcu(vc, tag->gid);
                 if(c_vcu == 0) {
-                deleted = 0;
+                    deleted = 0;
                 } 
                 tag = clean_base_tag(tag, c_vcu, NULL);
                 if(!is_deleted_tag(tag)) {
@@ -1962,13 +2203,16 @@ int zsetTryDel(CRDT_SS* ss,CRDT_SSTombstone* sst, CrdtMeta* meta) {
                 dictSetSignedIntegerVal(tde, *(long long*)&rel);
                 zslDelete(zset->zsl, old_score, field, NULL);
             } else {
-                double score = get_score_by_element(rel);
                 dictSetSignedIntegerVal(de, *(long long*)&rel);
-                zskiplistNode* node;
-                assert(zslDelete(zset->zsl, old_score, field, &node));
-                zslInsert(zset->zsl, score, node->ele);
-                node->ele = NULL;
-                zslFreeNode(node);
+                double score = get_score_by_element(rel);
+                if(old_score != score) {
+                    zskiplistNode* node;
+                    assert(zslDelete(zset->zsl, old_score, field, &node));
+                    zslInsert(zset->zsl, score, node->ele);
+                    node->ele = NULL;
+                    zslFreeNode(node);
+                }
+                
             }
         }
         dictReleaseIterator(di);
@@ -1996,8 +2240,10 @@ sds crdtZsetTombstoneInfo(void* tombstone) {
     sds result = sdsempty();
     long long size = dictSize(zset_tombstone->dict);
     sds vc_info = vectorClockToSds(zset_tombstone->lastvc);
-    result = sdscatprintf(result, "1) type: orset_zset_tombstone, vc: %s, size: %lld\n", vc_info, size);
+    sds max_vc_info = vectorClockToSds(zset_tombstone->maxdelvc);
+    result = sdscatprintf(result, "1) type: orset_zset_tombstone, vc: %s, maxvc:%s, size: %lld\n", vc_info, max_vc_info, size);
     sdsfree(vc_info);
+    sdsfree(max_vc_info);
     while((de = dictNext(it)) != NULL) {
         crdt_zset_element element = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
         sds element_info = getElementInfo(element);
