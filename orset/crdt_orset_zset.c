@@ -714,6 +714,19 @@ crdt_zset_tag_add_del_counter* A2AD(crdt_zset_tag_add_counter* a) {
     RedisModule_Free(a);
     return ad;
 }
+
+crdt_zset_tag_base_and_add_counter* A2BA(crdt_zset_tag_add_counter* a) {
+    crdt_zset_tag_base_and_add_counter* ba = RedisModule_Alloc(sizeof(crdt_zset_tag_base_and_add_counter));
+    ba->gid = a->gid;
+    ba->type = BA;
+    ba->add_vcu = a->add_vcu;
+    ba->add_counter = a->add_counter;
+    ba->base_vcu = 0;
+    ba->base_timespace = 0;
+    ba->score = 0;
+    return ba;
+}
+
 crdt_zset_tag_add_del_counter*  B2AD(crdt_zset_tag_base* b) {
     crdt_zset_tag_add_del_counter* ad = RedisModule_Alloc(sizeof(crdt_zset_tag_add_del_counter));
     ad->add_counter = 0;
@@ -2276,4 +2289,602 @@ zskiplistNode* zslInLexRange(CRDT_SS* current, zrangespec* range, int reverse) {
     }
 }
 
+crdt_zset_tag* dup_zset_tag(crdt_zset_tag* target) {
+    switch(target->type) {
+        case TAG_BASE: {
+            crdt_zset_tag_base* b = (crdt_zset_tag_base*)target;
+            crdt_zset_tag_base* rb = create_null_base_tag(target->gid);
+            rb->base_timespace = b->base_timespace;
+            rb->base_vcu = b->base_vcu;
+            rb->score = b->score;
+            return (crdt_zset_tag*)rb;
+        }
+        break;
+        case TAG_ADD_COUNTER: {
+            crdt_zset_tag_add_counter* a = (crdt_zset_tag_add_counter*)target;
+            crdt_zset_tag_add_counter* ra = create_null_add_counter_tag(a->gid);
+            ra->add_counter = a->add_counter;
+            ra->add_vcu = a->add_vcu;
+            return (crdt_zset_tag*)ra;
+        }
+        break;
+        case AD: {
+            crdt_zset_tag_add_del_counter* ad = (crdt_zset_tag_add_del_counter*)target;
+            crdt_zset_tag_add_del_counter* rad = create_add_del_tag(ad->gid);
+            rad->add_vcu = ad->add_vcu;
+            rad->add_counter = ad->add_counter;
+            rad->del_vcu = ad->del_vcu;
+            rad->del_counter = ad->del_counter;
+            return (crdt_zset_tag*)rad;
+        }
+        break;
+        case BA: {
+            crdt_zset_tag_base_and_add_counter* ba = (crdt_zset_tag_base_and_add_counter*)target;
+            crdt_zset_tag_base_and_add_counter* rba = create_base_and_add_tag(ba->gid);
+            rba->base_vcu = ba->base_vcu;
+            rba->base_timespace = ba->base_timespace;
+            rba->score = ba->score;
+            rba->add_vcu = ba->add_vcu;
+            rba->add_counter = ba->add_counter;
+            return (crdt_zset_tag*)rba;
+        }
+        break;
+        case BAD: {
+            crdt_zset_tag_base_and_add_del_counter* bad = (crdt_zset_tag_base_and_add_del_counter*)target;
+            crdt_zset_tag_base_and_add_del_counter* rbad = create_null_base_add_del_counter_tag(bad->gid);
+            rbad->base_vcu = bad->base_vcu;
+            rbad->base_timespace = bad->base_timespace;
+            rbad->score = bad->score;
+            rbad->add_vcu = bad->add_vcu;
+            rbad->add_counter = bad->add_counter;
+            rbad->del_vcu = bad->del_vcu;
+            rbad->del_counter = bad->del_counter;
+            return (crdt_zset_tag*)rbad;
+        }
+        break;
+        default:
+            printf("[dup_zset_tag] tag type is error: %d", target->type);
+            assert(1==0);
+        break;
+    }
+}
 
+crdt_zset_element dup_zset_element(crdt_zset_element target) {
+    crdt_zset_element rel = {.len = 0};
+    for(int i = 0, len = target.len; i < len; i++) {
+        crdt_zset_tag* tag = element_get_tag_by_index(target, i);
+        crdt_zset_tag* rtag = dup_zset_tag(tag);
+        rel = add_tag_by_element(rel, rtag);
+    }
+    return rel;
+}
+
+crdt_zset* dup_crdt_zset(crdt_zset* target) {
+    crdt_zset* result = create_crdt_zset();
+    result->lastvc = dupVectorClock(target->lastvc);
+    dictIterator* di = dictGetIterator(target->dict);
+    dictEntry* de = NULL;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element rel = dup_zset_element(el);
+        dictEntry* rde = dictAddRaw(result->dict, sdsdup(field), NULL);
+        dictSetSignedIntegerVal(rde, *(long long*)&rel);
+
+        double score = get_score_by_element(rel);
+        zslInsert(result->zsl, score, sdsdup(field));
+    }
+    dictReleaseIterator(di);
+    return result;
+}
+
+crdt_zset_tag* merge_tag_base(crdt_zset_tag_base* b, crdt_zset_tag* other) {
+    switch (other->type) {
+        case TAG_BASE: {
+            crdt_zset_tag_base* ob = (crdt_zset_tag_base*)other;
+            if(ob->base_vcu > b->base_vcu || (ob->base_vcu == b->base_vcu && ob->base_timespace == DEL_TIME)) {
+                b->base_vcu = ob->base_vcu;
+                b->base_timespace = ob->base_timespace;
+                b->score = ob->score;
+            }
+            return b;
+        }
+        break;
+        case TAG_ADD_COUNTER: {
+            crdt_zset_tag_add_counter* oa = (crdt_zset_tag_add_counter*)other;
+            crdt_zset_tag_base_and_add_counter* ba = B2BA(b);
+            ba->add_vcu = oa->add_vcu;
+            ba->add_counter = oa->add_counter;
+            return ba;
+        }
+        break;
+        case BA: {
+            crdt_zset_tag_base_and_add_counter* oba = (crdt_zset_tag_base_and_add_counter*)other;
+            crdt_zset_tag_base_and_add_counter* ba = B2BA(b);
+            if(oba->base_vcu > ba->base_vcu || (oba->base_vcu == ba->base_vcu && oba->base_timespace == DEL_TIME)) {
+                ba->base_vcu = oba->base_vcu;
+                ba->base_timespace = oba->base_timespace;
+                ba->score = oba->score;
+            }
+            ba->add_vcu = oba->add_vcu;
+            ba->add_counter = oba->add_counter;
+            return ba;
+        }
+        break;
+        case AD: {
+            crdt_zset_tag_add_del_counter* oad = (crdt_zset_tag_add_del_counter*)other;
+            crdt_zset_tag_base_and_add_del_counter* bad = B2BAD(b);
+            bad->add_vcu = oad->add_vcu;
+            bad->add_counter = oad->add_counter;
+            bad->del_vcu = oad->del_vcu;
+            bad->del_counter = oad->del_counter;
+            return bad;
+        }   
+        break;
+        case BAD: {
+            crdt_zset_tag_base_and_add_del_counter* obad = (crdt_zset_tag_base_and_add_del_counter*)other;
+            crdt_zset_tag_base_and_add_del_counter* bad = B2BAD(b);
+            if (obad->base_vcu > bad->base_vcu || (obad->base_vcu == bad->base_vcu && obad->base_timespace == DEL_TIME)) {
+                bad->base_vcu = obad->base_vcu;
+                bad->base_timespace = obad->base_timespace;
+                bad->score = obad->score;
+            }
+            bad->add_vcu = obad->add_vcu;
+            bad->add_counter = obad->add_counter;
+            bad->del_vcu = obad->del_vcu;
+            bad->del_counter = obad->del_counter;
+            return bad;
+        }
+        break;
+        default:
+            printf("[merge_tag_base] tag type is error: %d", other->type);
+            assert(1==0);
+        break;
+    }
+}
+crdt_zset_tag* merge_tag_add(crdt_zset_tag_add_counter* a, crdt_zset_tag* other) {
+    switch (other->type) {
+        case TAG_BASE: {
+            crdt_zset_tag_base* ob = (crdt_zset_tag_base*)other;
+            crdt_zset_tag_base_and_add_counter* ba = A2BA(a);
+            ba->base_vcu = ob->base_vcu;
+            ba->base_timespace = ob->base_timespace;
+            ba->score = ob->score;
+            return ba;
+        }
+        break;
+        case TAG_ADD_COUNTER: {
+            crdt_zset_tag_add_counter* oa = (crdt_zset_tag_add_counter*)other;
+            if(oa->add_vcu > a->add_vcu) {
+                a->add_vcu = oa->add_vcu;
+                a->add_counter = oa->add_counter;
+            }
+            return a;
+        }
+        break;
+        case BA: {
+            crdt_zset_tag_base_and_add_counter* oba = (crdt_zset_tag_base_and_add_counter*)other;
+            crdt_zset_tag_base_and_add_counter* ba = A2BA(a);
+            if(oba->add_vcu > ba->add_vcu) {
+                ba->add_vcu = oba->add_vcu;
+                ba->add_counter = oba->add_counter;
+            }
+            ba->base_vcu = oba->base_vcu;
+            ba->base_timespace = oba->base_timespace;
+            ba->score = oba->score;
+            return ba;
+        }
+        break;
+        case AD: {
+            crdt_zset_tag_add_del_counter* oad = (crdt_zset_tag_add_del_counter*)other;
+            crdt_zset_tag_add_del_counter* ad = A2AD(a);
+            if (oad->add_vcu > ad->add_vcu) {
+                ad->add_vcu = oad->add_vcu;
+                ad->add_counter = oad->add_counter;
+            }
+            ad->del_vcu = oad->del_vcu;
+            ad->del_counter = oad->del_counter;
+            return ad;
+        }
+        break;
+        case BAD: {
+            crdt_zset_tag_base_and_add_del_counter* obad = (crdt_zset_tag_base_and_add_del_counter*)other;
+            crdt_zset_tag_base_and_add_del_counter* bad = A2BAD(a);
+            if (obad->add_vcu > bad->add_vcu) {
+                bad->add_vcu = obad->add_vcu;
+                bad->add_counter = obad->add_counter;
+            }
+            bad->base_vcu = obad->base_vcu;
+            bad->base_timespace = obad->base_timespace;
+            bad->score = obad->score;
+            bad->del_vcu = obad->del_vcu;
+            bad->del_counter = obad->del_counter;
+            return bad;
+        }
+        break;
+        default:
+            printf("[merge_tag_add] tag type is error: %d", other->type);
+            assert(1==0);
+        break;
+    }
+}
+
+crdt_zset_tag*  merge_tag_add_del(crdt_zset_tag_add_del_counter* ad, crdt_zset_tag* other) {
+    switch(other->type) {
+        case TAG_BASE: {
+            crdt_zset_tag_base* ob = (crdt_zset_tag_base*)other;
+            crdt_zset_tag_base_and_add_del_counter* bad = AD2BAD(ad);
+            bad->base_vcu = ob->base_vcu;
+            bad->base_timespace = ob->base_timespace;
+            bad->score = ob->score;
+            return bad;
+        }
+        break;
+        case TAG_ADD_COUNTER: {
+            crdt_zset_tag_add_counter* oa = (crdt_zset_tag_add_counter*)other;
+            if(oa->add_vcu > ad->add_vcu) {
+                ad->add_vcu = oa->add_vcu;
+                ad->add_counter = oa->add_counter;
+            }
+            return ad;
+        }
+        break;
+        case BA: {
+            crdt_zset_tag_base_and_add_counter* oba = (crdt_zset_tag_base_and_add_counter*)other;
+            crdt_zset_tag_base_and_add_del_counter* bad = AD2BAD(ad);
+            if(oba->add_vcu > bad->add_vcu) {
+                bad->add_vcu = oba->add_vcu;
+                bad->add_counter = oba->add_counter;
+            }
+            bad->base_vcu = oba->base_vcu;
+            bad->base_timespace = oba->base_timespace;
+            bad->score = oba->score;
+            return bad;
+        }
+        break;
+        case AD: {
+            crdt_zset_tag_add_del_counter* oad = (crdt_zset_tag_add_del_counter*)other;
+            if(oad->add_vcu > ad->add_vcu) {
+                ad->add_vcu = oad->add_vcu;
+                ad->add_counter = oad->add_counter;
+            }
+            if(oad->del_vcu > ad->del_vcu) {
+                ad->del_vcu = oad->del_vcu;
+                ad->del_counter = oad->del_counter;
+            }
+            return ad;
+        }
+        break;
+        case BAD: {
+            crdt_zset_tag_base_and_add_del_counter* obad = (crdt_zset_tag_base_and_add_del_counter*)other;
+            crdt_zset_tag_base_and_add_del_counter* bad = AD2BAD(ad);
+            if(obad->add_vcu > bad->add_vcu) {
+                bad->add_vcu = obad->add_vcu;
+                bad->add_counter = obad->add_counter;
+            }
+            if(obad->del_vcu > bad->del_vcu) {
+                bad->del_vcu = obad->del_vcu;
+                bad->del_counter = obad->del_counter;
+            }
+            bad->base_vcu = obad->base_vcu;
+            bad->base_timespace = obad->base_timespace;
+            bad->score = obad->score;
+            return bad;
+        }
+        break;
+        default:
+            printf("[merge_tag_add_del] tag type is error: %d", other->type);
+            assert(1==0);
+        break;
+    }
+}
+
+crdt_zset_tag* merge_tag_base_add(crdt_zset_tag_base_and_add_counter* ba, crdt_zset_tag* other) {
+    switch(other->type) {
+        case TAG_BASE: {
+            crdt_zset_tag_base* ob = (crdt_zset_tag_base*)other;
+            if(ob->base_vcu > ba->base_vcu || (ob->base_vcu == ba->base_vcu && ob->base_timespace == DEL_TIME)) {
+                ba->base_vcu = ob->base_vcu;
+                ba->base_timespace = ob->base_timespace;
+                ba->score = ob->score;
+            }
+            return ba;
+        }
+        break;
+        case TAG_ADD_COUNTER: {
+            crdt_zset_tag_add_counter* oa = (crdt_zset_tag_add_counter*)other;
+            if(oa->add_vcu > ba->add_vcu) {
+                ba->add_vcu = oa->add_vcu;
+                ba->add_counter = oa->add_counter;
+            }
+            return ba;
+        }
+        break;
+        case BA: {
+            crdt_zset_tag_base_and_add_counter* oba = (crdt_zset_tag_base_and_add_counter*)other;
+            if(oba->base_vcu > ba->base_vcu || (oba->base_vcu == ba->base_vcu && oba->base_timespace == DEL_TIME)) {
+                ba->base_vcu = oba->base_vcu;
+                ba->base_timespace = oba->base_timespace;
+                ba->score = oba->score;
+            }
+            if(oba->add_vcu > ba->add_vcu) {
+                ba->add_vcu = oba->add_vcu;
+                ba->add_counter = oba->add_counter;
+            }
+            return ba;
+        }
+        break;
+        case AD: {
+            crdt_zset_tag_add_del_counter* oad = (crdt_zset_tag_add_del_counter*)other;
+            crdt_zset_tag_base_and_add_del_counter* bad = BA2BAD(ba);
+            if(oad->add_vcu > bad->add_vcu) {
+                bad->add_vcu = oad->add_vcu;
+                bad->add_counter = oad->add_counter;
+            }
+            bad->del_vcu = oad->del_vcu;
+            bad->del_counter = oad->del_counter;
+            return bad;
+        }
+        break;
+        case BAD: {
+            crdt_zset_tag_base_and_add_del_counter* obad = (crdt_zset_tag_base_and_add_del_counter*)other;
+            crdt_zset_tag_base_and_add_del_counter* bad = BA2BAD(ba);
+            if(obad->base_vcu > bad->base_vcu || (obad->base_vcu == bad->base_vcu && obad->base_timespace == DEL_TIME)) {
+                bad->base_vcu = obad->base_vcu;
+                bad->base_timespace = obad->base_timespace;
+                bad->score = obad->score;
+            }
+            if(obad->add_vcu > bad->add_vcu) {
+                bad->add_vcu = obad->add_vcu;
+                bad->add_counter = obad->add_counter;
+            }
+            bad->del_vcu = obad->del_vcu;
+            bad->del_counter = obad->del_counter;
+            return bad;
+        }
+        break;
+        default:
+            printf("[merge_tag_base_add] tag type is error: %d", other->type);
+            assert(1==0);
+        break;
+    }
+}
+
+crdt_zset_tag* merge_tag_base_add_del(crdt_zset_tag_base_and_add_del_counter* bad, crdt_zset_tag* other) {
+    switch(other->type) {
+        case TAG_BASE: {
+            crdt_zset_tag_base* ob = (crdt_zset_tag_base*)other;
+            if(ob->base_vcu > bad->base_vcu || (ob->base_vcu == bad->base_vcu && ob->base_timespace == DEL_TIME)) {
+                bad->base_vcu = ob->base_vcu;
+                bad->base_timespace = ob->base_timespace;
+                bad->score = ob->score; 
+            }
+            return bad;
+        }
+        break;
+        case TAG_ADD_COUNTER: {
+            crdt_zset_tag_add_counter* oa = (crdt_zset_tag_add_counter*)other;
+            if(oa->add_vcu > bad->add_vcu) {
+                bad->add_vcu = oa->add_vcu;
+                bad->add_counter = oa->add_counter;
+            }
+            return bad;
+        }
+        break;
+        case BA: {
+            crdt_zset_tag_base_and_add_counter* oba = (crdt_zset_tag_base_and_add_counter*)other;
+            if(oba->base_vcu > bad->base_vcu || (oba->base_vcu == bad->base_vcu && oba->base_timespace == DEL_TIME)) {
+                bad->base_vcu = oba->base_vcu;
+                bad->base_timespace = oba->base_timespace;
+                bad->score = oba->score; 
+            }
+            if(oba->add_vcu > bad->add_vcu) {
+                bad->add_vcu = oba->add_vcu;
+                bad->add_counter = oba->add_counter;
+            }
+            return bad;
+        }
+        break;
+        case AD: {
+            crdt_zset_tag_add_del_counter* oad = (crdt_zset_tag_add_del_counter*)other;
+            if(oad->add_vcu > bad->add_vcu) {
+                bad->add_vcu = oad->add_vcu;
+                bad->add_counter = oad->add_counter;
+            }
+            if(oad->del_vcu > bad->del_vcu) {
+                bad->del_vcu = oad->del_vcu;
+                bad->del_counter = oad->del_counter;
+            }
+            return bad;
+        }
+        break;
+        case BAD: {
+            crdt_zset_tag_base_and_add_del_counter* obad = (crdt_zset_tag_base_and_add_del_counter*)other;
+            if(obad->base_vcu > bad->base_vcu || (obad->base_vcu == bad->base_vcu && obad->base_timespace == DEL_TIME)) {
+                bad->base_vcu = obad->base_vcu;
+                bad->base_timespace = obad->base_timespace;
+                bad->score = obad->score; 
+            }
+            if(obad->add_vcu > bad->add_vcu) {
+                bad->add_vcu = obad->add_vcu;
+                bad->add_counter = obad->add_counter;
+            }
+            if(obad->del_vcu > bad->del_vcu) {
+                bad->del_vcu = obad->del_vcu;
+                bad->del_counter = obad->del_counter;
+            }
+            return bad;
+        }
+        break;
+        default:
+            printf("[merge_tag_base_add_del] tag type is error: %d", other->type);
+            assert(1==0);
+        break;
+    }
+}
+
+crdt_zset_tag* merge_zset_tag(crdt_zset_tag* target, crdt_zset_tag* other) {
+    switch (target->type)
+    {
+        case TAG_BASE: {
+            return merge_tag_base((crdt_zset_tag_base*)target, other);
+        }
+        break;
+        case TAG_ADD_COUNTER: {
+            return merge_tag_add((crdt_zset_tag_add_counter*)target, other);
+        }
+        break;
+        case AD: {
+            return merge_tag_add_del((crdt_zset_tag_add_del_counter*)target, other);
+        }
+        break;
+        case BA: {
+            return merge_tag_base_add((crdt_zset_tag_base_and_add_counter*)target, other);
+        }
+        break;
+        case BAD: {
+            return merge_tag_base_add_del((crdt_zset_tag_base_and_add_del_counter*)target, other);
+        }
+        break;
+        default:
+            printf("[merge_zset_tag] tag type is error: %d", target->type);
+            assert(1==0);
+        break;
+    }
+}
+CrdtObject *crdtSSMerge(CrdtObject *currentVal, CrdtObject *value) {
+    crdt_zset* target = retrieve_crdt_zset(currentVal);
+    crdt_zset* other = retrieve_crdt_zset(value);
+    if (target == NULL && other ==  NULL) {
+        return NULL;
+    }
+    if(target == NULL) {
+        return (CrdtObject*)dup_crdt_zset(other);
+    }
+    crdt_zset* result = dup_crdt_zset(target);
+    if(other == NULL) {return result;}
+    dictIterator* di = dictGetIterator(other->dict);
+    dictEntry* de = NULL;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        dictEntry* rde = dictFind(result->dict, field);
+        crdt_zset_element rel;
+        if (rde == NULL) {
+            rel = dup_zset_element(el);
+            rde = dictAddRaw(result->dict, sdsdup(field), NULL);
+            dictSetSignedIntegerVal(rde, *(long long*)&rel);
+            double rscore = get_score_by_element(rel);
+            zslInsert(result->zsl, rscore, sdsdup(field));
+        } else {
+            rel = *(crdt_zset_element*)&dictGetSignedIntegerVal(rde);
+            double old_score = get_score_by_element(rel);
+            for(int i = 0,len = el.len; i < len; i++) {
+                crdt_zset_tag* tag = element_get_tag_by_index(el, i);
+                int rindex = 0;
+                crdt_zset_tag* rtag = element_get_tag_by_gid(rel, tag->gid, &rindex);
+                if (rtag == NULL) {
+                    rtag = dup_zset_tag(tag);
+                    rel = add_tag_by_element(rel, rtag);
+                } else {
+                    rtag = merge_zset_tag(rtag, tag);
+                    element_set_tag_by_index(&rel, rindex, rtag);
+                }
+            }
+            dictSetSignedIntegerVal(rde, *(long long*)&rel);
+            double now_score = get_score_by_element(rel);
+            zskiplistNode* node;
+            zslDelete(result->zsl, old_score, field, &node);
+            zslInsert(result->zsl, now_score, node->ele);
+            node->ele = NULL;
+            zslFreeNode(node);
+        }
+    }
+    dictReleaseIterator(di);
+    VectorClock old_vc = result->lastvc;
+    result->lastvc = vectorClockMerge(result->lastvc, other->lastvc);
+    freeVectorClock(old_vc);
+    return (CrdtObject*)result;
+}
+size_t get_tag_memory(crdt_zset_tag* tag) {
+    crdt_zset_tag_base* b;
+    crdt_zset_tag_add_counter* a;
+    crdt_zset_tag_add_del_counter* ad;
+    crdt_zset_tag_base_and_add_counter* ba;
+    crdt_zset_tag_base_and_add_del_counter* bad;
+    switch(tag->type) {
+        case TAG_BASE:
+            return sizeof(crdt_zset_tag_base);
+        break;
+        case TAG_ADD_COUNTER:
+            return sizeof(crdt_zset_tag_add_counter);
+        break;
+        case BA:
+            return sizeof(crdt_zset_tag_base_and_add_counter);
+        break;
+        case AD:
+            return sizeof(crdt_zset_tag_add_del_counter);
+        break;
+        case BAD:
+            return sizeof(crdt_zset_tag_base_and_add_del_counter);
+        break;
+        default:
+            printf("filter type error: type is %d", tag->type);
+            assert( 1 == 0);
+        break;
+    } 
+}
+size_t get_element_memory(crdt_zset_element el) {
+    size_t memory = 0;
+    for(int i = 0; i < el.len; i++) {
+        crdt_zset_tag* tag = element_get_tag_by_index(el, i);
+        size_t memory = get_tag_memory(tag);
+    }
+    return memory;
+}
+CrdtObject** crdtSSFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* num) {
+    crdt_zset* zset = retrieve_crdt_zset(common);
+    dictIterator *di = dictGetSafeIterator(zset->dict);
+    dictEntry *de;
+    crdt_zset** result = NULL;
+    crdt_zset* current = NULL;
+    int current_memory = 0;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        int memory = get_element_memory(el);
+        if(memory + sdslen(field) > maxsize) {
+            printf("[filter crdt_zset] memory error: key-%s \n", field);
+            *num = -1;
+            return NULL;
+        }
+        if(current_memory + sdslen(field) + memory > maxsize) {
+            current = NULL;
+        }
+        if(current == NULL) {
+            current = create_crdt_zset();
+            current_memory = 0;
+            (*num)++;
+            if(result) {
+                result = RedisModule_Realloc(result, sizeof(crdt_zset*) * (*num));
+            }else {
+                result = RedisModule_Alloc(sizeof(crdt_zset*));
+            }
+            result[(*num)-1] = current;
+        }
+        current_memory += sdslen(field) + memory;
+        dictEntry* de = dictAddOrFind(current->dict, sdsdup(field));
+        dictSetSignedIntegerVal(de, *(long long*)&el);
+    }
+    dictReleaseIterator(di);
+    if(current != NULL) {
+        current->lastvc = dupVectorClock(zset->lastvc);
+    }
+    return (CrdtObject**)result;
+}
+void freeSSFilter(CrdtObject** filters, int num) {
+    for(int i = 0; i < num; i++) {
+        freeCrdtSS(filters[i]);
+    }
+    RedisModule_Free(filters);
+}

@@ -76,6 +76,15 @@ static CrdtDataMethod ZSetDataMethod = {
     .info = crdtZSetInfo,
 };
 
+
+CrdtObject *crdtSSMerge(CrdtObject *currentVal, CrdtObject *value);
+CrdtObject** crdtSSFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
+void freeSSFilter(CrdtObject** filters, int num);    
+static CrdtObjectMethod ZSetCommandMethod = {
+    .merge = crdtSSMerge,
+    .filterAndSplit = crdtSSFilter,
+    .freefilter = freeSSFilter,
+};
 // moduleType
 static RedisModuleType *CrdtSS;
 static RedisModuleType *CrdtSST;

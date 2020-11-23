@@ -288,6 +288,8 @@ CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
                 return &SetCommonMethod;
             case CRDT_RC_TYPE:
                 return &RcCommonMethod;
+            case CRDT_ZSET_TYPE:
+                return &ZSetCommandMethod;
             default:
                 return NULL;
         }
