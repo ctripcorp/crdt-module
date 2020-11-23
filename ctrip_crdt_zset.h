@@ -54,16 +54,16 @@ typedef struct crdt_zset_tombstone {
 
 
 
-CrdtTombstone* crdtZsetTombstoneMerge(CrdtTombstone* target, CrdtTombstone* src);
-CrdtTombstone** crdtZsetTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) ;
-void freeCrdtZsetTombstoneFilter(CrdtTombstone** filters, int num);
+CrdtTombstone* crdtSSTMerge(CrdtTombstone* target, CrdtTombstone* src);
+CrdtTombstone** crdtSSTFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) ;
+void freeSSTFilter(CrdtTombstone** filters, int num);
 int crdtZsetTombstonePurge(CrdtTombstone* tombstone, CrdtData* r);
 sds crdtZsetTombstoneInfo(void* tombstone);
 int crdtZsetTombstoneGc(CrdtTombstone* target, VectorClock clock);
 static CrdtTombstoneMethod ZsetTombstoneCommonMethod = {
-    .merge = crdtZsetTombstoneMerge,
-    .filterAndSplit =  crdtZsetTombstoneFilter,
-    .freefilter = freeCrdtZsetTombstoneFilter,
+    .merge = crdtSSTMerge,
+    .filterAndSplit =  crdtSSTFilter,
+    .freefilter = freeSSTFilter,
     .gc = crdtZsetTombstoneGc,
     .purge = crdtZsetTombstonePurge,
     .info = crdtZsetTombstoneInfo,

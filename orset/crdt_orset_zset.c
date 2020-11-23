@@ -2233,19 +2233,8 @@ int zsetTryDel(CRDT_SS* ss,CRDT_SSTombstone* sst, CrdtMeta* meta) {
     
     return 1;
 }
-// tombstone method
-CrdtTombstone* crdtZsetTombstoneMerge(CrdtTombstone* target, CrdtTombstone* src) {
-    return NULL;
-}
-CrdtTombstone** crdtZsetTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) {
-    return NULL;
-}
-void freeCrdtZsetTombstoneFilter(CrdtTombstone** filters, int num) {
 
-}
-int crdtZsetTombstonePurge(CrdtTombstone* tombstone, CrdtData* r) {
-    return 0;
-}
+
 sds crdtZsetTombstoneInfo(void* tombstone) {
     crdt_zset_tombstone* zset_tombstone = retrieve_crdt_zset_tombstone(tombstone);
     dictIterator* it = dictGetIterator(zset_tombstone->dict);
@@ -2412,6 +2401,7 @@ crdt_zset_tag* merge_tag_base(crdt_zset_tag_base* b, crdt_zset_tag* other) {
         }
         break;
         case AD: {
+            RedisModule_Debug(logLevel, "ad");
             crdt_zset_tag_add_del_counter* oad = (crdt_zset_tag_add_del_counter*)other;
             crdt_zset_tag_base_and_add_del_counter* bad = B2BAD(b);
             bad->add_vcu = oad->add_vcu;
@@ -2512,6 +2502,7 @@ crdt_zset_tag* merge_tag_add(crdt_zset_tag_add_counter* a, crdt_zset_tag* other)
 crdt_zset_tag*  merge_tag_add_del(crdt_zset_tag_add_del_counter* ad, crdt_zset_tag* other) {
     switch(other->type) {
         case TAG_BASE: {
+            RedisModule_Debug(logLevel, "del base");
             crdt_zset_tag_base* ob = (crdt_zset_tag_base*)other;
             crdt_zset_tag_base_and_add_del_counter* bad = AD2BAD(ad);
             bad->base_vcu = ob->base_vcu;
@@ -2887,4 +2878,129 @@ void freeSSFilter(CrdtObject** filters, int num) {
         freeCrdtSS(filters[i]);
     }
     RedisModule_Free(filters);
+}
+
+crdt_zset_tombstone* dup_crdt_zset_tombstone(crdt_zset_tombstone* target) {
+    crdt_zset_tombstone* result = create_crdt_zset_tombstone();
+    result->lastvc = dupVectorClock(target->lastvc);
+    result->maxdelvc = dupVectorClock(target->maxdelvc);
+    dictIterator* di = dictGetIterator(target->dict);
+    dictEntry* de = NULL;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element rel = dup_zset_element(el);
+        dictEntry* rde = dictAddRaw(result->dict, sdsdup(field), NULL);
+        dictSetSignedIntegerVal(rde, *(long long*)&rel);
+    }
+    dictReleaseIterator(di);
+    return result;
+}
+// tombstone method
+CrdtTombstone* crdtSSTMerge(CrdtTombstone* currentTomstone, CrdtTombstone* otherTomstone) {
+    crdt_zset_tombstone* target = retrieve_crdt_zset_tombstone(currentTomstone);
+    crdt_zset_tombstone* other = retrieve_crdt_zset(otherTomstone);
+    if (target == NULL && other ==  NULL) {
+        return NULL;
+    }
+    if(target == NULL) {
+        return (CrdtObject*)dup_crdt_zset_tombstone(other);
+    }
+    crdt_zset_tombstone* result = dup_crdt_zset_tombstone(target);
+    if(other == NULL) {
+        return result;
+    }
+    dictIterator* di = dictGetIterator(other->dict);
+    dictEntry* de = NULL;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        dictEntry* rde = dictFind(result->dict, field);
+        crdt_zset_element rel;
+        if(rde == NULL) {
+            rde = dictAddRaw(result->dict, sdsdup(field), NULL);
+            rel = dup_zset_element(el);
+        } else {
+            rel = *(crdt_zset_element*)&dictGetSignedIntegerVal(rde);
+            for(int i = 0, len = el.len; i < len; i++) {
+                crdt_zset_tag* tag = element_get_tag_by_index(el, i);
+                int rindex = 0;
+                crdt_zset_tag* rtag = element_get_tag_by_gid(rel, tag->gid, &rindex);
+                if(rtag == NULL) {
+                    rtag = dup_zset_tag(tag);
+                    rel = add_tag_by_element(rel, rtag);
+                } else {
+                    rtag = merge_zset_tag(rtag, tag);
+                    element_set_tag_by_index(&rel, rindex, rtag);
+                }
+            }
+        }
+        dictSetSignedIntegerVal(rde, *(long long*)&rel);
+    }
+    dictReleaseIterator(di);
+    VectorClock vc = result->lastvc;
+    result->lastvc = vectorClockMerge(result->lastvc , other->lastvc);
+    if(vc) {
+        freeVectorClock(vc);
+        vc = NULL;
+    }
+    vc = result->maxdelvc;
+    result->maxdelvc = vectorClockMerge(vc, other->maxdelvc);
+    if(vc) {
+        freeVectorClock(vc);
+    }
+    return result;
+}
+
+CrdtTombstone** crdtSSTFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* num) {
+    crdt_zset_tombstone* zset_tombstone = retrieve_crdt_zset_tombstone(target);
+    dictIterator *di = dictGetSafeIterator(zset_tombstone->dict);
+    dictEntry *de;
+    crdt_zset_tombstone** result = NULL;
+    crdt_zset_tombstone* current = NULL;
+    int current_memory = 0;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        int memory = get_element_memory(el);
+        if(memory + sdslen(field) > maxsize) {
+            printf("[filter crdt_zset] memory error: key-%s \n", field);
+            *num = -1;
+            return NULL;
+        }
+        if(current_memory + sdslen(field) + memory > maxsize) {
+            current = NULL;
+        }
+        if(current == NULL) {
+            current = create_crdt_zset_tombstone();
+            current_memory = 0;
+            (*num)++;
+            if(result) {
+                result = RedisModule_Realloc(result, sizeof(crdt_zset*) * (*num));
+            }else {
+                result = RedisModule_Alloc(sizeof(crdt_zset*));
+            }
+            result[(*num)-1] = current;
+        }
+        current_memory += sdslen(field) + memory;
+        dictEntry* de = dictAddOrFind(current->dict, sdsdup(field));
+        dictSetSignedIntegerVal(de, *(long long*)&el);
+    }
+    dictReleaseIterator(di);
+    if(current != NULL) {
+        current->lastvc = dupVectorClock(zset_tombstone->lastvc);
+        current->maxdelvc = dupVectorClock(zset_tombstone->maxdelvc);
+    }
+    return (CrdtObject**)result;
+}
+
+void freeSSTFilter(CrdtTombstone** filters, int num) {
+    for(int i = 0; i < num; i++) {
+        freeCrdtSST(filters[i]);
+    }
+    RedisModule_Free(filters);
+}
+
+int crdtZsetTombstonePurge(CrdtTombstone* tombstone, CrdtData* r) {
+    return 0;
 }
