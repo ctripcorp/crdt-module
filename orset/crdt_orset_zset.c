@@ -47,15 +47,54 @@ sds getTagInfo(crdt_zset_tag* tag) {
     return result;
 }
 
+crdt_zset_element create_element() {
+    crdt_zset_element el = {.len = 0};
+    return el;
+}
+crdt_zset_element get_element_by_dictEntry(dictEntry* di) {
+    return  *(crdt_zset_element*)&dictGetSignedIntegerVal(di);
+}
+void set_element_by_dictEntry(dictEntry* di, crdt_zset_element el) {
+    dictSetSignedIntegerVal(di, *(long long*)&el);
+}
+
+void free_tag(crdt_zset_tag* tag) {
+    RedisModule_Free(tag);
+}
+
+crdt_zset_tag* element_get_tag_by_index(crdt_zset_element el, int index) {
+    assert(el.len > index && index >= 0);
+    if(el.len == 0) {
+        return NULL;
+    }
+    if(el.len == 1) {
+        long long ll = el.tags;
+        return ll;
+    }
+    crdt_zset_tag** tags = (crdt_zset_tag**)(el.tags);
+    return tags[index];
+}
+
+void free_element(void *val) {
+    crdt_zset_element el = *(crdt_zset_element*)&val;
+    if(el.len == 0) return;
+    for(int i = 0; i < el.len; i++) {
+        crdt_zset_tag* tag = element_get_tag_by_index(el, i);
+        free_tag(tag);
+    }
+    if(el.len > 1) {
+        RedisModule_Free(el.tags);
+    }
+}
 void dictCrdtSSDestructor(void *privdata, void *val) {
     DICT_NOTUSED(privdata);
 
     if (val == NULL) return; /* Lazy freeing will set value to NULL. */
-    freeCrdtSS(val);
+    free_element(val);
 }
 
 
-static dictType crdtSetDictType = {
+static dictType crdtZSetDictType = {
         dictSdsHash,                /* hash function */
         NULL,                       /* key dup */
         NULL,                       /* val dup */
@@ -70,7 +109,7 @@ CRDT_SS* create_crdt_zset() {
     s->type = 0;
     setDataType((CrdtObject*)s, CRDT_ZSET_TYPE);
     setType((CrdtObject*)s, CRDT_DATA);
-    s->dict = dictCreate(&crdtSetDictType, NULL);
+    s->dict = dictCreate(&crdtZSetDictType, NULL);
     s->zsl = zslCreate();
     s->lastvc = newVectorClock(0);
     return (CRDT_SS*)s;
@@ -81,7 +120,7 @@ CRDT_SSTombstone* create_crdt_zset_tombstone() {
     st->type = 0;
     setDataType((CrdtObject*)st, CRDT_ZSET_TYPE);
     setType((CrdtObject*)st, CRDT_TOMBSTONE);
-    st->dict = dictCreate(&crdtSetDictType, NULL);
+    st->dict = dictCreate(&crdtZSetDictType, NULL);
     st->lastvc = newVectorClock(0);
     st->maxdelvc = newVectorClock(0);
     return (CRDT_SSTombstone*)st;
@@ -201,25 +240,24 @@ static int sort_tag_by_gid(const void *a, const void *b) {
 crdt_zset_element add_tag_by_element(crdt_zset_element el, crdt_zset_tag* tag) {
     if(tag == NULL) {return el;}
     if(el.len == 0) {
-        crdt_zset_element e = {.len = 1, .tags = *(long long*)&tag};
+        crdt_zset_element e = {.len = 1, .tags = tag};
         return e;
     } else if(el.len == 1) {
         crdt_zset_tag** tags = RedisModule_Alloc(sizeof(crdt_zset_tag*) * 2);
         long long a = el.tags;
-        tags[0] = *(crdt_zset_tag**)&a;
+        tags[0] = (crdt_zset_tag*)a;
         tags[1] = tag;
         el.len = 2;
         qsort(tags, 2, sizeof(crdt_zset_tag*), sort_tag_by_gid);
-        el.tags = *(long long*)&tags;
+        el.tags = tags;
         return el;
     } else {
-        long long a = el.tags;
-        crdt_zset_tag* t = *(crdt_zset_tag**)(&a);
-        crdt_zset_tag** tags = RedisModule_Realloc(t, sizeof(crdt_zset_tag*) * (el.len + 1));
-        tags[el.len] = *tags;
+        crdt_zset_tag** tags  = (crdt_zset_tag**)el.tags;
+        tags = RedisModule_Realloc(tags, sizeof(crdt_zset_tag*) * (el.len + 1));
+        tags[el.len] = tag;
         el.len = el.len + 1;
         qsort(tags, el.len, sizeof(crdt_zset_tag*), sort_tag_by_gid);
-        el.tags = *(long long*)&tags;
+        el.tags = tags;
         return el;
     }
     
@@ -286,18 +324,7 @@ double get_counter_score(crdt_zset_tag* tag) {
     }
 }
 
-crdt_zset_tag* element_get_tag_by_index(crdt_zset_element el, int index) {
-    assert(el.len > index && index >= 0);
-    if(el.len == 0) {
-        return NULL;
-    }
-    if(el.len == 1) {
-        long long ll = el.tags;
-        return ll;
-    }
-    crdt_zset_tag** tags = (crdt_zset_tag**)(el.tags);
-    return tags[index];
-}
+
 
 double get_score_by_element(crdt_zset_element el) {
     double base = 0;
@@ -400,7 +427,7 @@ void *RdbLoadCrdtORSETSS(RedisModuleIO *rdb, int version, int encver) {
         sds field = sdsnewlen(str, strLength);
         crdt_zset_element el = load_element(rdb);
         dictEntry* entry = dictAddOrFind(set->dict, field);
-        dictSetSignedIntegerVal(entry, *(long long*)&el);
+        set_element_by_dictEntry(entry, el);
         double score = get_score_by_element(el);
         zslInsert(set->zsl, score, sdsdup(field));
         RedisModule_ZFree(str);
@@ -483,7 +510,7 @@ void save_zset_dict_to_rdb(RedisModuleIO *rdb, dict* d) {
     dictEntry *de;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         RedisModule_SaveStringBuffer(rdb, field, sdslen(field));
         save_element_to_rdb(rdb, el);
     }
@@ -527,7 +554,7 @@ void *RdbLoadCrdtORSETSST(RedisModuleIO *rdb, int version, int encver) {
         sds field = sdsnewlen(str, strLength);
         crdt_zset_element el = load_element(rdb);
         dictEntry* entry = dictAddOrFind(zset_tombstone->dict, field);
-        dictSetSignedIntegerVal(entry, *(long long*)&el);
+        set_element_by_dictEntry(entry, el);
         RedisModule_ZFree(str);
     }
     return zset_tombstone;
@@ -893,7 +920,7 @@ callback_bad:
     return (crdt_zset_tag*)bad;
 }
 
-crdt_zset_tag* clean_tag(crdt_zset_tag* tag, int isDelete) {
+crdt_zset_tag* clean_tag(crdt_zset_tag* tag, int base_vcu) {
     if(tag == NULL) { return tag; }
     crdt_zset_tag_base_and_add_del_counter* bad;
     crdt_zset_tag_base_and_add_counter* ba;
@@ -905,6 +932,7 @@ crdt_zset_tag* clean_tag(crdt_zset_tag* tag, int isDelete) {
     case TAG_BASE:
         // crdt_zset_tag_base* base = (crdt_zset_tag_base*)tag;
         b = (crdt_zset_tag_base*)tag;
+        if(base_vcu != -1) b->base_vcu = base_vcu;
         b->score = 0;
         b->base_timespace = DEL_TIME;
         return b;
@@ -935,6 +963,7 @@ add_del:
     ad->del_vcu = ad->add_vcu;
     return ad;
 base_add_del:
+    if(base_vcu != -1) bad->base_vcu = base_vcu;
     bad->base_timespace = DEL_TIME;
     bad->score = 0;
     bad->del_counter = bad->add_counter;
@@ -951,7 +980,7 @@ crdt_zset_element update_base(crdt_zset_element el, CrdtMeta* meta, double score
             tag = reset_base_tag(tag, meta, score, 1, NULL);
             updated = 1;
         } else {
-            tag = clean_tag(tag, 0);
+            tag = clean_tag(tag, -1);
         }
         element_set_tag_by_index(&el, i, tag);
     }
@@ -1156,7 +1185,7 @@ int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* 
             *flags |= ZADD_NOP;
             return 1;
         }
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         double curscore = get_score_by_element(el);
         if(incr) {
             el = zset_update_add_counter(el, meta, score);
@@ -1174,7 +1203,8 @@ int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* 
             
             
         }
-        dictSetSignedIntegerVal(de, *(long long*)&el);
+        
+        set_element_by_dictEntry(de, el);
         double nscore = get_score_by_element(el);
         *newscore = nscore;
         
@@ -1194,7 +1224,7 @@ int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* 
         }
         crdt_zset_tag* tag =  NULL;
         if(tde) {
-            crdt_zset_element tel = *(crdt_zset_element*)&dictGetSignedIntegerVal(tde);
+            crdt_zset_element tel = get_element_by_dictEntry(tde);
             if(incr) {
                 tel = zset_update_add_counter(tel, meta, score);
                 push_item(field, callback_items, callback_len, callback_byte_size, add_counter_score_to_sds(element_get_tag_by_gid(tel, getMetaGid(meta), NULL)));
@@ -1208,9 +1238,10 @@ int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* 
                 }  
                 push_item(field, callback_items, callback_len, callback_byte_size, value);
             }
+            set_element_by_dictEntry(tde, create_element());
             dictFreeUnlinkedEntry(zset_tombstone->dict, tde);
             dictEntry* de = dictAddOrFind(zset->dict, sdsdup(field));
-            dictSetSignedIntegerVal(de, *(long long*)&tel);
+            set_element_by_dictEntry(de, tel);
             double nscore = get_score_by_element(tel);
             zslInsert(zset->zsl, nscore, sdsdup(field));
 
@@ -1230,7 +1261,7 @@ int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* 
             // dictAdd(zset->dict, field, ele);
             
             de = dictAddOrFind(zset->dict, sdsdup(field));
-            dictSetSignedIntegerVal(de, *(long long*)&e);
+            set_element_by_dictEntry(de, e);
         
         }
        
@@ -1252,7 +1283,7 @@ double getScore(CRDT_SS* ss, sds field) {
     if(de == NULL) {
         return 0;
     } 
-    crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+    crdt_zset_element el = get_element_by_dictEntry(de);
     return get_score_by_element(el);
 }
 
@@ -1303,7 +1334,7 @@ long zsetRank(CRDT_SS* ss, sds ele, int reverse) {
     llen = getZSetSize(ss);
     de = dictFind(zset->dict,ele);
     if (de != NULL) {
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         score = get_score_by_element(el);
         rank = zslGetRank(zsl,score,ele);
         /* Existing elements always have a rank. */
@@ -1337,7 +1368,7 @@ double zsetIncr(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, d
         crdt_zset_element el = *(crdt_zset_element*)&v;
         double curscore = get_score_by_element(el);
         el = zset_update_add_counter(el, meta, score);
-        dictSetSignedIntegerVal(de, *(long long*)&el);
+        set_element_by_dictEntry(de, el);
         double newscore = get_score_by_element(el);
         if(curscore != newscore) {
             zskiplistNode *node;
@@ -1353,7 +1384,7 @@ double zsetIncr(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, d
         e = add_tag_by_element(e, tag);
         znode = zslInsert(zsl, score, sdsdup(field));
         de = dictAddOrFind(zset->dict, sdsdup(field));
-        dictSetSignedIntegerVal(de, *(long long*)&e);
+        set_element_by_dictEntry(de, e);
         
         return score;
     }
@@ -1361,8 +1392,7 @@ double zsetIncr(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, d
 
 void free_elements(crdt_zset_element el) {
     if(el.len > 1) {
-        long long a = el.tags;
-        crdt_zset_tag* t = *(crdt_zset_tag**)(&a);
+        crdt_zset_tag** t = (crdt_zset_tag**)(el.tags);
         RedisModule_Free(t);
     }
 }
@@ -1370,7 +1400,7 @@ crdt_zset_tag* create_null_tag(int gid, long long vcu) {
     crdt_zset_tag_base* b = RedisModule_Alloc(sizeof(crdt_zset_tag_base));
     b->type = TAG_BASE;
     b->gid = gid;
-    b->base_timespace = 0;
+    b->base_timespace = DEL_TIME;
     b->base_vcu = vcu;
     b->score = 0;
     return b;
@@ -1402,7 +1432,7 @@ sds crdtZSetInfo(void *data) {
     result = sdscatprintf(result, "1) type: orset_zset, vc: %s, size: %lld\n", vc_info, size);
     sdsfree(vc_info);
     while((de = dictNext(it)) != NULL) {
-        crdt_zset_element element = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element element = get_element_by_dictEntry(de);
         sds element_info = getElementInfo(element);
         result = sdscatprintf(result, "2)  key: %s \n", dictGetKey(de));
         result = sdscatprintf(result, "%s", element_info);
@@ -1454,18 +1484,21 @@ zskiplistNode* zset_get_zsl_element_by_rank(CRDT_SS* current, int reverse, long 
 int initSSTombstoneFromSS(CRDT_SSTombstone* tombstone,CrdtMeta* del_meta, CRDT_SS* value, sds* del_counters) {
     crdt_zset_tombstone* sst = retrieve_crdt_zset_tombstone(tombstone);
     crdt_zset* ss = retrieve_crdt_zset(value);
-    sst->lastvc = vectorClockMerge(getMetaVectorClock(del_meta),ss->lastvc);
-    sst->maxdelvc = dupVectorClock(ss->lastvc);
+    int gid = getMetaGid(del_meta);
+    long long vcu = get_vcu_by_meta(del_meta);
+    updateCrdtSSTLastVc(sst, getMetaVectorClock(del_meta));
+    updateCrdtSSTMaxDel(sst, getMetaVectorClock(del_meta));
+
     dictIterator* next = dictGetIterator(ss->dict);
     dictEntry* de = NULL;
-    int i = 0;
     dictEntry* del_de = NULL;
+    int index = 0;
     while((de = dictNext(next)) != NULL) {
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         crdt_zset_element del_el = {.len = 0, .tags = 0};
         for(int i = 0; i < el.len; i++) {
             crdt_zset_tag* tag = element_get_tag_by_index(el, i);
-            crdt_zset_tag* del_tag = clean_tag(tag, 1);
+            crdt_zset_tag* del_tag = clean_tag(tag, tag->gid == gid? vcu: -1);
             if(del_tag != NULL) {
                 del_el = add_tag_by_element(del_el, del_tag);
             } 
@@ -1473,18 +1506,19 @@ int initSSTombstoneFromSS(CRDT_SSTombstone* tombstone,CrdtMeta* del_meta, CRDT_S
         if(del_el.len != 0) {
             sds meta_info = g_counter_metas_to_sds(&del_el, zsetTag2DelGcounter, del_el.len);
             if(meta_info == NULL) {
-                del_counters[i++] = sdsdup(dictGetKey(de));
+                del_counters[index++] = sdsdup(dictGetKey(de));
             } else {
                 sds v = sdsdup(dictGetKey(de));
                 v = sdscatprintf(v, ",%s", meta_info);
                 sdsfree(meta_info);
-                del_counters[i++] = v;
+                del_counters[index++] = v;
             }
             del_de = dictAddOrFind(sst->dict, sdsdup(dictGetKey(de)));
-            dictSetSignedIntegerVal(del_de, *(long long*)&del_el);
+            set_element_by_dictEntry(del_de, del_el);
         }
     }
-    return i;
+    //to do clean tombstone
+    return index;
 }
 
 double parseScore(sds info, int* len, g_counter_meta* g) {
@@ -1562,7 +1596,7 @@ crdt_zset_tag* clean_base_tag(crdt_zset_tag* tag, int vcu, g_counter_meta* meta)
             ba = (crdt_zset_tag_base_and_add_counter*)tag;
             if(ba->base_vcu <= vcu && !meta) {
                 ba->base_vcu = vcu;
-                ba->base_timespace = 0;
+                ba->base_timespace = DEL_TIME;
                 ba->score = 0;
                 return ba;
             } else {
@@ -1690,7 +1724,7 @@ int zsetTryAdd(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMet
         }
         dictEntry* tde = dictFind(sst->dict, field);
         if(tde != NULL) {
-            crdt_zset_element tel = *(crdt_zset_element*)&dictGetSignedIntegerVal(tde);
+            crdt_zset_element tel = get_element_by_dictEntry(tde);
             crdt_zset_element rel = {.len = 0};
             int added = 0;
             for(int i = 0, len = get_len(vc); i < len; i++) {
@@ -1788,14 +1822,14 @@ int zsetTryAdd(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMet
                 //=============
 
                 dictEntry* de = dictAddOrFind(ss->dict, sdsdup(field));
-                dictSetSignedIntegerVal(de, *(long long*)&rel);
-
+                set_element_by_dictEntry(de, rel);
+                set_element_by_dictEntry(tde, create_element());
                 dictDelete(sst->dict, field);
 
                 double score = get_score_by_element(rel);
                 zslInsert(ss->zsl, score, sdsdup(field));
             } else {
-                dictSetSignedIntegerVal(tde, *(long long*)&rel);
+                set_element_by_dictEntry(tde, rel);
             }
             return added;
         } 
@@ -1803,7 +1837,7 @@ int zsetTryAdd(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMet
     dictEntry* de = dictFind(ss->dict, field);
     // double curscore = get_score_by_element(el);
     if(de != NULL) {
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         double curscore = get_score_by_element(el);
         for(int i = 0, len = get_len(vc); i < len; i++) {
             clk* c = get_clock_unit_by_index(&vc, i);
@@ -1850,7 +1884,7 @@ int zsetTryAdd(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMet
             free_g_counter_meta(gcounters[i]);
             gcounters[i] = NULL;
         }
-        dictSetSignedIntegerVal(de,  *(long long*)&el);
+        set_element_by_dictEntry(de,  el);
         double nscore = get_score_by_element(el);
         if(curscore != nscore) {
             zskiplistNode *node;
@@ -1890,7 +1924,7 @@ int zsetTryAdd(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMet
             crdt_zset_tag* tag = create_base_tag_by_meta(meta, score);
             el = add_tag_by_element(el, tag);
         }
-        dictSetSignedIntegerVal(de,  *(long long*)&el);
+        set_element_by_dictEntry(de,  el);
         double n_score = get_score_by_element(el);
         zslInsert(ss->zsl, n_score, sdsdup(field));
     }
@@ -1916,7 +1950,7 @@ int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, Crdt
         dictEntry* tde = dictFind(sst->dict, field);
         if(tde != NULL) {
             int added = 0;
-            crdt_zset_element tel = *(crdt_zset_element*)&dictGetSignedIntegerVal(tde);
+            crdt_zset_element tel = get_element_by_dictEntry(tde);
             int index;
             crdt_zset_tag* tag = element_get_tag_by_gid(tel, gid, &index);
             if (tag) {
@@ -1935,11 +1969,12 @@ int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, Crdt
             if(added) {
                 double n_score = get_score_by_element(tel);
                 dictEntry* de = dictAddOrFind(ss->dict, sdsdup(field));
-                dictSetSignedIntegerVal(de, *(long long*)&tel);
+                set_element_by_dictEntry(de, tel);
                 zslInsert(ss->zsl, n_score, sdsdup(field));
+                set_element_by_dictEntry(tde, create_element());
                 dictDelete(sst->dict, field);
             } else {
-                dictSetSignedIntegerVal(tde, *(long long*)&tel);
+                set_element_by_dictEntry(tde, tel);
             }
             return added;
         }
@@ -1947,7 +1982,7 @@ int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, Crdt
     dictEntry* de = dictFind(ss->dict, field);
     // double curscore = get_score_by_element(el);
     if(de != NULL) {
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         int index = -1;
         crdt_zset_tag* tag = element_get_tag_by_gid(el, gid, &index);
         double old_score = get_score_by_element(el);
@@ -1958,7 +1993,7 @@ int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, Crdt
             tag = update_tag_add_counter(tag, meta, score, 0);
             element_set_tag_by_index(&el, index, tag);
         }
-        dictSetSignedIntegerVal(de,  *(long long*)&el);
+        set_element_by_dictEntry(de,  el);
         double new_score = get_score_by_element(el);
         if(new_score != old_score) {
             zskiplistNode *node;
@@ -1972,7 +2007,7 @@ int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, Crdt
         crdt_zset_element el = {.len =0};
         crdt_zset_tag_add_counter* a =  create_null_add_counter_tag(gid);
         el = add_tag_by_element(el, update_tag_add_counter(a, meta, score, 0));
-        dictSetSignedIntegerVal(de,  *(long long*)&el);
+        set_element_by_dictEntry(de,  el);
         zslInsert(ss->zsl, score, sdsdup(field));
     }
     return 1;
@@ -1989,28 +2024,41 @@ sds zsetDel(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* 
         return NULL;
     }
     VectorClock vc = getMetaVectorClock(meta);
-    crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+    int gid = getMetaGid(meta);
+    crdt_zset_element el = get_element_by_dictEntry(de);
     crdt_zset_element del_el = {.len = 0, .tags = 0};
     double score = get_score_by_element(el);
     int counter_num = 0;
+    int deleted_me = 0;
     for(int i = 0; i < el.len; i++) {
         crdt_zset_tag* tag = element_get_tag_by_index(el, i);
-        crdt_zset_tag* del_tag = clean_tag(tag, 0);
+        if(tag->gid  == gid) {
+            deleted_me = 1;
+        } 
+        crdt_zset_tag* del_tag = clean_tag(tag, tag->gid == gid ? get_vcu_by_meta(meta): -1);
         if(del_tag != NULL) {
             counter_num ++;
             del_el = add_tag_by_element(del_el, del_tag);
         } else { 
             del_el = add_tag_by_element(del_el, tag);
         }
+        
+    }
+    if(deleted_me == 0) {
+        crdt_zset_tag_base* del_tag = create_null_base_tag(gid);
+        del_tag->base_vcu = get_vcu_by_meta(meta);
+        del_tag->base_timespace = DEL_TIME;
+        del_el = add_tag_by_element(del_el, del_tag);
     }
     free_elements(el);
+    set_element_by_dictEntry(de, create_element());
     dictFreeUnlinkedEntry(zset->dict,de);
     /* Delete from skiplist. */
     int retval = zslDelete(zset->zsl,score,field,NULL);
     assert(retval);
     if(counter_num != 0) {  
         dictEntry* del_de = dictAddOrFind(zset_tombstone->dict, sdsdup(field));
-        dictSetSignedIntegerVal(del_de, *(long long*)&del_el);
+        set_element_by_dictEntry(del_de, del_el);
         *stats = 2;
         sds gmeta_str = g_counter_metas_to_sds(&del_el, zsetTag2DelGcounter, del_el.len);
         if(gmeta_str == NULL) {
@@ -2055,8 +2103,9 @@ int zsetTryRem(CRDT_SSTombstone* sst,CRDT_SS* ss, sds info, CrdtMeta* meta) {
         printf("zset try zrem  value and tombstone all exist: %s \n", field);
         return -1;
     }
+    
     if (de) {
-       crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+       crdt_zset_element el = get_element_by_dictEntry(de);
        crdt_zset_element result_el = {.len = 0};
        double old_score = get_score_by_element(el);
        int deleted = 1;
@@ -2065,7 +2114,11 @@ int zsetTryRem(CRDT_SSTombstone* sst,CRDT_SS* ss, sds info, CrdtMeta* meta) {
             long long c_vcu = get_vcu(vc, tag->gid);
             int meta_index = find_g_meta(gcounters, gcounter_len, tag->gid); 
             if(c_vcu == 0) {
-               deleted = 0;
+                deleted = 0;
+                if(meta_index == -1) {
+                    result_el = add_tag_by_element(result_el, tag);
+                    continue;
+                }
             } 
             tag = clean_base_tag(tag, c_vcu, meta_index != -1? gcounters[meta_index]: NULL);
             if(!is_deleted_tag(tag)) {
@@ -2077,6 +2130,7 @@ int zsetTryRem(CRDT_SSTombstone* sst,CRDT_SS* ss, sds info, CrdtMeta* meta) {
                 gcounters[meta_index] = NULL;
             }
         }
+        
         free_elements(el);
         for(int i = 0, len = get_len(vc); i < len; i++) {
             clk* c = get_clock_unit_by_index(&vc, i);
@@ -2109,12 +2163,13 @@ int zsetTryRem(CRDT_SSTombstone* sst,CRDT_SS* ss, sds info, CrdtMeta* meta) {
             }
         }
         if(deleted) {
+            set_element_by_dictEntry(de, create_element());
             dictDelete(zset->dict, field);
             tde = dictAddOrFind(zset_tombstone->dict, sdsdup(field));
-            dictSetSignedIntegerVal(tde, *(long long*)&result_el);
+            set_element_by_dictEntry(tde, result_el);
             zslDelete(zset->zsl, old_score, field, NULL);
         } else {
-            dictSetSignedIntegerVal(de, *(long long*)&result_el);
+            set_element_by_dictEntry(de, result_el);
             double score = get_score_by_element(result_el);
             if(score != old_score) {
                  zskiplistNode* node;
@@ -2123,15 +2178,12 @@ int zsetTryRem(CRDT_SSTombstone* sst,CRDT_SS* ss, sds info, CrdtMeta* meta) {
                 node->ele = NULL;
                 zslFreeNode(node);
             }
-            
-           
         }
-        
         return deleted;
     }
     crdt_zset_element tel = {.len = 0 };
     if(tde) {
-        tel = *(crdt_zset_element*)&dictGetSignedIntegerVal(tde);
+        tel = get_element_by_dictEntry(tde);
     } else {
         tde = dictAddOrFind(zset_tombstone->dict, field);
     }
@@ -2164,7 +2216,7 @@ int zsetTryRem(CRDT_SSTombstone* sst,CRDT_SS* ss, sds info, CrdtMeta* meta) {
         }
         
     }
-    dictSetSignedIntegerVal(tde, *(long long*)&tel);
+    set_element_by_dictEntry(tde, tel);
     return 1;
 }
 
@@ -2180,7 +2232,7 @@ int zsetTryDel(CRDT_SS* ss,CRDT_SSTombstone* sst, CrdtMeta* meta) {
         dictEntry *de;
         while((de = dictNext(di)) != NULL) {
             sds field = dictGetKey(de);
-            crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+            crdt_zset_element el = get_element_by_dictEntry(de);
             crdt_zset_element rel = {.len = 0};
             double old_score = get_score_by_element(el);
             dictEntry* tde = NULL;
@@ -2190,7 +2242,10 @@ int zsetTryDel(CRDT_SS* ss,CRDT_SSTombstone* sst, CrdtMeta* meta) {
                 long long c_vcu = get_vcu(vc, tag->gid);
                 if(c_vcu == 0) {
                     deleted = 0;
+                    rel = add_tag_by_element(rel, tag);
+                    continue;
                 } 
+                
                 tag = clean_base_tag(tag, c_vcu, NULL);
                 if(!is_deleted_tag(tag)) {
                     deleted = 0;
@@ -2211,12 +2266,13 @@ int zsetTryDel(CRDT_SS* ss,CRDT_SSTombstone* sst, CrdtMeta* meta) {
                 rel = add_tag_by_element(rel, b);
             }
             if(deleted) {
-                dictDelete(zset->dict, field);
+                set_element_by_dictEntry(de, create_element());
                 tde = dictAddOrFind(zset_tombstone->dict, sdsdup(field));
-                dictSetSignedIntegerVal(tde, *(long long*)&rel);
+                set_element_by_dictEntry(tde, rel);
                 zslDelete(zset->zsl, old_score, field, NULL);
+                dictDelete(zset->dict, field);
             } else {
-                dictSetSignedIntegerVal(de, *(long long*)&rel);
+                set_element_by_dictEntry(de, rel);
                 double score = get_score_by_element(rel);
                 if(old_score != score) {
                     zskiplistNode* node;
@@ -2230,7 +2286,17 @@ int zsetTryDel(CRDT_SS* ss,CRDT_SSTombstone* sst, CrdtMeta* meta) {
         }
         dictReleaseIterator(di);
     }
-    
+    //to do 
+    //clean tombstone
+    if(zset_tombstone) {
+        // dictIterator* di = NULL;
+        // di = dictGetSafeIterator(zset_tombstone->dict);
+        // dictEntry *de;
+        // while((de = dictNext(di)) != NULL) {
+            
+        // }
+        // dictReleaseIterator(di);
+    }
     return 1;
 }
 
@@ -2247,7 +2313,7 @@ sds crdtZsetTombstoneInfo(void* tombstone) {
     sdsfree(vc_info);
     sdsfree(max_vc_info);
     while((de = dictNext(it)) != NULL) {
-        crdt_zset_element element = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element element = get_element_by_dictEntry(de);
         sds element_info = getElementInfo(element);
         result = sdscatprintf(result, "2)  key: %s \n", dictGetKey(de));
         result = sdscatprintf(result, "%s", element_info);
@@ -2257,7 +2323,12 @@ sds crdtZsetTombstoneInfo(void* tombstone) {
     return result;
 }
 int crdtZsetTombstoneGc(CrdtTombstone* target, VectorClock clock) {
-    return 0;
+    sds vc_str = vectorClockToSds(getCrdtSSTLastVc(target));
+    sds clock_str = vectorClockToSds(clock_str);
+    RedisModule_Debug(logLevel, "gc %s - %s", vc_str, clock_str);
+    sdsfree(vc_str);
+    sdsfree(clock_str);
+    return isVectorClockMonoIncr(getCrdtSSTLastVc(target), clock);
 }
 
 zskiplistNode* zslInRange(CRDT_SS* current, zrangespec* range, int reverse) {
@@ -2355,10 +2426,10 @@ crdt_zset* dup_crdt_zset(crdt_zset* target) {
     dictEntry* de = NULL;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         crdt_zset_element rel = dup_zset_element(el);
         dictEntry* rde = dictAddRaw(result->dict, sdsdup(field), NULL);
-        dictSetSignedIntegerVal(rde, *(long long*)&rel);
+        set_element_by_dictEntry(rde, rel);
 
         double score = get_score_by_element(rel);
         zslInsert(result->zsl, score, sdsdup(field));
@@ -2502,7 +2573,6 @@ crdt_zset_tag* merge_tag_add(crdt_zset_tag_add_counter* a, crdt_zset_tag* other)
 crdt_zset_tag*  merge_tag_add_del(crdt_zset_tag_add_del_counter* ad, crdt_zset_tag* other) {
     switch(other->type) {
         case TAG_BASE: {
-            RedisModule_Debug(logLevel, "del base");
             crdt_zset_tag_base* ob = (crdt_zset_tag_base*)other;
             crdt_zset_tag_base_and_add_del_counter* bad = AD2BAD(ad);
             bad->base_vcu = ob->base_vcu;
@@ -2758,17 +2828,17 @@ CrdtObject *crdtSSMerge(CrdtObject *currentVal, CrdtObject *value) {
     dictEntry* de = NULL;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         dictEntry* rde = dictFind(result->dict, field);
         crdt_zset_element rel;
         if (rde == NULL) {
             rel = dup_zset_element(el);
             rde = dictAddRaw(result->dict, sdsdup(field), NULL);
-            dictSetSignedIntegerVal(rde, *(long long*)&rel);
+            set_element_by_dictEntry(rde, rel);
             double rscore = get_score_by_element(rel);
             zslInsert(result->zsl, rscore, sdsdup(field));
         } else {
-            rel = *(crdt_zset_element*)&dictGetSignedIntegerVal(rde);
+            rel = get_element_by_dictEntry(rde);
             double old_score = get_score_by_element(rel);
             for(int i = 0,len = el.len; i < len; i++) {
                 crdt_zset_tag* tag = element_get_tag_by_index(el, i);
@@ -2782,7 +2852,7 @@ CrdtObject *crdtSSMerge(CrdtObject *currentVal, CrdtObject *value) {
                     element_set_tag_by_index(&rel, rindex, rtag);
                 }
             }
-            dictSetSignedIntegerVal(rde, *(long long*)&rel);
+            set_element_by_dictEntry(rde, rel);
             double now_score = get_score_by_element(rel);
             zskiplistNode* node;
             zslDelete(result->zsl, old_score, field, &node);
@@ -2842,7 +2912,7 @@ CrdtObject** crdtSSFilter(CrdtObject* common, int gid, long long logic_time, lon
     int current_memory = 0;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         int memory = get_element_memory(el);
         if(memory + sdslen(field) > maxsize) {
             printf("[filter crdt_zset] memory error: key-%s \n", field);
@@ -2865,7 +2935,7 @@ CrdtObject** crdtSSFilter(CrdtObject* common, int gid, long long logic_time, lon
         }
         current_memory += sdslen(field) + memory;
         dictEntry* de = dictAddOrFind(current->dict, sdsdup(field));
-        dictSetSignedIntegerVal(de, *(long long*)&el);
+        set_element_by_dictEntry(de, el);
     }
     dictReleaseIterator(di);
     if(current != NULL) {
@@ -2888,10 +2958,10 @@ crdt_zset_tombstone* dup_crdt_zset_tombstone(crdt_zset_tombstone* target) {
     dictEntry* de = NULL;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         crdt_zset_element rel = dup_zset_element(el);
         dictEntry* rde = dictAddRaw(result->dict, sdsdup(field), NULL);
-        dictSetSignedIntegerVal(rde, *(long long*)&rel);
+        set_element_by_dictEntry(rde, rel);
     }
     dictReleaseIterator(di);
     return result;
@@ -2914,14 +2984,14 @@ CrdtTombstone* crdtSSTMerge(CrdtTombstone* currentTomstone, CrdtTombstone* other
     dictEntry* de = NULL;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         dictEntry* rde = dictFind(result->dict, field);
         crdt_zset_element rel;
         if(rde == NULL) {
             rde = dictAddRaw(result->dict, sdsdup(field), NULL);
             rel = dup_zset_element(el);
         } else {
-            rel = *(crdt_zset_element*)&dictGetSignedIntegerVal(rde);
+            rel = get_element_by_dictEntry(rde);
             for(int i = 0, len = el.len; i < len; i++) {
                 crdt_zset_tag* tag = element_get_tag_by_index(el, i);
                 int rindex = 0;
@@ -2935,18 +3005,18 @@ CrdtTombstone* crdtSSTMerge(CrdtTombstone* currentTomstone, CrdtTombstone* other
                 }
             }
         }
-        dictSetSignedIntegerVal(rde, *(long long*)&rel);
+        set_element_by_dictEntry(rde, rel);
     }
     dictReleaseIterator(di);
     VectorClock vc = result->lastvc;
     result->lastvc = vectorClockMerge(result->lastvc , other->lastvc);
-    if(vc) {
+    if(!isNullVectorClock(vc)) {
         freeVectorClock(vc);
         vc = NULL;
     }
     vc = result->maxdelvc;
     result->maxdelvc = vectorClockMerge(vc, other->maxdelvc);
-    if(vc) {
+    if(!isNullVectorClock(vc)) {
         freeVectorClock(vc);
     }
     return result;
@@ -2961,7 +3031,7 @@ CrdtTombstone** crdtSSTFilter(CrdtTombstone* target, int gid, long long logic_ti
     int current_memory = 0;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
-        crdt_zset_element el = *(crdt_zset_element*)&dictGetSignedIntegerVal(de);
+        crdt_zset_element el = get_element_by_dictEntry(de);
         int memory = get_element_memory(el);
         if(memory + sdslen(field) > maxsize) {
             printf("[filter crdt_zset] memory error: key-%s \n", field);
@@ -2984,7 +3054,7 @@ CrdtTombstone** crdtSSTFilter(CrdtTombstone* target, int gid, long long logic_ti
         }
         current_memory += sdslen(field) + memory;
         dictEntry* de = dictAddOrFind(current->dict, sdsdup(field));
-        dictSetSignedIntegerVal(de, *(long long*)&el);
+        set_element_by_dictEntry(de, el);
     }
     dictReleaseIterator(di);
     if(current != NULL) {
@@ -3001,6 +3071,86 @@ void freeSSTFilter(CrdtTombstone** filters, int num) {
     RedisModule_Free(filters);
 }
 
-int crdtZsetTombstonePurge(CrdtTombstone* tombstone, CrdtData* r) {
+
+
+int purge_element(crdt_zset_element* tel, crdt_zset_element* el) {
+    crdt_zset_element rel = {.len = 0};
+    int purge_tag_value = 1;
+    for (int i = 0, len = tel->len; i<len; i++) {
+        crdt_zset_tag* ttag = element_get_tag_by_index(*tel, i);
+        int index = 0;
+        crdt_zset_tag* tag = element_get_tag_by_gid(*el, ttag->gid, &index);
+        if(tag == NULL) {
+            rel = add_tag_by_element(rel, ttag);
+        } else {
+            ttag = merge_zset_tag(ttag, tag);
+            if(!is_deleted_tag(ttag)) {
+                purge_tag_value = 0;
+            }
+            rel = add_tag_by_element(rel, ttag);
+        }
+    }
+    for (int i = 0, len = el->len; i < len; i++) {
+        crdt_zset_tag* tag = element_get_tag_by_index(*el, i);
+        if(element_get_tag_by_gid(rel, tag->gid, NULL)) {
+            continue;
+        }
+        purge_tag_value = 0;
+        add_tag_by_element(rel, tag);
+    }
+    crdt_zset_element null_element = {.len=0};
+    if(purge_tag_value == 1) {
+        *el = null_element;
+        *tel = rel;
+        return PURGE_VAL;
+    } else {
+        *el = rel;
+        *tel = null_element;
+        return PURGE_TOMBSTONE;
+    }
+}
+
+int crdtZsetTombstonePurge(CrdtTombstone* tombstone, CrdtData* value) {
+    crdt_zset_tombstone* zset_tombstone = retrieve_crdt_zset_tombstone(tombstone);
+    crdt_zset* zset = retrieve_crdt_zset(value);
+    if(zset_tombstone == NULL) return PURGE_TOMBSTONE;
+    if(zset == NULL) return PURGE_VAL;
+    dictIterator *tdi = dictGetSafeIterator(zset_tombstone->dict);
+    dictEntry *tde, *de;
+    while((tde = dictNext(tdi)) != NULL) {
+        sds field = dictGetKey(tde);
+        de = dictFind(zset->dict, field);
+        if(de == NULL) {
+            continue;
+        } 
+        crdt_zset_element tel = get_element_by_dictEntry(tde);
+        crdt_zset_element el = get_element_by_dictEntry(de);
+        double old_score = get_score_by_element(el);
+        int result = purge_element(&tel, &el);
+        set_element_by_dictEntry(tde, tel);
+        set_element_by_dictEntry(de, el);
+        if(result == PURGE_VAL) {
+            dictDelete(zset->dict, field);
+            zslDelete(zset->zsl, old_score, field, NULL);
+        }else{
+            double now_score = get_score_by_element(el);
+            if(now_score != old_score) {
+                zskiplistNode* node;
+                assert(zslDelete(zset->zsl, old_score, field, &node));
+                zslInsert(zset->zsl, now_score, node->ele);
+                zslFreeNode(node);
+            }
+            dictDelete(zset_tombstone->dict, field);
+        }
+    }
+    dictReleaseIterator(tdi);
+    updateCrdtSSLastVc(zset, zset_tombstone->lastvc);
+    updateCrdtSSTLastVc(zset_tombstone, zset->lastvc);
+    if(dictSize(zset_tombstone->dict) == 0) {
+        return PURGE_TOMBSTONE;
+    }
+    if(dictSize(zset->dict) == 0) {
+        return PURGE_VAL;
+    }
     return 0;
 }

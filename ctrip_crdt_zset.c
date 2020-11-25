@@ -51,6 +51,7 @@ int replicationFeedCrdtZaddCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta*
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, callback[i], sdslen(callback[i]));
         sdsfree(callback[i]);
     }
+    RedisModule_Debug(logLevel, "send cmd: %s %d", cmdbuf, cmdlen);
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
@@ -60,6 +61,7 @@ int replicationCrdtZaddCommand(RedisModuleCtx* ctx, CrdtMeta* meta, sds key, sds
     + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN
     + (callback_len + 1) * (REPLICATION_MAX_LONGLONG_LEN + 2) 
     + callback_byte_size ;
+    RedisModule_Debug(logLevel, "alllen %d", alllen);
     if(alllen > MAXSTACKSIZE) {
         char* cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtZaddCommand(ctx, cmdbuf, meta, key, callback, callback_len);
@@ -71,6 +73,54 @@ int replicationCrdtZaddCommand(RedisModuleCtx* ctx, CrdtMeta* meta, sds key, sds
     return 1;
 }
 
+//CRDT.DEL_SS key gid time vc 
+const char* crdt_del_head = "$11\r\nCRDT.DEL_SS\r\n";
+int replicationFeedCrdtDelSSCommand(int dbId,  char* cmdbuf, CrdtMeta* meta, sds key, sds* callback, int callback_len) {
+    // sds vcSds = vectorClockToSds(getMetaVectorClock(meta));
+    // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.zadd", "sllca", key,  getMetaGid(set_meta), getMetaTimestamp(set_meta), vcSds, callback, callback_len);
+    // sdsfree(vcSds);
+    static size_t crdt_del_head_size = 0;
+    if(crdt_del_head_size == 0) {
+        crdt_del_head_size = strlen(crdt_del_head);
+    }
+
+    size_t cmdlen = 0;
+    cmdlen += feedArgc(cmdbuf + cmdlen, callback_len + 5);
+    cmdlen += feedBuf(cmdbuf + cmdlen, crdt_del_head);
+    // cmdlen += feedBuf(cmdbuf + cmdlen, crdt_zadd_head, crdt_zadd_head_size);
+    cmdlen += feedStr2Buf(cmdbuf + cmdlen, key, sdslen(key));
+    cmdlen += feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(meta), getMetaTimestamp(meta), getMetaVectorClock(meta));
+    for(int i = 0; i<callback_len; i++) {
+        cmdlen += feedStr2Buf(cmdbuf + cmdlen, callback[i], sdslen(callback[i]));
+        sdsfree(callback[i]);
+    }
+    RedisModule_Debug(logLevel, "send cmd: %s %d", cmdbuf, cmdlen);
+    RedisModule_ReplicationFeedStringToAllSlaves(dbId, cmdbuf, cmdlen);
+    return cmdlen;
+}
+
+// replicationCrdtDelSSCommand(dbId, &del_meta, RedisModule_GetSds(keyRobj), del_counters, dlen)
+int replicationCrdtDelSSCommand(int dbId, CrdtMeta* meta, sds key, sds* callback, int callback_len) {
+    int callback_byte_size = 0;
+    for(int i = 0; i < callback_len; i++) {
+        callback_byte_size += sdslen(callback[i]);
+    }
+    size_t alllen = 18  
+    + sdslen(key)
+    + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN
+    + (callback_len + 1) * (REPLICATION_MAX_LONGLONG_LEN + 2) 
+    + callback_byte_size ;
+    RedisModule_Debug(logLevel, "alllen %d", alllen);
+    if(alllen > MAXSTACKSIZE) {
+        char* cmdbuf = RedisModule_Alloc(alllen);
+        replicationFeedCrdtDelSSCommand(dbId, cmdbuf, meta, key, callback, callback_len);
+        RedisModule_Free(cmdbuf);
+    } else {
+        char cmdbuf[alllen]; 
+        replicationFeedCrdtDelSSCommand(dbId, cmdbuf, meta, key, callback, callback_len);
+    }
+    return 1;
+}
 
 const char* crdt_zincr_head = "$12\r\nCRDT.Zincrby\r\n";
 int replicationFeedCrdtZincrCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta* meta, sds key, sds* callback, int callback_len) {
@@ -92,6 +142,7 @@ int replicationFeedCrdtZincrCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, callback[i], sdslen(callback[i]));
         sdsfree(callback[i]);
     }
+    RedisModule_Debug(logLevel, "send cmd: %s", cmdbuf);
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
@@ -129,6 +180,7 @@ int replicationFeedCrdtZremCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta*
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, callback[i], sdslen(callback[i]));
         sdsfree(callback[i]);
     }
+    RedisModule_Debug(logLevel, "send cmd: %s", cmdbuf);
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
@@ -243,6 +295,9 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
         score = newscore;
     }
     updateCrdtSSLastVc(current, getMetaVectorClock(&zadd_meta));
+    if(tombstone && getZsetTombstoneSize(tombstone) == 0) {
+        RedisModule_DeleteTombstone(moduleKey);
+    }
     // sds vc_info = vectorClockToSds(getMetaVectorClock(&zadd_meta));
     if (incr) {
         replicationCrdtZincrCommand(ctx, &zadd_meta, RedisModule_GetSds(argv[1]), callback_items, callback_len, callback_byte_size);
@@ -306,6 +361,9 @@ int crdtZaddCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     CRDT_SS* current = getCurrentValue(moduleKey);
     if(current == NULL) {
         current = create_crdt_zset();
+        if(tombstone) {
+            updateCrdtSSLastVc(current, getCrdtSSTLastVc(tombstone));
+        }
         need_add = 1;
     } 
     int result = 0;
@@ -369,6 +427,9 @@ int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     int need_add = 0;
     if(current == NULL) {
         current = create_crdt_zset();
+        if(tombstone) {
+            updateCrdtSSLastVc(current, getCrdtSSTLastVc(tombstone));
+        }
         need_add = 1;
     } 
     int result = 0;
@@ -385,6 +446,9 @@ int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     } else {
         if(need_add) {
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtSS, current);
+        }
+        if(tombstone && getZsetTombstoneSize(tombstone) == 0) {
+            RedisModule_DeleteTombstone(moduleKey);
         }
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "zincr", argv[1]);
     }
@@ -443,11 +507,13 @@ end:
 
 
 int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
+    RedisModule_Debug(logLevel, "zset delete");
     RedisModuleKey *moduleKey = (RedisModuleKey *)key;
     CrdtMeta del_meta = {.gid = 0};
     initIncrMeta(&del_meta);
     VectorClock lastVc = getCrdtSSLastVc(value);
     appendVCForMeta(&del_meta, lastVc);
+    
     CRDT_SSTombstone *tombstone = getTombstone(moduleKey);
     if(tombstone == NULL || !isCrdtSSTombstone(tombstone)) {
         tombstone = create_crdt_zset_tombstone();
@@ -458,8 +524,11 @@ int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
     int dlen = initSSTombstoneFromSS(tombstone, &del_meta, value, del_counters);
     assert(dlen < len * 3);
     sds vcSds = vectorClockToSds(getMetaVectorClock(&del_meta));
+    RedisModule_Debug(logLevel, "delete zset vc : %s", vcSds);
     RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_SS", "sllca", keyRobj, getMetaGid(&del_meta), getMetaTimestamp(&del_meta), vcSds, del_counters, (size_t)dlen);
+    // replicationCrdtDelSSCommand(dbId, &del_meta, RedisModule_GetSds(keyRobj), del_counters, dlen);
     sdsfree(vcSds);
+    
     freeIncrMeta(&del_meta);
     return CRDT_OK;
 }
@@ -494,6 +563,7 @@ int crdtDelSSCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     zsetTryDel(current, tombstone, &meta);
     updateCrdtSSTLastVc(tombstone, getMetaVectorClock(&meta));
+    
     if(current) {
         if(getZSetSize(current) == 0) {
             RedisModule_DeleteKey(moduleKey);
@@ -501,6 +571,7 @@ int crdtDelSSCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             updateCrdtSSLastVc(current, getMetaVectorClock(&meta));
         }
     } 
+    updateCrdtSSTMaxDel(tombstone, getMetaVectorClock(&meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "del", argv[1]);
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
 end:
@@ -622,6 +693,8 @@ int zremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_ZSET, "zrem", argv[1]);
         if (keyremoved) {
             RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_ZSET, "del", argv[1]);
+        } else {
+            updateCrdtSSLastVc(current, getMetaVectorClock(&zrem_meta));
         }
         replicationCrdtZremCommand(ctx, RedisModule_GetSds(argv[1]), &zrem_meta ,callback_items, deleted, callback_byte_size);
     }
