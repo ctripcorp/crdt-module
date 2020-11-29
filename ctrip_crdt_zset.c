@@ -51,7 +51,7 @@ int replicationFeedCrdtZaddCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta*
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, callback[i], sdslen(callback[i]));
         sdsfree(callback[i]);
     }
-    RedisModule_Debug(logLevel, "send cmd: %s %d", cmdbuf, cmdlen);
+    printf("send cmd: %s %d\n", cmdbuf, cmdlen);
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
@@ -284,10 +284,23 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     for(int i = 0; i < elements; i++) {
         int retflags = flags;
         score = scores[i];
-        int retval = zsetAdd(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[i*2 + scoreidx + 1]), &retflags, score, &newscore, callback_items, &callback_len, &callback_byte_size);
-        if (retval == 0) {
+        // int retval = zsetAdd(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[i*2 + scoreidx + 1]), &retflags, score, &newscore, callback_items, &callback_len, &callback_byte_size);
+        // if (retval == 0) {
+        //     RedisModule_ReplyWithError(ctx, nanerr);
+        //     goto cleanup;
+        // }
+        sds callback_item = zsetAdd(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[i*2 + scoreidx + 1]), &retflags, score, &newscore);
+        if(callback_item == NULL) {
             RedisModule_ReplyWithError(ctx, nanerr);
             goto cleanup;
+        }
+        if(sdslen(callback_item) != 0) {
+            RedisModule_Debug(logLevel, "callback_item: %s", callback_item);
+            callback_items[callback_len++] = sdsdup(RedisModule_GetSds(argv[i*2 + scoreidx + 1]));
+            callback_items[callback_len++] = callback_item;
+            callback_byte_size += sdslen(RedisModule_GetSds(argv[i*2 + scoreidx + 1])) + sdslen(callback_item);
+        } else {
+            sdsfree(callback_item);
         }
         if (retflags & ZADD_ADDED) added++;
         if (retflags & ZADD_UPDATED) updated++;
@@ -295,7 +308,7 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
         score = newscore;
     }
     updateCrdtSSLastVc(current, getMetaVectorClock(&zadd_meta));
-    if(tombstone && getZsetTombstoneSize(tombstone) == 0) {
+    if(tombstone && zsetTombstoneLength(tombstone) == 0) {
         RedisModule_DeleteTombstone(moduleKey);
     }
     // sds vc_info = vectorClockToSds(getMetaVectorClock(&zadd_meta));
@@ -376,12 +389,13 @@ int crdtZaddCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     if(result == 0 ) {
         if(need_add) {
             freeCrdtSS(current);
+            current = NULL;
         } 
     } else {
         if(need_add) {
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtSS, current);
         }
-        if(tombstone && getZsetTombstoneSize(tombstone) == 0) {
+        if(tombstone && zsetTombstoneLength(tombstone) == 0) {
             RedisModule_DeleteTombstone(moduleKey);
         }
         updateCrdtSSLastVc(current, getMetaVectorClock(&meta));
@@ -413,6 +427,7 @@ int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     if (readMeta(ctx, argv, 2, &meta) != CRDT_OK) {
         return 0;
     }
+    assert(meta.gid != 0);
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSS);
     if(moduleKey == NULL) {
         RedisModule_IncrCrdtConflict(TYPECONFLICT | MODIFYCONFLICT);
@@ -442,12 +457,13 @@ int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     if(result == 0) {
         if(need_add) {
             freeCrdtSS(current);
+            current = NULL;
         }
     } else {
         if(need_add) {
             RedisModule_ModuleTypeSetValue(moduleKey, CrdtSS, current);
         }
-        if(tombstone && getZsetTombstoneSize(tombstone) == 0) {
+        if(tombstone && zsetTombstoneLength(tombstone) == 0) {
             RedisModule_DeleteTombstone(moduleKey);
         }
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "zincr", argv[1]);
@@ -481,8 +497,9 @@ int zscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     if(current) {
-        result = getScore(current, RedisModule_GetSds(argv[2]));
-        return RedisModule_ReplyWithDouble(ctx, result);
+        if (getScore(current, RedisModule_GetSds(argv[2]), &result)) {
+            return RedisModule_ReplyWithDouble(ctx, result);
+        }
     } 
 error:
     return RedisModule_ReplyWithNull(ctx);
@@ -499,7 +516,7 @@ int zcardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     if(current) {
-        result = getZSetSize(current);
+        result = crdtZsetLength(current);
     } 
 end:
     return RedisModule_ReplyWithLongLong(ctx, result);
@@ -507,7 +524,6 @@ end:
 
 
 int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
-    RedisModule_Debug(logLevel, "zset delete");
     RedisModuleKey *moduleKey = (RedisModuleKey *)key;
     CrdtMeta del_meta = {.gid = 0};
     initIncrMeta(&del_meta);
@@ -519,12 +535,11 @@ int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
         tombstone = create_crdt_zset_tombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSST, tombstone);
     }
-    int len = getZSetSize(value);
+    int len = crdtZsetLength(value);
     sds del_counters[len*3];
     int dlen = initSSTombstoneFromSS(tombstone, &del_meta, value, del_counters);
     assert(dlen < len * 3);
     sds vcSds = vectorClockToSds(getMetaVectorClock(&del_meta));
-    RedisModule_Debug(logLevel, "delete zset vc : %s", vcSds);
     RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_SS", "sllca", keyRobj, getMetaGid(&del_meta), getMetaTimestamp(&del_meta), vcSds, del_counters, (size_t)dlen);
     // replicationCrdtDelSSCommand(dbId, &del_meta, RedisModule_GetSds(keyRobj), del_counters, dlen);
     sdsfree(vcSds);
@@ -565,7 +580,7 @@ int crdtDelSSCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     updateCrdtSSTLastVc(tombstone, getMetaVectorClock(&meta));
     
     if(current) {
-        if(getZSetSize(current) == 0) {
+        if(crdtZsetLength(current) == 0) {
             RedisModule_DeleteKey(moduleKey);
         } else {
             updateCrdtSSLastVc(current, getMetaVectorClock(&meta));
@@ -609,7 +624,7 @@ int zrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         return RedisModule_ReplyWithArray(ctx , 0);
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
-    size_t llen = getZSetSize(current);
+    size_t llen = crdtZsetLength(current);
     if(start < 0 ) start = llen + start;
     if(end < 0) end = llen + end;
     if(start < 0) start = 0;
@@ -676,13 +691,14 @@ int zremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     sds callback_items[argc-2];
     int callback_byte_size = 0;
     for(i = 2; i < argc; i++) {
-        int stats = 0;
-        sds callback_item = zsetDel(current, tombstone, &zrem_meta, RedisModule_GetSds(argv[i]), &stats);
-        if(stats) {
+        int success = 0;
+        sds callback_item = zsetRem(current, tombstone, &zrem_meta, RedisModule_GetSds(argv[i]));
+        if(callback_item) {
             callback_items[deleted++] = callback_item;
             callback_byte_size += sdslen(callback_item);
-        }
-        if(getZSetSize(current) == 0) {
+        } 
+        
+        if(crdtZsetLength(current) == 0) {
             RedisModule_DeleteKey(moduleKey);
             keyremoved = 1;
             break;
@@ -703,7 +719,7 @@ int zremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     return REDISMODULE_OK;
 }
-//crdt.zrem key git time vc <ele,gid:vcu:type:value>...
+//crdt.zrem key git time vc [num key <gid:vcu:type:value>]...
 int crdtZremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 6) return RedisModule_WrongArity(ctx);
     CrdtMeta meta = {.gid = 0};
@@ -743,9 +759,10 @@ int crdtZremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         }
         updateCrdtSSTLastVc(tombstone, getMetaVectorClock(&meta));
         if(current) {
-            if(getZSetSize(current) == 0) {
+            if(crdtZsetLength(current) == 0) {
                 RedisModule_DeleteKey(moduleKey);
                 RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "del", argv[1]);
+                current = NULL;
             }  
         } 
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "zrem", argv[1]);
@@ -849,7 +866,7 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
             ln = ln->level[0].forward;
         }
     }
-    int max_len = getZSetSize(current);
+    int max_len = crdtZsetLength(current);
     sds fields[max_len];
     double scores[max_len];
     while (ln && limit--) {
@@ -915,16 +932,16 @@ int zcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(moduleKey == NULL) {
         return RedisModule_ReplyWithNull(ctx);
     }
-    crdt_zset* current = RedisModule_ModuleTypeGetValue(moduleKey);
+    CRDT_SS* current = RedisModule_ModuleTypeGetValue(moduleKey);
     zskiplistNode *zn = zslInRange(current, &range, 0);
-    int all_len = getZSetSize(current);
+    int all_len = crdtZsetLength(current);
     if(zn != NULL) {
-        rank = zslGetRank(current->zsl, zn->score, zn->ele);
+        rank = zsetGetRank(current, zn->score, zn->ele);
         count = (all_len - (rank - 1));
         zn = zslInRange(current, &range, 1);
         /* Use rank of last element, if any, to determine the actual count */
         if (zn != NULL) {
-            rank = zslGetRank(current->zsl, zn->score, zn->ele);
+            rank = zsetGetRank(current, zn->score, zn->ele);
             count -= (all_len - rank);
         }
     }
@@ -997,7 +1014,7 @@ int genericZrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
     /* We don't know in advance how many matching elements there are in the
         * list, so we push this object that will represent the multi-bulk
         * length in the output buffer, and will "fix" it later */
-    int max_len = getZSetSize(current);
+    int max_len = crdtZsetLength(current);
     sds fields[max_len];
     /* If there is an offset, just traverse the number of elements without
         * checking the score because that is done in the next loop. */
@@ -1063,12 +1080,13 @@ int zlexcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     /* Find first element in range */
     zn = zslInLexRange(current, &range, 0);
-    crdt_zset* zset = (crdt_zset*)current;
-    size_t length = getZSetSize(current);
+    // crdt_zset* zset = (crdt_zset*)current;
+    size_t length = crdtZsetLength(current);
 
     /* Use rank of first element, if any, to determine preliminary count */
     if (zn != NULL) {
-        rank = zslGetRank(zset->zsl, zn->score, zn->ele);
+        // rank = zslGetRank(zset->zsl, zn->score, zn->ele);
+        rank = zsetGetRank(current, zn->score, zn->ele);
         count = (length - (rank - 1));
 
         /* Find last element in range */
@@ -1076,7 +1094,8 @@ int zlexcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
         /* Use rank of last element, if any, to determine the actual count */
         if (zn != NULL) {
-            rank = zslGetRank(zset->zsl, zn->score, zn->ele);
+            // rank = zslGetRank(zset->zsl, zn->score, zn->ele);
+            rank = zsetGetRank(current, zn->score, zn->ele);
             count -= (length - rank);
         }
     }

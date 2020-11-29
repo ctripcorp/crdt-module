@@ -1,43 +1,32 @@
-#include <string.h>
-#include <stdlib.h>
+
 #include <stdio.h>
-#include <unistd.h>
-
-
-#include <assert.h>
-#include <ctype.h>
-#include <limits.h>
-#include <math.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <float.h>
-#include <stdint.h>
-#include <errno.h>
 #include "../include/rmutil/sds.h"
 #include "../include/redismodule.h"
 #include "../include/util.h"
-#define VALUE_TYPE_LONGLONG 0
-#define VALUE_TYPE_LONGDOUBLE   1
-#define VALUE_TYPE_DOUBLE     2
+#include "./type.h"
+#include "../util.h"
+#define VALUE_TYPE_NONE 0
+#define VALUE_TYPE_LONGLONG 1
+#define VALUE_TYPE_DOUBLE  2
 #define VALUE_TYPE_SDS 3
+#define VALUE_TYPE_LONGDOUBLE 4
+
 typedef struct g_counter_meta {
     unsigned long long gid:4;
     unsigned long long data_type:4;
     unsigned long long vcu: 56;
-    union {
-        long long i;
-        long double f;
-        double d;
-        sds v;
-    } conv;
+    union all_type value;
     sds v;
 } g_counter_meta;
-g_counter_meta* create_g_counter_meta(long long gid, long long type, long long vcu);
-void free_g_counter_meta(g_counter_meta* meta);
-int g_counter_meta_to_string(g_counter_meta* del, char* buf);
+
+g_counter_meta* create_g_counter_meta(long long gid, long long vcu);
+void free_g_counater_maeta(g_counter_meta* meta);
+int g_counter_meta_to_str(g_counter_meta* del, char* buf);
 typedef int (*GetGMetaFunc)(void* data, int index, g_counter_meta* value);
-sds g_counter_metas_to_sds(void* data, GetGMetaFunc fun, int size);
-int sds_to_g_counter_meta(sds data, g_counter_meta** ds);
-int str_to_g_counter_meta(char* data, int data_size, g_counter_meta** ds);
-int array_get_g_counter_meta(void* data, int index, g_counter_meta* value);
-int gcounter_meta_set_value(g_counter_meta* meta, int type, void* d, int parse);
+int value_to_str(char*buf, int type, union all_type value);
+sds value_to_sds(int data_type, union all_type v);
+int g_counter_metas_to_str(char* buf, void* data, GetGMetaFunc fun, int size);
+int gcounter_meta_set_value(g_counter_meta* meta, int type, void* v, int parse);
+int str_to_g_counter_metas(char* buf, int len, g_counter_meta** metas);
+sds read_value(char* buf, int len, long long* type, union all_type* value, int* offset);
+int str_2_value_and_g_counter_metas(sds info, long long*type, union all_type* value, g_counter_meta** g);

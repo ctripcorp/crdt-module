@@ -372,6 +372,18 @@ int string2ld(const char *s, size_t slen, long double *dp) {
     return 1;
 }
 
+int string2d(char* buf, size_t len, double* value) {
+    long double ld = 0;
+    int result = string2ld(buf, len, &ld);
+    if(!result) return result;
+    double d = (double)ld;
+    if(isnan(d)) {
+        return 0;
+    }
+    *value = d;
+    return 1;
+}
+
 /* Convert a double to a string representation. Returns the number of bytes
  * required. The representation should always be parsable by strtod(3).
  * This function does not support human-friendly formatting like ld2string

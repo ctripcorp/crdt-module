@@ -41,6 +41,7 @@ struct sharedZsetStruct zset_shared;
 void initZsetShard();
 
 zskiplist *zslCreate(void);
+void zslFree(zskiplist *zsl);
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele);
 void zslFreeNode(zskiplistNode *node);
 int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node);
@@ -48,7 +49,7 @@ void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update);
 int zslParseRange(sds min, sds max, zrangespec *spec);
 zskiplistNode *zslLastInRange(zskiplist *zsl, zrangespec *range);
 zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec *range);
-unsigned long zsetGetRank(zskiplist* zsl, double score, sds ele);
+unsigned long zslGetRank(zskiplist* zsl, double score, sds ele);
 int zslParseLexRange(sds min, sds max, zlexrangespec *spec);
 zskiplistNode *zslLastInLexRange(zskiplist *zsl, zlexrangespec *range);
 zskiplistNode *zslFirstInLexRange(zskiplist *zsl, zlexrangespec *range);
@@ -59,3 +60,5 @@ int zslValueLteMax(double value, zrangespec *spec);
 
 int zslLexValueLteMax(sds value, zlexrangespec *spec);
 int zslLexValueGteMin(sds value, zlexrangespec *spec);
+
+zskiplistNode* zslGetElementByRank(zskiplist *zsl, unsigned long rank);

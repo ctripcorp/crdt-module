@@ -32,6 +32,19 @@ zskiplist *zslCreate(void) {
     return zsl;
 }
 
+/* Free a whole skiplist. */
+void zslFree(zskiplist *zsl) {
+    zskiplistNode *node = zsl->header->level[0].forward, *next;
+
+    zfree(zsl->header);
+    while(node) {
+        next = node->level[0].forward;
+        zslFreeNode(node);
+        node = next;
+    }
+    zfree(zsl);
+}
+
 /* Returns a random level for the new skiplist node we are going to create.
  * The return value of this function is between 1 and ZSKIPLIST_MAXLEVEL
  * (both inclusive), with a powerlaw-alike distribution where higher
@@ -274,7 +287,7 @@ zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec *range) {
  * Returns 0 when the element cannot be found, rank otherwise.
  * Note that the rank is 1-based due to the span of zsl->header to the
  * first element. */
-unsigned long zsetGetRank(zskiplist* zsl, double score, sds ele) {
+unsigned long zslGetRank(zskiplist* zsl, double score, sds ele) {
     zskiplistNode *x;
     unsigned long rank = 0;
     int i;
@@ -461,4 +474,24 @@ void zslFreeLexRange(zlexrangespec *spec) {
 void initZsetShard() {
     zset_shared.minstring = sdsnew("minstring");
     zset_shared.maxstring = sdsnew("maxstring");
+}
+
+/* Finds an element by its rank. The rank argument needs to be 1-based. */
+zskiplistNode* zslGetElementByRank(zskiplist *zsl, unsigned long rank) {
+    zskiplistNode *x;
+    unsigned long traversed = 0;
+    int i;
+
+    x = zsl->header;
+    for (i = zsl->level-1; i >= 0; i--) {
+        while (x->level[i].forward && (traversed + x->level[i].span) <= rank)
+        {
+            traversed += x->level[i].span;
+            x = x->level[i].forward;
+        }
+        if (traversed == rank) {
+            return x;
+        }
+    }
+    return NULL;
 }

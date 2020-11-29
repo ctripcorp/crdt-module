@@ -37,20 +37,8 @@ struct crdt_sorted_set {
 
 
 //crdtObject
-typedef struct crdt_zset
-{
-    char type; // data + zset 
-    dict* dict;// Map<string, crdt_zset_element>
-    zskiplist* zsl;
-    VectorClock lastvc; 
-} crdt_zset;
 
-typedef struct crdt_zset_tombstone {
-    char type;//  tombstone + zset 
-    dict* dict;
-    VectorClock lastvc;
-    VectorClock maxdelvc;
-} crdt_zset_tombstone;
+
 
 
 
@@ -112,15 +100,16 @@ size_t crdtSSTMemUsageFunc(const void *value);
 void freeCrdtSST(void* ss);
 void crdtSSTDigestFunc(RedisModuleDigest *md, void *value);
 // functions
-int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* flags, double score, double* newscore, sds* callback_items, int* callback_len, int* callback_byte_size);
+sds zsetAdd(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds field, int* flags, double score, double* newscore);
+// int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* flags, double score, double* newscore, sds* callback_items, int* callback_len, int* callback_byte_size);
 double zsetIncr(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, double score);
-sds zsetDel(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* stats);
-size_t getZSetSize(CRDT_SS* ss);
-size_t getZsetTombstoneSize(CRDT_SSTombstone* sst);
+sds zsetRem(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field);
+size_t crdtZsetLength(CRDT_SS* ss);
+size_t zsetTombstoneLength(CRDT_SSTombstone* sst);
 zskiplist* getZSetSkipList(CRDT_SS* ss);
 long zsetRank(CRDT_SS* ss, sds ele, int reverse);
 int incrTagCounter(CRDT_SS* current, CrdtMeta* zadd_meta, sds field, double score);
-double getScore(CRDT_SS* current, sds field);
+int getScore(CRDT_SS* current, sds field, double* score);
 zskiplistNode* zset_get_zsl_element_by_rank(CRDT_SS* current, int reverse, long start);
 VectorClock getCrdtSSLastVc(CRDT_SS* data);
 void updateCrdtSSLastVc(CRDT_SS* data, VectorClock vc);
@@ -135,3 +124,4 @@ int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, Crdt
 int zsetTryRem(CRDT_SSTombstone* tombstone,CRDT_SS* current, sds info, CrdtMeta* meta);
 int zsetTryDel(CRDT_SS* current,CRDT_SSTombstone* tombstone, CrdtMeta* meta);
 void updateCrdtSSTLastVc(CRDT_SSTombstone* data, VectorClock vc);
+unsigned long zsetGetRank(CRDT_SS* current, double score, sds ele);
