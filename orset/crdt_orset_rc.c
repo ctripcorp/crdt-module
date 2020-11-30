@@ -1,1176 +1,568 @@
-#include "./crdt_orset_rc.h"
-#include "../crdt_util.h"
-#include "../gcounter/g_counter.h"
-//  generic function
-crdt_rc_tombstone* retrieveCrdtRcTombstone(CRDT_RCTombstone* rt) {
-    return (crdt_rc_tombstone*)rt;
-}
+#include "crdt_orset_rc.h"
 
-crdt_orset_rc* retrieveCrdtRc(CRDT_RC* rc) {
+
+int rcStartGc() {
+    rc_gc_stats = 1;
+    return rc_gc_stats;
+}
+int rcStopGc() {
+    rc_gc_stats = 0;
+    return rc_gc_stats;
+}
+/************ utils *************/
+crdt_orset_rc* retrieve_crdt_rc(CRDT_RC* rc) {
     return (crdt_orset_rc*)rc;
 }
 
-int getRcElementLen(CRDT_RC* rc) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    return r->len;
-}
-
-void freeCrdtRc(void *value) {
-    crdt_orset_rc* rc = retrieveCrdtRc(value);
-    freeVectorClock(rc->vectorClock);
-    for(int i = 0; i < rc->len; i++) {
-        freeRcElement(rc->elements[i]);
-        rc->elements[i] = NULL;
-    }
-    RedisModule_Free(rc->elements);
-}
-
-//========================= Virtual functions =======================
-int getCrdtRcType(CRDT_RC* rc) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    for(int i = 0; i< r->len; i++) {
-        if(r->elements[i]->base) {
-            if(r->elements[i]->base->type == VALUE_TYPE_LONGDOUBLE) {
-                return VALUE_TYPE_LONGDOUBLE;
-            }
-        }
-        if(r->elements[i]->counter) {
-            if(r->elements[i]->counter->type == VALUE_TYPE_LONGDOUBLE) {
-                return VALUE_TYPE_LONGDOUBLE;
-            }
-        }
-    }
-    return VALUE_TYPE_LONGLONG;
-}
-
-CrdtMeta* getCrdtRcLastMeta(CRDT_RC*rc) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    long long time = 0;
-    int gid = 0;
-    for(int i = 0; i < r->len; i++) {
-        rc_base* b = r->elements[i]->base;
-        if(b && b->timespace > time) {
-            time = b->timespace;
-            gid = r->elements[i]->gid;
-        }
-    }
-    CrdtMeta* meta =  createMeta(gid, time, dupVectorClock(r->vectorClock));
-    return meta;
-}
-
-long double getCrdtRcBaseFloatValue(CRDT_RC* rc, CrdtMeta* lastMeta) {
-    int gid = getMetaGid(lastMeta);
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    rc_element* el = findRcElement(r, gid);
-    assert(el != NULL);
-    if(el->base->type == VALUE_TYPE_LONGLONG) {
-        return (long double)(el->base->conv.i);
-    } else if(el->base->type == VALUE_TYPE_LONGDOUBLE) {
-        return el->base->conv.f;
-    } else {
-        assert(1 == 0);
-    }
-    
-}
-
-long long getCrdtRcBaseIntValue(CRDT_RC* rc, CrdtMeta* lastMeta) {
-    int gid = getMetaGid(lastMeta);
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    rc_element* el = findRcElement(r, gid);
-    assert(el->base->type == VALUE_TYPE_LONGLONG);
-    return el->base->conv.i;
-}
-long double getCrdtRcCouanterFloatValue(CRDT_RC* rc) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    long double counter = 0; 
-    for(int i = 0; i < r->len; i++) {
-        if(r->elements[i]->counter) {
-            if(r->elements[i]->counter->type == VALUE_TYPE_LONGLONG) {
-                counter += (long double)(r->elements[i]->counter->conv.i - r->elements[i]->counter->del_conv.i);
-            } else if(r->elements[i]->counter->type == VALUE_TYPE_LONGDOUBLE) {
-                counter += r->elements[i]->counter->conv.f - r->elements[i]->counter->del_conv.f;
-            } else {
-                assert(1 == 0);
-            }
-        }
-    }
-    return counter;
-}
-
-long long getCrdtRcCouanterIntValue(CRDT_RC* rc) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    long long counter = 0; 
-    for(int i = 0; i < r->len; i++) {
-        if(r->elements[i]->counter) {
-            assert(r->elements[i]->counter->type == VALUE_TYPE_LONGLONG);
-            counter += r->elements[i]->counter->conv.i - r->elements[i]->counter->del_conv.i;
-        }
-    }
-    return counter;
-}
-
-long long getCrdtRcIntValue(CRDT_RC* rc) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    long long counter = 0;                  
-    long long base = 0;
-    long long base_time = 0;
-    for(int i = 0; i < r->len; i++) {
-        rc_base* b = r->elements[i]->base;
-        if(b && b->timespace > base_time) {
-            base_time = b->timespace;
-            base = b->conv.i;
-        }
-        if(r->elements[i]->counter) {
-            counter += r->elements[i]->counter->conv.i - r->elements[i]->counter->del_conv.i;
-        }
-    }
-    return base + counter;
-}
-
-long double getCrdtRcFloatValue(CRDT_RC* rc) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    long double counter = 0;                  
-    long double base = 0;
-    long long base_time = 0;
-    for(int i = 0; i < r->len; i++) {
-        rc_base* b = r->elements[i]->base;
-        if(b && b->timespace > base_time) {
-            base_time = b->timespace;
-            if(b->type == VALUE_TYPE_LONGDOUBLE) {
-                base = b->conv.f;
-            } else if(b->type == VALUE_TYPE_LONGLONG) {
-                base = (long double)b->conv.i;
-            }
-            
-        }
-        if(r->elements[i]->counter) {
-            if(r->elements[i]->counter->type == VALUE_TYPE_LONGDOUBLE) {
-                counter += r->elements[i]->counter->conv.f - r->elements[i]->counter->del_conv.f;
-            } else if(r->elements[i]->counter->type == VALUE_TYPE_LONGLONG) {
-                long long v = (r->elements[i]->counter->conv.i - r->elements[i]->counter->del_conv.i);
-                counter += (long double)v;
-            } else {
-                assert(1 == 0);
-            }
-            
-        }
-    }
-    return base + counter;
+crdt_rc_tombstone* retrieve_crdt_rc_tombstone(CRDT_RCTombstone* rct) {
+    return (crdt_rc_tombstone*)rct;
 }
 
 
-int tryUpdateCounter(CRDT_RC* rc, CRDT_RCTombstone* tom, int gid, long long timestamp, long long start_clock, long long end_clock, int type,  void* val) {
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(tom);
-    if(rt != NULL) {
-        long long tvcu = get_vcu(rt->vectorClock, gid);
-        if(tvcu > end_clock) {
-            rc_tombstone_element* el =  findRcTombstoneElement(rt, gid);
-            assert(el != NULL && el->counter != NULL);
-            assert(el->counter->type == type);
-            if(el->counter->end_clock < end_clock) {
-                el->counter->end_clock = end_clock;
-                if(type == VALUE_TYPE_LONGDOUBLE) {
-                    el->counter->conv.f = *(long double*)val;
-                } else if(type == VALUE_TYPE_LONGLONG) {
-                    el->counter->conv.i = *(long long*)val;
-                }
-            }
-            return PURGE_VAL;
-        } else {
-            initCrdtRcFromTombstone(rc, tom);
-        }
+void reset_rc_type(CRDT_RC* rc) {
+    setDataType((CrdtObject*)rc, CRDT_RC_TYPE);
+    setType((CrdtObject*)rc, CRDT_DATA);
+}
+#if defined(TCL_TEST)
+    crdt_element get_element_from_rc(crdt_orset_rc* rc) {
+        return (crdt_element)rc;
     }
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    rc_element* e = findRcElement(r, gid);
-    if(e == NULL) {
-        e = createRcElement(gid);
-        appendRcElement(r, e);
-    } 
-    if(e->counter == NULL) {
-        e->counter = createGcounter(type);
-        e->counter->start_clock = start_clock;
-    } else {
-        assert(e->counter->start_clock == start_clock);
-        if(e->counter->type != type) {
-            setCounterType(e->counter, type);
-        }
+    void set_rc_from_element(crdt_orset_rc* rc, crdt_element el) {
+        rc->len = el->len;
+        rc->tags = el->tags;
     }
-    e->counter->end_clock = end_clock;
-    if(type == VALUE_TYPE_LONGDOUBLE) {
-        e->counter->conv.f = *(long double*)val;
-    } else if(type == VALUE_TYPE_LONGLONG) {
-        e->counter->conv.i = *(long long*)val;
+    crdt_element get_element_from_rc_tombstone(crdt_rc_tombstone* rct) {
+        return (crdt_element)rct;
     }
-    e->counter->type = type;
-    VectorClock vc = newVectorClockFromGidAndClock(gid, end_clock);
-    crdtRcUpdateLastVC(rc, vc);
-    freeVectorClock(vc);
-    return PURGE_TOMBSTONE;
+
+    void set_rc_tombstone_from_element(crdt_rc_tombstone* rct, crdt_element el) {
+        rct->len = el->len;
+        rct->tags = el->tags;
+    }
+#else
+    crdt_element get_element_from_rc(crdt_orset_rc* rc) {
+        return *(crdt_element*)rc;
+    }
+    void set_rc_from_element(crdt_orset_rc* rc, crdt_element el) {
+      rc->len = el.len;
+      rc->tags = el.tags;   
+    }
+
+    crdt_element get_element_from_rc_tombstone(crdt_rc_tombstone* rct) {
+        return *(crdt_element*)rct;
+    }
+
+    void set_rc_tombstone_from_element(crdt_rc_tombstone* rct, crdt_element el) {
+        rct->len = el.len;
+        rct->tags = el.tags; 
+    }
+#endif
+
+void freeCrdtRc(void* r) {
+    crdt_element el = get_element_from_rc(r);
+    free_internal_crdt_element(el);
+    RedisModule_Free(r);
+}
+
+crdt_orset_rc* dup_crdt_rc(crdt_orset_rc* other) {
+    crdt_orset_rc* dup = (crdt_orset_rc*)createCrdtRc();
+    crdt_element el = dup_crdt_element(get_element_from_rc(other));
+    set_rc_from_element(dup, el);
+    free_external_crdt_element(el);
+    return dup;
+}
+
+// int getCrdtRcType(CRDT_RC* rc) {
+//      crdt_element el = *(crdt_element*)rc;
+//      return get_element_type(el);
+// }
+
+//crdt_rc
+crdt_orset_rc* load_rc_by_rdb(RedisModuleIO *rdb) {
+    // crdt_element* rc = (crdt_element*)retrieve_crdt_rc(createCrdtRc());
+    crdt_orset_rc* rc = (crdt_orset_rc*)createCrdtRc();
+    crdt_element el = load_crdt_element_from_rdb(rdb);
+    set_rc_from_element(rc, el);
+    reset_rc_type((CRDT_RC*)rc);
+    free_external_crdt_element(el);
+    return rc;
 }
 
 
-gcounter*  addOrCreateCounter(CRDT_RC* rc,  CrdtMeta* meta, int type, void* val) {
-    int gid = getMetaGid(meta);
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    rc_element* e = findRcElement(r, gid);
-    if(e == NULL) {
-        e = createRcElement(gid);
-        appendRcElement(r, e);
-    }
-    long long vcu = get_vcu_by_meta(meta);
-    if(e->counter == NULL) {
-        e->counter = createGcounter(type);
-        e->counter->start_clock = vcu;
-    }
-    e->counter->end_clock = vcu;
-    if(e->counter->type != type) {
-         setCounterType(e->counter, type);
-        // float can't to int
-        if(type == VALUE_TYPE_LONGDOUBLE) {
-            long double v = (*(long double*)val);
-            e->counter->conv.f += v ;
-        } else {
-            assert(1 == 0);
-        }
-    } else {
-        if(type == VALUE_TYPE_LONGDOUBLE) {
-            e->counter->conv.f += (*(long double*)val);
-        } else if(type == VALUE_TYPE_LONGLONG) {
-            e->counter->conv.i += (*(long long*)val);
-        } else {
-            assert(1 == 0);
-        }
-    }
-    
-    crdtRcUpdateLastVC(rc, getMetaVectorClock(meta));
-    return e->counter;
-}
-
-//========================= tombstone function =============================
-int crdtRcTombstoneGc(CrdtTombstone* target, VectorClock clock) {
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(target);
-    return isVectorClockMonoIncr(rt->vectorClock, clock);
-}
-
-CrdtTombstone* crdRcTombstoneMerge(CrdtTombstone* currentVal, CrdtTombstone* value) {
-    if(currentVal == NULL && value == NULL) {
-        return NULL;
-    }
-    if(currentVal == NULL) {
-        return dupCrdtRcTombstone(value);
-    }
-    if(value == NULL) {
-        return dupCrdtRcTombstone(currentVal);
-    }
-    crdt_rc_tombstone *current = retrieveCrdtRcTombstone(currentVal);
-    crdt_rc_tombstone *other = retrieveCrdtRcTombstone(value);
-    crdt_rc_tombstone* result = retrieveCrdtRcTombstone(dupCrdtRcTombstone(currentVal));
-    for(int i = 0; i < other->len; i++) {
-        rc_tombstone_element * el = findRcTombstoneElement(result, other->elements[i]->gid);
-        if(el == NULL) {
-            el = dupCrdtRcTombstoneElement(other->elements[i]);
-            appendRcTombstoneElement(result, el);
-        } else {
-            long long current_vcu = get_vcu(result->vectorClock, el->gid);
-            long long other_vcu = get_vcu(other->vectorClock, el->gid);
-            assign_max_rc_tombstone_element(current_vcu, other_vcu, el, other->elements[i]);
-        }
-    }
-    freeVectorClock(result->vectorClock);
-    result->vectorClock = vectorClockMerge(current->vectorClock, other->vectorClock);
-    return (CrdtTombstone* )result;
-}
-
-
-
-CrdtObject** crdtRcTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) {
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(target);
-    //value + gid + time + vectorClock
-    if (crdtRcTombstoneMemUsageFunc(rt) > maxsize) {
-        *length  = -1;
-        return NULL;
-    }
-    VectorClockUnit unit = getVectorClockUnit(rt->vectorClock, gid);
-    if(isNullVectorClockUnit(unit)) return NULL;
-    long long vcu = get_logic_clock(unit);
-    if(vcu > logic_time) {
-        *length = 1;
-        CrdtObject** re = RedisModule_Alloc(sizeof(crdt_rc_tombstone*));
-        re[0] = (CrdtObject*)rt;
-        return re;
-    }  
-    return NULL;
-}
-
-void freeCrdtRcTombstoneFilter(CrdtTombstone** filters, int num) {
-    RedisModule_Free(filters);
-}
-int comp_rc_tombstone_element(const void* a, const void* b) {
-    return (*(rc_tombstone_element**)a)->gid > (*(rc_tombstone_element**)b)->gid? 1: 0;
-}
-sds crdtRcTombstoneInfo(void* t) {
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(t);
-    sds result = sdsempty();
-    sds vc_info = vectorClockToSds(rt->vectorClock);
-    result = sdscatprintf(result, "type: crdt_rc_tombstone, vc: %s\r\n", vc_info);
-    sdsfree(vc_info);
-    for(int i = 0; i < rt->len; i++) {
-        rc_tombstone_element* el = rt->elements[i];
-        result = sdscatprintf(result, "   %d) gid: %d, unit: %lld\r\n", i, el->gid, el->del_unit);
-        if(el->counter) {
-            if(el->counter->type == VALUE_TYPE_LONGDOUBLE) {
-                result = sdscatprintf(result, "       counter: { start: %lld, end: %lld, value: %.17Lf}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.f);
-                result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %.17Lf}\r\n",el->counter->del_end_clock, el->counter->del_conv.f);
-            } else if(el->counter->type == VALUE_TYPE_LONGLONG) {
-                result = sdscatprintf(result, "       counter: { start: %lld, end: %lld, value: %lld}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.i);
-                result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %lld}\r\n",el->counter->del_end_clock, el->counter->del_conv.i);
-            } else {
-                assert(1 == 0);
-            }
-        }
-    }
-    return result;
-}
-
-void updateRcTombstoneLastVc(CRDT_RCTombstone* rt, VectorClock vc) {
-    crdt_rc_tombstone* r = retrieveCrdtRcTombstone(rt);
-    VectorClock tag = r->vectorClock;
-    if(!isNullVectorClock(tag)) {
-        r->vectorClock = vectorClockMerge(tag, vc);
-        freeVectorClock(tag);
-    } else {
-        r->vectorClock = dupVectorClock(vc);
-    }
-}
-
-void crdtRcUpdateLastVC(void* rc, VectorClock vc) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    VectorClock tag = r->vectorClock;
-    if(!isNullVectorClock(tag)) {
-        r->vectorClock = vectorClockMerge(tag, vc);
-        freeVectorClock(tag);
-    } else {
-        r->vectorClock = dupVectorClock(vc);
-    }
-}
-
-
-
-void initCrdtRcFromTombstone(CRDT_RC* r, CRDT_RCTombstone* t) {
-    if(t == NULL) {
-        return;
-    }
-    crdt_orset_rc* rc = retrieveCrdtRc(r);
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(t);
-    rc->vectorClock = dupVectorClock(rt->vectorClock);
-    for(int i = 0; i < rt->len; i++) {
-        rc_tombstone_element* tel =  rt->elements[i];
-        rc_element* rel = findRcElement(rc, tel->gid);
-        if(rel == NULL) {
-            rel = createRcElement(tel->gid);
-            rel->counter = dupGcounter(tel->counter);
-            appendRcElement(rc, rel);
-        } else {
-            update_add_counter(rel->counter, tel->counter);
-            update_del_counter(rel->counter, tel->counter);
-        }
-    }
-}
-
-int comp_rc_element(const void* a, const void* b) {
-    return (*(rc_element**)a)->gid > (*(rc_element**)b)->gid? 1: 0;
-}
-
-sds crdtRcInfo(void* value) {
-    crdt_orset_rc* rc = retrieveCrdtRc(value);
-    sds result = sdsempty();
-    sds vc_info = vectorClockToSds(rc->vectorClock);
-    result = sdscatprintf(result, "type: crdt_orset_rc, vc: %s\r\n", vc_info);
-    sdsfree(vc_info);
-    for(int i = 0; i < rc->len; i++) {
-        rc_element* el = rc->elements[i];
-        result = sdscatprintf(result, "  %d) gid: %d\r\n", i, (int)el->gid);
-        if(el->base) {
-            if(el->base->type == VALUE_TYPE_LONGDOUBLE) {
-                result = sdscatprintf(result, "     base: { type: float, clock: %lld, timespace: %lld, value: %.17Lf} \r\n", el->base->unit, el->base->timespace, el->base->conv.f);
-            } else if(el->base->type == VALUE_TYPE_LONGLONG) {
-                result = sdscatprintf(result, "     base: { type: int, clock: %lld, timespace: %lld, value: %lld} \r\n", el->base->unit, el->base->timespace, el->base->conv.i);
-            } else {
-                assert(1 == 0);
-            }
-        }
-        if(el->counter) {
-            if(el->counter->type == VALUE_TYPE_LONGDOUBLE) {
-                result = sdscatprintf(result, "       counter: { type: float, start: %lld, end: %lld, value: %.17Lf}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.f);
-                if(el->counter->del_end_clock != 0) result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %.17Lf}\r\n",el->counter->del_end_clock, el->counter->del_conv.f);
-            } else if(el->counter->type == VALUE_TYPE_LONGLONG) {
-                result = sdscatprintf(result, "       counter: { type: int, start: %lld, end: %lld, value: %lld}\r\n", el->counter->start_clock, el->counter->end_clock, el->counter->conv.i);
-                if(el->counter->del_end_clock != 0) result = sdscatprintf(result, "       counter-del:{ del_end: %lld, value: %lld}\r\n",el->counter->del_end_clock, el->counter->del_conv.i);
-            } else {
-                assert(1 == 0);
-            }
-        }
-    }
-    return result;
-}
-
-int crdtRcTrySetValue(CRDT_RC* rc, CrdtMeta* set_meta, int gslen, gcounter_meta** gs, CrdtTombstone* tombstone, int type, void* val) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(tombstone);
-    if(rt != NULL) {
-        if(isVectorClockMonoIncr(getMetaVectorClock(set_meta) , rt->vectorClock)) {
-            return PURGE_VAL;
-        }
-    }
-    int gid = getMetaGid(set_meta);
-    VectorClock vc = getMetaVectorClock(set_meta);
-    crdtRcUpdateLastVC(rc, vc);
-    int added = 0;
-    for(int i = 0; i < r->len; i++) {
-        if(r->elements[i]->gid == gid) {
-            if(r->elements[i]->base) {
-                long long unit = get_vcu(vc, r->elements[i]->gid);
-                if(r->elements[i]->base->unit <= unit) {
-                    resetElementBase(r->elements[i]->base, set_meta, type, val);
-                }
-            } else {
-                r->elements[i]->base = createRcElementBase();
-                resetElementBase(r->elements[i]->base, set_meta, type, val);
-            }
-            added = 1;
-        } else {
-            if(r->elements[i]->base) {
-                long long unit = get_vcu(vc, r->elements[i]->gid);
-                if(unit >= r->elements[i]->base->unit) {
-                    freeBase(r->elements[i]->base);
-                    r->elements[i]->base = NULL;
-                }
-            }
-        }
-        for(int j = 0; j < gslen; j++) {
-            if(gs[j] != NULL && r->elements[i]->gid == gs[j]->gid) {
-                if(!r->elements[i]->counter) {
-                    r->elements[i]->counter = createGcounter(gs[j]->type);
-                }
-                // assert(r->elements[i]->counter->type == gs[j]->type);
-                if(r->elements[i]->counter->del_end_clock < gs[j]->end_clock) {
-                    update_del_counter_by_meta(r->elements[i]->counter, gs[j]);
-                }
-                freeGcounterMeta(gs[j]);
-                gs[j] = NULL;
-            }
-        }
-    }
-    for(int i = 0; i < gslen; i++) {
-        if(gs[i] != NULL) {
-            rc_element* e = createRcElement(gs[i]->gid);
-            e->counter = createGcounter(gs[i]->type);
-            update_del_counter_by_meta(e->counter, gs[i]);
-            appendRcElement(r, e);
-            if(gs[i]->gid == gid) {
-                e->base = createRcElementBase( );
-                resetElementBase(e->base, set_meta, type, val);
-                added = 1;
-            }
-            freeGcounterMeta(gs[i]);
-            gs[i] = NULL;
-        }
-    }
-    if(added == 0) {
-        rc_element* e = createRcElement(gid);
-        e->base = createRcElementBase( );
-        resetElementBase(e->base, set_meta, type, val);
-        appendRcElement(r, e);
-    }
-    return PURGE_TOMBSTONE;
-}
-int crdtRcSetValue(CRDT_RC* rc, CrdtMeta* set_meta, sds* gs, CrdtTombstone* tombstone, int type, void* val) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    int gid = getMetaGid(set_meta);
-    int index = 0;
-    int added = 0;
-    VectorClock vc = getMetaVectorClock(set_meta);
-    crdtRcUpdateLastVC(rc, vc);
-    for(int i = 0; i < r->len; i++) {
-        if(r->elements[i]->gid == gid) {
-            if(!r->elements[i]->base) {
-                r->elements[i]->base = createRcElementBase();
-            } 
-            resetElementBase(r->elements[i]->base, set_meta, type, val);
-            added = 1;
-        } else {
-            freeBase(r->elements[i]->base);
-            r->elements[i]->base = NULL;
-        }
-        
-        if(r->elements[i]->counter) {
-            r->elements[i]->counter->del_end_clock = r->elements[i]->counter->end_clock;
-            if(r->elements[i]->counter->type == VALUE_TYPE_LONGDOUBLE) {
-                r->elements[i]->counter->del_conv.f = r->elements[i]->counter->conv.f;
-            } else {
-                r->elements[i]->counter->del_conv.i = r->elements[i]->counter->conv.i;
-            }
-            if(gs != NULL) {
-                gs[index++] = gcounterDelStatusToSds(r->elements[i]->gid, r->elements[i]->counter);
-                gs[index++] = gcounterDelValueToSds(r->elements[i]->counter);
-            }
-        }
-    }
-    
-    if(added == 0) {
-        rc_element* e =  createRcElement(gid);
-        e->base = createRcElementBase();
-        resetElementBase(e->base, set_meta, type, val);
-        appendRcElement(r, e);
-    }
-    return index;
+//crdt_rc_tombstone
+void reset_rc_tombstone_type(CRDT_RCTombstone* rct) {
+    setDataType((CrdtObject*)rct, CRDT_RC_TYPE);
+    setType((CrdtObject*)rct, CRDT_TOMBSTONE);
 }
 
 CRDT_RC* createCrdtRc() {
     crdt_orset_rc* rc = RedisModule_Alloc(sizeof(crdt_orset_rc));
-    rc->vectorClock = newVectorClock(0);
-    rc->type = 0;
-    setDataType((CrdtObject*)rc, CRDT_RC_TYPE);
-    setType((CrdtObject*)rc, CRDT_DATA);
-    rc->len = 0;
-    rc->elements = NULL;
+    crdt_element tel = get_element_from_rc(rc);
+    reset_crdt_element(&tel);
+    set_rc_from_element(rc, tel);
+    reset_rc_type((CRDT_RC*)rc);
     return (CRDT_RC*)rc;
-}
-CRDT_RC* dupCrdtRc(CRDT_RC* rc) {
-    if(rc == NULL) {return NULL;}
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    crdt_orset_rc* dup = retrieveCrdtRc(createCrdtRc());
-    dup->vectorClock = dupVectorClock(r->vectorClock);
-    for(int i = 0; i < r->len; i++) {
-        rc_element* el = dupRcElement(r->elements[i]);
-        appendRcElement(dup, el);
-    }
-    assert(r->len == dup->len);
-    return  (CRDT_RC*)dup;
 }
 
 CRDT_RCTombstone* createCrdtRcTombstone() {
-    crdt_rc_tombstone* rt = RedisModule_Alloc(sizeof(crdt_rc_tombstone));
-    rt->type = 0;
-    setDataType((CrdtObject*)rt, CRDT_RC_TYPE);
-    setType((CrdtObject*)rt, CRDT_TOMBSTONE);
-    rt->vectorClock = newVectorClock(0);
-    rt->len = 0;
-    rt->elements = NULL;
-    return (CRDT_RCTombstone*)rt;
+    crdt_rc_tombstone* rct = RedisModule_Alloc(sizeof(crdt_rc_tombstone));
+    crdt_element tel = get_element_from_rc_tombstone(rct);
+    reset_crdt_element(&tel);
+    set_rc_tombstone_from_element(rct, tel);
+    reset_rc_tombstone_type((CRDT_RCTombstone*)rct);
+    return (CRDT_RCTombstone*)rct;
 }
 
-CRDT_RCTombstone* dupCrdtRcTombstone(CRDT_RCTombstone* tombstone) { 
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(tombstone);
-    crdt_rc_tombstone* dup = retrieveCrdtRcTombstone(createCrdtRcTombstone());
-    dup->vectorClock = dupVectorClock(rt->vectorClock);
-    for(int i = 0; i < rt->len; i++) {
-        rc_tombstone_element* el = dupCrdtRcTombstoneElement(rt->elements[i]);
-        appendRcTombstoneElement(dup, el);
-    }
-    assert(dup->len == rt->len);
-    return (CRDT_RCTombstone*)dup;
+void freeCrdtRcTombstone(void* r) {
+    crdt_element el = get_element_from_rc_tombstone(r);
+    free_internal_crdt_element(el);
+    RedisModule_Free(r);
 }
 
-int appendRcTombstoneElement(crdt_rc_tombstone* rt, rc_tombstone_element* element) {
-    rt->len ++;
-    if(rt->len != 1) {
-        rt->elements = RedisModule_Realloc(rt->elements, sizeof(rc_tombstone_element*) * rt->len);
-    } else {
-        rt->elements = RedisModule_Alloc(sizeof(rc_tombstone_element*) * 1);
-    }
-    rt->elements[rt->len-1] = element;
-    qsort(rt->elements, rt->len, sizeof(rc_tombstone_element*), comp_rc_tombstone_element);
-    return 1;
-}
-// rc tombstone functions
-rc_tombstone_element* createRcTombstoneElement(int gid) {
-    rc_tombstone_element* element = RedisModule_Alloc(sizeof(rc_tombstone_element));
-    element->gid = gid;
-    element->counter = NULL;
-    element->del_unit = 0;
-    return element;
-}
-
-void freeRcTombstoneElement(void* element) {
-    RedisModule_Free(element);
-}
-
-rc_tombstone_element* dupCrdtRcTombstoneElement(rc_tombstone_element* rt) {
-    rc_tombstone_element* dup = createRcTombstoneElement(rt->gid);
-    dup->gid = rt->gid;
-    dup->del_unit = rt->del_unit;
-    dup->counter = dupGcounter(rt->counter);
+crdt_rc_tombstone* dup_crdt_rc_tombstone(crdt_rc_tombstone* other) {
+    crdt_rc_tombstone* dup = (crdt_rc_tombstone*)createCrdtRcTombstone();
+    crdt_element oel = dup_crdt_element(get_element_from_rc_tombstone(other));
+    set_rc_tombstone_from_element(dup, oel);
+    free_external_crdt_element(oel);
+    reset_rc_tombstone_type((CRDT_RCTombstone*) dup);
     return dup;
 }
 
-void assign_max_rc_tombstone_element(long long target_vcu, long long src_vcu, rc_tombstone_element* target, rc_tombstone_element* src) {
-    assert(target->gid == src->gid);
-    target->del_unit = max(target->del_unit, src->del_unit);
-    if(src->counter) {
-        if(!target->counter) {
-            target->counter = dupGcounter(src->counter);
-        }else{
-            if(target_vcu < src_vcu) {
-                setCounterType(target->counter,src->counter->type);
-            }
-            assign_max_rc_counter(target->counter, src->counter);
-        }
-    }
-    
-}
-
-rc_tombstone_element* findRcTombstoneElement(crdt_rc_tombstone* rt, int gid) {
-    for(int i = 0; i < rt->len; i++) {
-        if(rt->elements[i]->gid == gid) {
-            return rt->elements[i];
-        }
-    }
-    return NULL;
-}
-
-int initRcTombstoneFromRc(CRDT_RCTombstone *tombstone, CrdtMeta* meta, CRDT_RC* rc, sds* del_counters) {
-    crdt_orset_rc* r = retrieveCrdtRc(rc);
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(tombstone);
-    updateRcTombstoneLastVc(tombstone, getMetaVectorClock(meta));
-    int index = 0;
-    int added = 0;
-    int gid = getMetaGid(meta);
-    int vcu = get_vcu_by_meta(meta);
-    for(int i = 0; i < r->len; i++) {
-        rc_tombstone_element* t = findRcTombstoneElement(rt, r->elements[i]->gid);
-        if(t == NULL) {
-            t = createRcTombstoneElement(r->elements[i]->gid);
-            appendRcTombstoneElement(rt, t);
-        }
-        if(r->elements[i]->gid == gid) {
-            added = 1;
-            if(t->del_unit < vcu) {
-                t->del_unit = vcu;
-            }
-        }else if(r->elements[i]->base) {
-            if(t->del_unit < r->elements[i]->base->unit) {
-                t->del_unit = r->elements[i]->base->unit;
-            }
-        }
-        if(r->elements[i]->counter) {
-            if(t->counter == NULL) {
-                t->counter = r->elements[i]->counter;
-                counter_del(t->counter, t->counter);
-            } else {
-                rc_element* el = r->elements[i];
-                assert(t->counter->start_clock == el->counter->start_clock);
-                update_add_counter(t->counter, el->counter);
-                if( el->counter->end_clock < el->counter->del_end_clock) {
-                    update_del_counter(t->counter, el->counter);
-                } else {
-                    if(t->counter->del_end_clock < el->counter->end_clock) {
-                        counter_del(t->counter, el->counter);
-                    }
-                }   
-                freeGcounter(el->counter);             
-            }
-            r->elements[i]->counter = NULL;
-            if(del_counters) {
-                del_counters[index++] = gcounterDelStatusToSds(t->gid,t->counter);
-                del_counters[index++] = gcounterDelValueToSds(t->counter);
-            }
-        }
-    } 
-    if(added == 0) {
-        rc_tombstone_element* el = createRcTombstoneElement(gid);
-        el->del_unit = vcu;
-        appendRcTombstoneElement(rt, el);
-    }
-    return index;
+crdt_rc_tombstone* load_rc_tombstone_by_rdb(RedisModuleIO *rdb) {
+    crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(createCrdtRcTombstone());
+    // *rct = load_crdt_element_from_rdb(rdb);
+    crdt_element tel = load_crdt_element_from_rdb(rdb);
+    set_rc_tombstone_from_element(rct, tel);
+    free_external_crdt_element(tel);
+    reset_rc_tombstone_type((CRDT_RCTombstone*)rct);
+    return (crdt_rc_tombstone*)rct;
 }
 
 
 
-rc_base* createRcElementBase() {
-    rc_base* base = RedisModule_Alloc(sizeof(rc_base));
-    base->timespace = 0;
-    base->type = 0;
-    base->unit = 0;
-    base->conv.i = 0;
-    return base;
+sds initRcTombstoneFromRc(CRDT_RCTombstone *tombstone, CrdtMeta* meta, CRDT_RC* data) {
+    crdt_orset_rc* rc = retrieve_crdt_rc(data);
+    crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(tombstone);
+    crdt_element el = get_element_from_rc(rc);
+    el = element_clean(el, getMetaGid(meta), get_vcu_by_meta(meta), 1);
+    crdt_element tel = get_element_from_rc_tombstone(rct);
+    el = move_crdt_element(&tel, el);
+    set_rc_tombstone_from_element(rct, tel);
+    reset_crdt_element(&el);
+    set_rc_from_element(rc, el);
+    return get_delete_counter_sds_from_element(tel);
 }
 
-void assign_max_rc_base(rc_base* target, rc_base* src) {
-    if(target->unit < src->unit) {
-        target->timespace = src->timespace;
-        target->type = src->type;
-        if (src->type == VALUE_TYPE_LONGDOUBLE) {
-            target->conv.f = src->conv.f;
-        } else if(src->type == VALUE_TYPE_LONGLONG) {
-            target->conv.i = src->conv.i;
-        }
-    }
+VectorClock getCrdtRcLastVc(void* data) {
+    crdt_orset_rc* rc = retrieve_crdt_rc(data);
+    crdt_element el = get_element_from_rc(rc);
+    VectorClock vc = element_get_vc(el);
+    return vc;
 }
-
-rc_base* dupRcBase(rc_base* base) {
-    if(base == NULL) { return NULL;}
-    rc_base* dup = createRcElementBase();
-    dup->type = base->type;
-    dup->timespace = base->timespace;
-    dup->unit = base->unit;
-    if(dup->type == VALUE_TYPE_LONGDOUBLE) {
-        dup->conv.f = base->conv.f;
-    } else if (dup->type == VALUE_TYPE_LONGLONG) {
-        dup->conv.i = base->conv.i;
-    }
-    return dup;
-}
-
-int resetElementBase(rc_base* base, CrdtMeta* meta, int val_type, void* v) {
-    if (val_type == VALUE_TYPE_LONGDOUBLE) {
-        base->conv.f = *(long double*)v;
-    } else if (val_type == VALUE_TYPE_LONGLONG) {
-        base->conv.i = *(long long*)v;
-    } else {
-        assert( 1 == 0);
-    }
-    base->unit = get_vcu_by_meta(meta);
-    base->timespace = getMetaTimestamp(meta);
-    base->type = val_type;
-    return 1;
-}
-
-void freeBase(rc_base* base) {
-    RedisModule_Free(base);
-}
-
-rc_element* createRcElement(int gid) {
-    rc_element* element = RedisModule_Alloc(sizeof(rc_element));
-    element->gid = gid;
-    element->counter = NULL;
-    element->base = NULL;
-    return element;
-}
-
-void freeRcElement(void* element) {
-    RedisModule_Free(element);
-}
+void freeRcLastVc(VectorClock vc) {
+    freeVectorClock(vc);
+} 
 
 
-
-rc_element* dupRcElement(rc_element* el) {
-    rc_element* dup = createRcElement(el->gid);
-    dup->base = dupRcBase(el->base);
-    dup->counter = dupGcounter(el->counter);
-    return dup;
-}
-
-void assign_max_rc_element(long long target_vcu, long long src_vcu, rc_element* target, rc_element* src) {
-    if(target == NULL || src == NULL) return;
-    assert(target->gid == src->gid);
-    if(target->base && src->base) {
-        assign_max_rc_base(target->base, src->base);
-    } else if(target->base) {
-        if(src_vcu >= target->base->unit) {
-            freeBase(target->base);
-            target->base = NULL;
-        }
-    } else if(src->base) {
-        if(src->base->unit > target_vcu) {
-            target->base = dupRcBase(src->base);
-        }
-    }
-    if(src->counter) {
-        if(!target->counter) {
-            target->counter = dupGcounter(src->counter);
-        } else {
-            if(target_vcu < src_vcu) {
-                setCounterType(target->counter , src->counter->type);
-            }
-            assign_max_rc_counter(target->counter, src->counter);
-        }
-        
-    }
-}
-
-int appendRcElement(crdt_orset_rc* rc, rc_element* element) {
-    rc->len ++;
-    if(rc->len != 1) {
-        rc->elements = RedisModule_Realloc(rc->elements, sizeof(rc_element*) * rc->len);
-    } else {
-        rc->elements = RedisModule_Alloc(sizeof(rc_element*) * 1);
-    }
-    rc->elements[rc->len-1] = element;
-    qsort(rc->elements, rc->len, sizeof(rc_element*), comp_rc_element);
-    return 1;
-}
-
-rc_element* findRcElement(crdt_orset_rc* rc, int gid) {
-    for(int i = 0; i < rc->len; i++) {
-        if(rc->elements[i]->gid == gid) {
-            return rc->elements[i];
-        }
-    }
-    return NULL;
-}
-
-// gcounter* getRcCounter(CRDT_RC* r, int gid) {
-//     rc_element* el = findRcElement(r, gid);
-//     if(el == NULL) {return NULL;}
-//     return el->counter;
-// }
-
-//
-VectorClock  getCrdtRcLastVc(void* r) {
-    crdt_orset_rc* rc = retrieveCrdtRc(r);
-    return rc->vectorClock;
-}
-
-VectorClock getCrdtRcTombstoneLastVc(CRDT_RCTombstone* r) {
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(r);
-    return rt->vectorClock;
-}
-
-void freeCrdtRcTombstone(void *obj) {
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(obj);
-    freeVectorClock(rt->vectorClock);
-    for(int i = 0; i < rt->len; i++) {
-        freeRcTombstoneElement(rt->elements[i]);
-        rt->elements[i] = NULL;
-    }
-    RedisModule_Free(rt->elements);
-}
-//
-int mergeRcTombstone(CRDT_RCTombstone* tombstone, CrdtMeta* meta, int del_len, gcounter_meta** del_counter) {
-    crdt_rc_tombstone* t = retrieveCrdtRcTombstone(tombstone);
-    VectorClock vc = getMetaVectorClock(meta);
-    for(int i = 0; i < t->len; i++) {
-        rc_tombstone_element* el = (t->elements[i]);
-        long long unit = get_vcu(vc, el->gid);
-        if(unit > el->del_unit) {
-            el->del_unit = unit;
-        }
-        for(int j = 0; j < del_len; j++) {
-            if(del_counter[j] != NULL && del_counter[j]->gid == el->gid) {
-                update_del_counter_by_meta(el->counter, del_counter[j]);
-                freeGcounterMeta(del_counter[j]);
-                del_counter[j] = NULL;
-            }
-        }
-    }
-    for(int j = 0; j < del_len; j++) {
-        if(del_counter[j] != NULL) {
-            rc_tombstone_element* el = createRcTombstoneElement(del_counter[j]->gid);
-            appendRcTombstoneElement(t, el);
-            el->del_unit = get_vcu(vc, el->gid);
-            el->counter = createGcounter(del_counter[j]->type);
-            el->counter->start_clock = del_counter[j]->start_clock;
-            update_del_counter_by_meta(el->counter, del_counter[j]);
-            freeGcounterMeta(del_counter[j]);
-            del_counter[j] = NULL;
-        }
-    }
-    for(int j = 0, len = (int)(get_len(vc)); j < len; j++) {
-        clk* c =  get_clock_unit_by_index(&vc, (char)j);
-        char gid = get_gid(*c);
-        if(!findRcTombstoneElement(t, gid)) {
-            rc_tombstone_element* el = createRcTombstoneElement(gid);
-            el->del_unit = get_logic_clock(*c);
-            appendRcTombstoneElement(t, el);
-        }
-    }
-    updateRcTombstoneLastVc(tombstone, vc);
-    return 1;
-}
-
-int crdtRcTombstonePurge(CRDT_RCTombstone* tombstone, CRDT_RC* r) {
-    crdt_orset_rc* rc = retrieveCrdtRc(r);
-    crdt_rc_tombstone* t = retrieveCrdtRcTombstone(tombstone);
-    if(isVectorClockMonoIncr(rc->vectorClock, t->vectorClock)) {
-        // rc.counter.conv -> tombstone.counter.conv 
-        for(int i = 0; i < rc->len; i++) {
-            rc_tombstone_element* el = findRcTombstoneElement(t, rc->elements[i]->gid);
-            assert(el != NULL);
-            if(rc->elements[i]->counter) {
-                update_add_counter(el->counter, rc->elements[i]->counter);
-            }
-        }
-        return PURGE_VAL;
-    }
-    for(int i = 0; i < t->len; i++) {
-        rc_element* el = findRcElement(rc, t->elements[i]->gid);
-        if(el != NULL) {
-            if(el->base && t->elements[i]->del_unit >= el->base->unit) {
-                freeBase(el->base);
-                el->base = NULL;
-            }
-            if(t->elements[i]->counter != NULL) {
-                if(el->counter) {
-                    update_add_counter(el->counter, t->elements[i]->counter);
-                    update_del_counter(el->counter, t->elements[i]->counter);
-                    freeGcounter(t->elements[i]->counter);
-                } else {
-                    el->counter = t->elements[i]->counter;
-                }
-                t->elements[i] = NULL;
-            }
-        }
-        
-    }
-    crdtRcUpdateLastVC(r, t->vectorClock);
-    return PURGE_TOMBSTONE;
-}
-//========================= Rc moduleType functions =======================
-
-#define ADD 1
-#define DEL (1<<1)
-gcounter* load_counter(RedisModuleIO* rdb, int version) {
-    gcounter* counter = createGcounter(0);
-    counter->start_clock = RedisModule_LoadSigned(rdb);
-    counter->type = RedisModule_LoadUnsigned(rdb);
-    int flags = RedisModule_LoadSigned(rdb);
-    if(flags & ADD) {
-        counter->end_clock = RedisModule_LoadSigned(rdb);
-        if(counter->type == VALUE_TYPE_LONGDOUBLE) {
-            counter->conv.f = rdbLoadLongDouble(rdb, version);
-        } else if(counter->type == VALUE_TYPE_LONGLONG) {
-            counter->conv.i = RedisModule_LoadSigned(rdb);
-        }  
-    }
-    if(flags & DEL) {
-        counter->del_end_clock = RedisModule_LoadSigned(rdb);
-        if(counter->type == VALUE_TYPE_LONGDOUBLE) {
-            counter->del_conv.f = rdbLoadLongDouble(rdb, version);
-        } else if(counter->type == VALUE_TYPE_LONGLONG) {
-            counter->del_conv.i = RedisModule_LoadSigned(rdb);
-        }  
-    }
-    return counter;
-}
-
-void save_counter(RedisModuleIO* rdb, gcounter* counter) {
-    RedisModule_SaveSigned(rdb, counter->start_clock);
-    RedisModule_SaveUnsigned(rdb, counter->type);
-    int flags = 0;
-    if(counter->end_clock != 0) {flags |= ADD;}
-    if(counter->del_end_clock != 0) {flags |= DEL;}
-    RedisModule_SaveSigned(rdb, flags);
-    if(counter->end_clock != 0) {
-        RedisModule_SaveSigned(rdb, counter->end_clock);
-        if(counter->type == VALUE_TYPE_LONGDOUBLE) {
-            rdbSaveLongDouble(rdb, counter->conv.f);
-            // RedisModule_SaveFloat(rdb, counter->conv.f);
-        } else if(counter->type == VALUE_TYPE_LONGLONG) {
-            RedisModule_SaveSigned(rdb, counter->conv.i);
-        }    
-    }
-    if(counter->del_end_clock != 0) {
-        RedisModule_SaveSigned(rdb, counter->del_end_clock);
-        if(counter->type == VALUE_TYPE_LONGDOUBLE) {
-            rdbSaveLongDouble(rdb, counter->del_conv.f);
-        } else if(counter->type == VALUE_TYPE_LONGLONG) {
-            RedisModule_SaveSigned(rdb, counter->del_conv.i);
-        }    
-    }
-    
-}
-
-rc_base* load_base(RedisModuleIO* rdb, int version) {
-    rc_base* base = createRcElementBase();
-    base->unit = RedisModule_LoadSigned(rdb);
-    base->timespace = RedisModule_LoadSigned(rdb);
-    base->type = RedisModule_LoadUnsigned(rdb);
-    if(base->type == VALUE_TYPE_LONGDOUBLE) {
-        base->conv.f = rdbLoadLongDouble(rdb, version);
-    } else if(base->type == VALUE_TYPE_LONGLONG) {
-        base->conv.i = RedisModule_LoadSigned(rdb);
-    }
-    return base;
-}
-
-void save_base(RedisModuleIO* rdb, rc_base* base) {
-    RedisModule_SaveSigned(rdb, base->unit);
-    RedisModule_SaveSigned(rdb, base->timespace);
-    unsigned long long  type = (base->type);
-    RedisModule_SaveUnsigned(rdb, type);
-    if(base->type == VALUE_TYPE_LONGDOUBLE) {
-        rdbSaveLongDouble(rdb, base->conv.f);
-    } else if(base->type == VALUE_TYPE_LONGLONG) {
-        RedisModule_SaveSigned(rdb, base->conv.i);
-    }
-}
-
-#define BASE_DATA 1
-#define COUNTER_DATA (1<<1)
-
-rc_element* load_rc_element(RedisModuleIO* rdb, int version) {
-    rc_element* rc = createRcElement(0);
-    rc->gid = RedisModule_LoadSigned(rdb);
-    int flags = RedisModule_LoadSigned(rdb);
-    if(flags & BASE_DATA) {
-        rc->base = load_base(rdb, version);
-    }
-    if(flags & COUNTER_DATA) {
-        rc->counter = load_counter(rdb, version);
-    }
-    return rc;
-}
-
-void save_rc_element(RedisModuleIO* rdb, rc_element* el) {
-    RedisModule_SaveSigned(rdb, el->gid);
-    int flags = 0;
-    if(el->base) { flags |= BASE_DATA;}
-    if(el->counter) { flags |= COUNTER_DATA;}
-    RedisModule_SaveSigned(rdb, flags);
-    if(el->base) {save_base(rdb, el->base);}
-    if(el->counter) {save_counter(rdb, el->counter);}
-}
-
-crdt_orset_rc* RdbLoadCrdtOrSetRc(RedisModuleIO *rdb, long long version, int encver) {
-    crdt_orset_rc* rc = retrieveCrdtRc(createCrdtRc());
-    rc->vectorClock = rdbLoadVectorClock(rdb, version);
-    int len = RedisModule_LoadSigned(rdb);
-    for(int i = 0; i < len; i++) {
-        rc_element* el = load_rc_element(rdb, version);
-        if(el == NULL) { freeCrdtRc(rc); return NULL;}
-        appendRcElement(rc, el);
-    }
-    return rc;
-}
-void *RdbLoadCrdtRc(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
-    int type = getCrdtRdbType(header);
-    int version = getCrdtRdbVersion(header);
-    if( type == ORSET_TYPE) {
-        void* v = RdbLoadCrdtOrSetRc(rdb, version, encver);
-        return v;
-    }
-    return NULL;
-}
-
-
-
-rc_tombstone_element* load_rc_tombstone_element(RedisModuleIO *rdb, int version) {
-    rc_tombstone_element* el = createRcTombstoneElement(0);
-    el->gid = RedisModule_LoadSigned(rdb);
-    el->del_unit = RedisModule_LoadSigned(rdb);
-    int hasCounter = RedisModule_LoadSigned(rdb);
-    if(hasCounter) {
-        el->counter = load_counter(rdb, version);
-    }
-    return el;
-}
-
-void save_rc_tombstone_element(RedisModuleIO *rdb, rc_tombstone_element* el) {
-    RedisModule_SaveSigned(rdb, el->gid);
-    RedisModule_SaveSigned(rdb, el->del_unit);
-    if(!el->counter) { 
-        RedisModule_SaveSigned(rdb, 0);
-        return;
-    } 
-    RedisModule_SaveSigned(rdb, 1);
-    save_counter(rdb, el->counter);
-}
-
-void* RdbLoadCrdtOrSetRcTombstone(RedisModuleIO *rdb, int version, int encver) {
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(createCrdtRcTombstone());
-    rt->vectorClock = rdbLoadVectorClock(rdb, version);
-    int len = RedisModule_LoadSigned(rdb);
-    for(int i = 0; i < len; i++) {
-        rc_tombstone_element* el = load_rc_tombstone_element(rdb, version);
-        if(el == NULL) { freeCrdtRcTombstone(rt); return NULL;}
-        appendRcTombstoneElement(rt, el);
-    }
-    return rt;
-}
-
-void RdbSaveCrdtRc(RedisModuleIO *rdb, void *value) {
-    crdt_orset_rc* rc = retrieveCrdtRc(value);
-    saveCrdtRdbHeader(rdb, ORSET_TYPE);
-    rdbSaveVectorClock(rdb, rc->vectorClock, CRDT_RDB_VERSION);
-    RedisModule_SaveSigned(rdb, rc->len);
-    for(int i = 0; i < rc->len; i++) {
-        save_rc_element(rdb, rc->elements[i]);
-    }
-}
-
-void RdbSaveCrdtRcTombstone(RedisModuleIO *rdb, void *value) {
-    crdt_rc_tombstone* rt = retrieveCrdtRcTombstone(value);
-    saveCrdtRdbHeader(rdb, ORSET_TYPE);
-    rdbSaveVectorClock(rdb, rt->vectorClock, CRDT_RDB_VERSION);
-    RedisModule_SaveSigned(rdb, rt->len);
-    for(int i = 0; i < rt->len; i++) {
-        save_rc_tombstone_element(rdb, rt->elements[i]);
-    }
-}
-//========================= CRDT Data functions =======================
-CrdtObject *crdtRcMerge(CrdtObject *currentVal, CrdtObject *value) {
-    if(currentVal == NULL && value == NULL) {
-        return NULL;
-    }
-    if(currentVal == NULL) {
-        return dupCrdtRc(value);
-    }
-    if(value == NULL) {
-        return dupCrdtRc(currentVal);
-    }
-    crdt_orset_rc *current = retrieveCrdtRc(currentVal);
-    crdt_orset_rc *other = retrieveCrdtRc(value);
-    crdt_orset_rc* result = retrieveCrdtRc(dupCrdtRc(currentVal));
-    for(int i = 0; i < other->len; i++) {
-        rc_element* el = findRcElement(result, other->elements[i]->gid);
-        if(el == NULL) {
-            el = dupRcElement(other->elements[i]);
-            appendRcElement(result, el);
-        } else {
-            assign_max_rc_element(get_vcu(result->vectorClock, el->gid) , get_vcu(other->vectorClock, el->gid), el, other->elements[i]);
-        }
-    }
-    freeVectorClock(result->vectorClock);
-    result->vectorClock = vectorClockMerge(current->vectorClock, other->vectorClock);
-    return (CrdtObject*)result;
+sds crdtRcInfo(void* value) {
+    sds result = sdsnew("1) type: orset_rc\r\n");
+    crdt_element el = get_element_from_rc(value);
+    sds element_info = get_element_info(el);
+    result = sdscatprintf(result," %s", element_info);
+    sdsfree(element_info);
+    return result;
 }
 
 CrdtObject** crdtRcFilter(CrdtObject* target, int gid, long long logic_time, long long maxsize, int* length) {
-    crdt_orset_rc* rc = retrieveCrdtRc(target);
+    printf("[crdtRcFilter] start\n");
+    crdt_orset_rc* rc = retrieve_crdt_rc(target);
+    crdt_element el = get_element_from_rc(rc);
+    if(element_get_vcu_by_gid(el, gid) < logic_time) {
+        return NULL;
+    }
+    printf("[crdtRcFilter] 1\n");
     //value + gid + time + vectorClock
-    if (crdtRcMemUsageFunc(rc) > maxsize) {
+    if (get_crdt_element_memory(el) > maxsize) {
         *length  = -1;
         return NULL;
     }
-    VectorClockUnit unit = getVectorClockUnit(rc->vectorClock, gid);
-    if(isNullVectorClockUnit(unit)) return NULL;
-    long long vcu = get_logic_clock(unit);
-    if(vcu >= logic_time) {
-        *length = 1;
-        CrdtObject** re = RedisModule_Alloc(sizeof(crdt_orset_rc*));
-        re[0] = target;
-        return re;
-    }  
-    return NULL;
+    printf("[crdtRcFilter] 2\n");
+    *length = 1;
+    CrdtObject** re = RedisModule_Alloc(sizeof(crdt_orset_rc*));
+    re[0] = target;
+    return re;
 }
 
 void freeRcFilter(CrdtObject** filters, int num) {
     RedisModule_Free(filters);
 }
 
-//======== info =======
-RedisModuleString* element_info(RedisModuleCtx* ctx,rc_element* el) {
-    sds base_info = sdsempty();
-    sds counter_info = sdsempty();
-    if(el->base) {
-        if(el->base->type == VALUE_TYPE_LONGDOUBLE) {
-            base_info = sdscatprintf(base_info, "base: {type: float, gid: %d, unit: %lld, time: %lld,value: %.17Lf}",el->gid, el->base->unit, el->base->timespace, el->base->conv.f);
-        } else if(el->base->type == VALUE_TYPE_LONGLONG){
-            base_info = sdscatprintf(base_info, "base: {type: int, gid: %d, unit: %lld, time: %lld,value: %lld}",el->gid, el->base->unit, el->base->timespace, el->base->conv.i);
-        }
+
+//methods
+sds rcIncrby(CRDT_RC* data, CrdtMeta* meta, int type, union all_type* value) {
+    crdt_orset_rc* rc = retrieve_crdt_rc(data);
+    int gid = getMetaGid(meta);
+    int index = 0;
+    crdt_element el = get_element_from_rc(rc);
+    crdt_tag* tag = element_get_tag_by_gid(el, gid, &index);
+    crdt_tag_add_counter* a = (crdt_tag_add_counter*)create_add_tag_from_all_type(gid, type, *value);
+    a->add_vcu = get_vcu_by_meta(meta);
+    if(tag) {  
+        tag = tag_add_tag(tag, a);
+        el = element_set_tag_by_index(el, index, tag);
+        free_crdt_tag((crdt_tag*)a);
+    } else {
+        el = element_add_tag(el, (crdt_tag*)a);
+        tag = (crdt_tag*)a;
     }
-    if(el->counter) {
-        gcounter* g = el->counter;
-        if(el->counter->type == VALUE_TYPE_LONGDOUBLE) {
-            counter_info = sdscatprintf(counter_info, "counter: {type: float, start_clock: %lld, end_clock: %lld, value: %.17Lf, del_clock: %lld, del_value: %.17Lf}", g->start_clock, g->end_clock, g->conv.f, g->del_end_clock, g->del_conv.f);
+    // move_crdt_element((crdt_element*)rc, el);
+    set_rc_from_element(rc, el);
+    return get_add_value_sds_from_tag(tag);
+}
+
+
+void rc_tombstone_2_rc(CRDT_RC* data, CRDT_RCTombstone* tombstone) {
+    crdt_orset_rc* rc = retrieve_crdt_rc(data);
+    crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(tombstone);
+    crdt_element tel = get_element_from_rc_tombstone(rct);
+    crdt_element el = get_element_from_rc(rc);
+    tel = move_crdt_element(&el, tel);
+    reset_crdt_element(&tel);
+    set_rc_from_element(rc, el);
+    set_rc_tombstone_from_element(rct, tel);
+    // *rc = *rct;
+    reset_rc_type((CRDT_RC*)rc);
+}
+
+int rcTryIncrby(CRDT_RC* data, CRDT_RCTombstone* tombstone, CrdtMeta* meta, sds value) {
+    crdt_orset_rc* rc = retrieve_crdt_rc(data);
+    crdt_element el = get_element_from_rc(rc);
+    int gid = getMetaGid(meta);
+    ctrip_value v = {.type = VALUE_TYPE_NONE, .value.i = 0};
+    int gcounter_len = str_2_value_and_g_counter_metas(value, &v, NULL);
+    assert(gcounter_len == 0);
+    crdt_tag_add_counter* a;
+    if(v.type != VALUE_TYPE_LONGDOUBLE) {
+        a = create_add_tag(gid);
+        copy_tag_data_from_all_type(v.type, &a->add_counter,v.value) ;
+        a->add_vcu = get_vcu_by_meta(meta);
+        a->counter_type = v.type;
+    } else {
+        crdt_tag_ld_add_counter* lda = (crdt_tag_ld_add_counter*)create_ld_add_tag(gid);
+        lda->add_counter = v.value.f;
+        lda->add_vcu = get_vcu_by_meta(meta);
+        a = (crdt_tag_add_counter*)lda;
+    }
+    free_ctrip_value(v);
+    if(tombstone) {
+        crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(tombstone);
+        crdt_element tel = get_element_from_rc_tombstone(rct);
+        int index;
+        crdt_tag* tag = element_get_tag_by_gid(tel, gid, &index);
+        if(tag) {
+            tag = merge_crdt_tag(tag, (crdt_tag*)a);
+            tel = element_set_tag_by_index(tel, index, tag); 
+            free_crdt_tag((crdt_tag*)a);
+            if(is_deleted_tag(tag)) {
+                return PURGE_VAL;
+            }  
         } else {
-            counter_info = sdscatprintf(counter_info, "counter: {type: int, start_clock: %lld, end_clock: %lld, value: %lld, del_clock: %lld, del_value: %lld}", g->start_clock, g->end_clock, g->conv.i, g->del_end_clock, g->del_conv.i);
+            tel = element_add_tag(tel, tag);
+        }
+        move_crdt_element(&el, tel);
+        reset_crdt_element(&tel);
+        set_rc_tombstone_from_element(rct, tel);
+        set_rc_from_element(rc, el);
+        return PURGE_TOMBSTONE;
+    }
+    if(data) {
+        el = element_merge_tag(el, a);
+    }
+    set_rc_from_element(rc, el);
+    return PURGE_TOMBSTONE;
+}
+
+int rcTryDel(CRDT_RC* current,CRDT_RCTombstone* tombstone, CrdtMeta* meta, sds info) {
+    crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(tombstone);
+    VectorClock vc = getMetaVectorClock(meta);
+    g_counter_meta* gcounters[get_len(vc)];
+    int gcounter_len = 0;
+    if(info) {
+        gcounter_len = str_to_g_counter_metas(info, sdslen(info), gcounters);
+        assert(gcounter_len != -1);
+    }
+    crdt_element rel = create_element_from_vc_and_g_counter(vc, gcounter_len, gcounters, NULL);
+    crdt_element tel = get_element_from_rc_tombstone(rct);
+    if(current) {
+        crdt_orset_rc* rc = retrieve_crdt_rc(current);
+        crdt_element el = get_element_from_rc(rc);
+        int result = purge_element(&rel, &el);
+        if(result == PURGE_VAL) {
+            rel = move_crdt_element(&tel, rel);
+        }
+        set_rc_tombstone_from_element(rct, tel);
+        set_rc_from_element(rc, el);
+        free_external_crdt_element(rel);
+        return result;
+    }
+    tel = merge_crdt_element(tel, rel);
+    set_rc_tombstone_from_element(rct, tel);
+    free_external_crdt_element(rel);
+    return PURGE_VAL;
+}
+
+void initCrdtRcFromTombstone(CRDT_RC* rc, CRDT_RCTombstone* t) {
+    if(t == NULL) return;
+    return rc_tombstone_2_rc(rc, t);
+}
+
+
+
+sds rcAdd(CRDT_RC* data,  CrdtMeta* meta, sds val) {
+    crdt_orset_rc* rc = retrieve_crdt_rc(data);
+    int gid = getMetaGid(meta);
+    crdt_tag_base* b = create_base_tag(gid);
+    b->base_data_type = VALUE_TYPE_SDS;
+    b->base_timespace = getMetaTimestamp(meta);
+    b->base_vcu = get_vcu_by_meta(meta);
+    b->score.s = sdsdup(val);
+
+    crdt_element el = get_element_from_rc(rc);
+    el = element_clean(el, -1, 0, 0);
+    el = element_merge_tag(el, b);
+    
+    VectorClock vc = element_get_vc(el);
+    appendVCForMeta(meta, vc);
+    freeVectorClock(vc);
+    sds result = get_base_value_sds_from_element(el, gid);
+    set_rc_from_element(rc, el);
+    return result;
+}
+
+int rcTryAdd(CRDT_RC* data, CRDT_RCTombstone* tombstone, CrdtMeta* meta, sds value) {
+    crdt_orset_rc* rc = retrieve_crdt_rc(data);
+    crdt_element el = get_element_from_rc(rc);
+    VectorClock vc = getMetaVectorClock(meta);
+    g_counter_meta* gcounters[get_len(vc)];
+    ctrip_value v = {.type = VALUE_TYPE_NONE, .value.i = 0};
+    int gcounter_len = str_2_value_and_g_counter_metas(value, &v, gcounters);
+    assert(gcounter_len != -1);
+    crdt_tag* b = (crdt_tag*)create_base_tag_by_meta(meta, v);
+    free_ctrip_value(v);
+    crdt_element rel =  create_element_from_vc_and_g_counter(vc, gcounter_len, gcounters, b);
+    if(tombstone) {
+        crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(tombstone);
+        crdt_element tel = get_element_from_rc_tombstone(rct);
+        int result = purge_element(&tel, &rel);
+        if(result == PURGE_VAL) {
+            rel = move_crdt_element(&tel, rel);
+            set_rc_tombstone_from_element(rct, tel);
+            free_external_crdt_element(rel);
+            return PURGE_VAL;
+        }
+        set_rc_tombstone_from_element(rct, tel);
+    }
+    el = merge_crdt_element(el, rel);
+    // move_crdt_element((crdt_element*)data, rel);
+    set_rc_from_element(rc, el);
+    free_external_crdt_element(rel);
+    return PURGE_TOMBSTONE;
+}
+
+/*****  value  ***/
+void RdbSaveCrdtRc(RedisModuleIO *rdb, void *value) {
+    crdt_orset_rc* rc = retrieve_crdt_rc(value);
+    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+    crdt_element el = get_element_from_rc(rc);
+    save_crdt_element_to_rdb(rdb, el);
+}
+void *RdbLoadCrdtRc(RedisModuleIO *rdb, int encver) {
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
+    if ( type == ORSET_TYPE ) {
+        if(version >= 1) {
+            return load_rc_by_rdb(rdb);
         }
     }
-    RedisModuleString* result =  RedisModule_CreateStringPrintf(ctx, "gid: %d, %s %s", el->gid, base_info, counter_info);
-    sdsfree(base_info);
-    sdsfree(counter_info);
+    return NULL;
+}
+
+
+void AofRewriteCrdtRc(RedisModuleIO *aof, RedisModuleString *key, void *value) {
+
+}
+size_t crdtRcMemUsageFunc(const void *value) {
+    return 1;
+}
+
+
+
+void crdtRcDigestFunc(RedisModuleDigest *md, void *value) {
+
+}
+
+CrdtObject* crdtRcMerge(CrdtObject* currentVal, CrdtObject* value) {
+    
+    if(currentVal == NULL && value == NULL) {
+        return NULL;
+    }
+    if(currentVal == NULL) {
+        return (CrdtObject* )dup_crdt_rc((crdt_orset_rc*)value);
+    }
+    if(value == NULL) {
+        return (CrdtObject* )dup_crdt_rc((crdt_orset_rc*)currentVal);
+    }
+    crdt_element other = get_element_from_rc((crdt_orset_rc*)value);
+    crdt_orset_rc* result = dup_crdt_rc((crdt_orset_rc*)currentVal);
+    crdt_element el = get_element_from_rc(result);
+    el =  merge_crdt_element(el, other);
+    // move_crdt_element(result, rel);
+    // move_crdt_element(other, create_crdt_element());
+    reset_crdt_element(&other);
+    set_rc_from_element((crdt_orset_rc*)value, other);
+    set_rc_from_element(result, el);
+    return (CrdtObject* )result;
+}
+
+void crdtRcUpdateLastVC(void* rc, VectorClock vc) {
+   
+}
+
+
+/***  abouot ****/
+
+
+//about sorted set tombstone module type
+void RdbSaveCrdtRcTombstone(RedisModuleIO *rdb, void *value) {
+    crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(value);
+    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+    crdt_element tel = get_element_from_rc_tombstone(rct);
+    save_crdt_element_to_rdb(rdb, tel);
+}
+void *RdbLoadCrdtRcTombstone(RedisModuleIO *rdb, int encver) {
+    long long header = loadCrdtRdbHeader(rdb);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
+    if ( type == ORSET_TYPE ) {
+        if(version >= 1) {
+            return load_rc_tombstone_by_rdb(rdb);
+        }
+    }
+    return NULL;
+}
+
+void AofRewriteCrdtRcTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {
+
+}
+size_t crdtRcTombstoneMemUsageFunc(const void *value) {
+    return 1;
+}
+
+void crdtRcTombstoneDigestFunc(RedisModuleDigest *md, void *value) {
+
+}
+
+CrdtTombstone** crdtRcTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) {
+    crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(target);
+    crdt_element tel = get_element_from_rc_tombstone(rct);
+    long long vcu = element_get_vcu_by_gid(tel, gid);
+    if(vcu < logic_time) {
+        return NULL;
+    }
+    //value + gid + time + vectorClock
+    if (get_crdt_element_memory(tel) > maxsize) {
+        *length  = -1;
+        return NULL;
+    }
+
+    *length = 1;
+    CrdtTombstone** re = RedisModule_Alloc(sizeof(crdt_rc_tombstone*));
+    re[0] = (CrdtTombstone*)rct;
+    return re;
+}
+
+
+void freeCrdtRcTombstoneFilter(CrdtTombstone** filters, int num) {
+    RedisModule_Free(filters);
+}
+
+CrdtTombstone* crdtRcTombstoneMerge(CrdtTombstone* currentVal, CrdtTombstone* value) {
+    if(currentVal == NULL && value == NULL) {
+        return NULL;
+    }
+    if(currentVal == NULL) {
+        return (CrdtTombstone*)dup_crdt_rc_tombstone((crdt_rc_tombstone*)value);
+    }
+    if(value == NULL) {
+        return (CrdtTombstone*)dup_crdt_rc_tombstone((crdt_rc_tombstone*)currentVal);
+    }
+    crdt_element other = get_element_from_rc_tombstone((crdt_rc_tombstone*)value);
+    crdt_rc_tombstone* result = (dup_crdt_rc_tombstone((crdt_rc_tombstone*)currentVal));
+    crdt_element tel = get_element_from_rc_tombstone(result);
+    tel = merge_crdt_element(tel, other);
+    set_rc_tombstone_from_element(result, tel);
+    reset_crdt_element(&other);
+    set_rc_tombstone_from_element((crdt_rc_tombstone*)value, other);
+    set_rc_tombstone_from_element(result, tel);
+    return (CrdtTombstone* )result;
+}
+
+
+
+int crdtRcTombstonePurge(CRDT_RCTombstone* tombstone, CRDT_RC* r) {
+    crdt_element el = get_element_from_rc((crdt_orset_rc*)r);
+    crdt_element tel = get_element_from_rc_tombstone((crdt_rc_tombstone*)tombstone);
+    int result = purge_element(&tel, &el);
+    set_rc_from_element((crdt_orset_rc*)r, el);
+    set_rc_tombstone_from_element((crdt_rc_tombstone*)tombstone, tel);
     return result;
+}
+
+int crdtRcTombstoneGc(CrdtTombstone* target, VectorClock clock) {
+    if(!rc_gc_stats) {
+        return 0;
+    }
+    crdt_element tel = get_element_from_rc_tombstone((crdt_rc_tombstone*)target);
+    VectorClock vc = element_get_vc(tel);
+    int result = isVectorClockMonoIncr(vc,clock);
+    freeVectorClock(vc);
+    if(result) {
+        #if defined(DEBUG) 
+            sds info = crdtRcTombstoneInfo(target);
+            RedisModule_Debug("notice", "[gc] rc_tombstone:%s", info);
+            sdsfree(info);
+        #endif
+    }
+    return result;
+}
+
+sds crdtRcTombstoneInfo(void* value) {
+    sds result = sdsnew("1) type: orset_rc_tombstone\r\n");
+    crdt_element el = get_element_from_rc(value);
+    sds element_info = get_element_info(el);
+    result = sdscatprintf(result," %s", element_info);
+    sdsfree(element_info);
+    return result;
+}
+VectorClock getCrdtRcTombstoneLastVc(CrdtTombstone* tombstone) {
+    if(tombstone == NULL) return newVectorClock(0);
+    crdt_element el = get_element_from_rc_tombstone((crdt_rc_tombstone*)tombstone);
+    return element_get_vc(el);
+}
+
+/////////////////// value function 
+
+
+
+int get_crdt_rc_value(CRDT_RC* rc, ctrip_value* value) {
+    crdt_element el = get_element_from_rc((crdt_orset_rc*)rc);
+    return element_get_value(el, value);
+}
+
+int get_crdt_tag_add_value(CRDT_RC* rc, int gid, ctrip_value* value) {
+    crdt_element el = get_element_from_rc((crdt_orset_rc*)rc);
+    crdt_tag* tag = element_get_tag_by_gid(el, gid, NULL);
+    if(tag == NULL) return 0;
+    return get_tag_counter_value(tag, value, 0);
 }

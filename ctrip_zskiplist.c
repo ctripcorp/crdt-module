@@ -8,7 +8,7 @@
  * The SDS string 'ele' is referenced by the node after the call. */
 zskiplistNode *zslCreateNode(int level, double score, sds ele) {
     zskiplistNode *zn =
-        RedisModule_Alloc(sizeof(*zn)+level*sizeof(struct zskiplistLevel));
+        zskiplist_malloc(sizeof(*zn)+level*sizeof(struct zskiplistLevel));
     zn->score = score;
     zn->ele = ele;
     return zn;
@@ -19,7 +19,7 @@ zskiplist *zslCreate(void) {
     int j;
     zskiplist *zsl;
 
-    zsl = RedisModule_Alloc(sizeof(*zsl));
+    zsl = zskiplist_malloc(sizeof(*zsl));
     zsl->level = 1;
     zsl->length = 0;
     zsl->header = zslCreateNode(ZSKIPLIST_MAXLEVEL,0,NULL);
@@ -36,13 +36,13 @@ zskiplist *zslCreate(void) {
 void zslFree(zskiplist *zsl) {
     zskiplistNode *node = zsl->header->level[0].forward, *next;
 
-    zfree(zsl->header);
+    zskiplist_free(zsl->header);
     while(node) {
         next = node->level[0].forward;
         zslFreeNode(node);
         node = next;
     }
-    zfree(zsl);
+    zskiplist_free(zsl);
 }
 
 /* Returns a random level for the new skiplist node we are going to create.
@@ -121,7 +121,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
  * this function. */
 void zslFreeNode(zskiplistNode *node) {
     sdsfree(node->ele);
-    RedisModule_Free(node);
+    zskiplist_free(node);
 }
 
 /* Delete an element with matching score/element from the skiplist.
@@ -158,7 +158,7 @@ int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
             *node = x;
         return 1;
     }
-    printf("no find %s %.17f %d \n", ele, score, zsl->length);
+    printf("no find %s %.17f %ld \n", ele, score, zsl->length);
     return 0; /* not found */
 }
 
@@ -197,40 +197,51 @@ int zslValueLteMax(double value, zrangespec *spec) {
 int zslParseRange(sds min, sds max, zrangespec *spec) {
     char *eptr;
     spec->minex = spec->maxex = 0;
-    long long m = 0;
     /* Parse the min-max interval. If one of the values is prefixed
      * by the "(" character, it's considered "open". For instance
      * ZRANGEBYSCORE zset (1.5 (2.5 will match min < x < max
      * ZRANGEBYSCORE zset 1.5 2.5 will instead match min <= x <= max */
-    if (string2ll(min, sdslen(min), &m)) {
-        spec->min = m;
+    
+    if (((char*)min)[0] == '(') {
+        spec->min = strtod((char*)min+1,&eptr);
+        if (eptr[0] != '\0' || isnan(spec->min)) return 0;
+        spec->minex = 1;
     } else {
-        if (((char*)min)[0] == '(') {
-            spec->min = strtod((char*)min+1,&eptr);
-            if (eptr[0] != '\0' || isnan(spec->min)) return 0;
-            spec->minex = 1;
-        } else {
-            spec->min = strtod((char*)min,&eptr);
-            if (eptr[0] != '\0' || isnan(spec->min)) return 0;
-        }
+        spec->min = strtod((char*)min,&eptr);
+        if (eptr[0] != '\0' || isnan(spec->min)) return 0;
     }
     
-    if (string2ll(max, sdslen(max), &m)) {
-        spec->max = m;
+    
+    
+    if (((char*)max)[0] == '(') {
+        spec->max = strtod((char*)max+1,&eptr);
+        if (eptr[0] != '\0' || isnan(spec->max)) return 0;
+        spec->maxex = 1;
     } else {
-        if (((char*)max)[0] == '(') {
-            spec->max = strtod((char*)max+1,&eptr);
-            if (eptr[0] != '\0' || isnan(spec->max)) return 0;
-            spec->maxex = 1;
-        } else {
-            spec->max = strtod((char*)max,&eptr);
-            if (eptr[0] != '\0' || isnan(spec->max)) return 0;
-        }
+        spec->max = strtod((char*)max,&eptr);
+        if (eptr[0] != '\0' || isnan(spec->max)) return 0;
     }
+    
 
     return 1;
 }
 
+/* Returns if there is a part of the zset is in range. */
+int zslIsInRange(zskiplist *zsl, zrangespec *range) {
+    zskiplistNode *x;
+
+    /* Test for ranges that will always be empty. */
+    if (range->min > range->max ||
+            (range->min == range->max && (range->minex || range->maxex)))
+        return 0;
+    x = zsl->tail;
+    if (x == NULL || !zslValueGteMin(x->score,range))
+        return 0;
+    x = zsl->header->level[0].forward;
+    if (x == NULL || !zslValueLteMax(x->score,range))
+        return 0;
+    return 1;
+}
 /* Find the last node that is contained in the specified range.
  * Returns NULL when no element is contained in the range. */
 zskiplistNode *zslLastInRange(zskiplist *zsl, zrangespec *range) {
@@ -255,7 +266,6 @@ zskiplistNode *zslLastInRange(zskiplist *zsl, zrangespec *range) {
     if (!zslValueGteMin(x->score,range)) return NULL;
     return x;
 }
-
 
 /* Find the first node that is contained in the specified range.
  * Returns NULL when no element is contained in the range. */

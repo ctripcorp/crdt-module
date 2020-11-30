@@ -6,15 +6,19 @@
 int getCrdtLWWRegisterGid(CRDT_LWW_Register* r) {   
     return (int)r->gid;
 } 
+
 void setCrdtLWWRegisterGid(CRDT_LWW_Register* r, int gid) {
     r->gid = gid;
 }
+
 long long getCrdtLWWRegisterTimestamp(CRDT_LWW_Register* r) {
     return r->timestamp;
 }
+
 void setCrdtLWWRegisterTimestamp(CRDT_LWW_Register* r, long long timestamp) {
     r->timestamp = timestamp;
 }
+
 VectorClock getCrdtLWWRegisterVectorClock(CRDT_LWW_Register* r) {
     return r->vectorClock;
 }
@@ -280,8 +284,8 @@ CRDT_LWW_Register** filterLWWRegister(CRDT_LWW_Register* target, int gid, long l
 sds crdtLWWRegisterInfo(CRDT_LWW_Register *crdtRegister) {
     sds result = sdsempty();
     sds vcStr = vectorClockToSds(getCrdtLWWRegisterVectorClock(crdtRegister));
-    result = sdscatprintf(result, "type: lww_register, gid: %d, timestamp: %lld, vector-clock: %s, val: %s",
-            getCrdtLWWRegisterGid(crdtRegister), getCrdtLWWRegisterTimestamp(crdtRegister), vcStr,getCrdtLWWRegisterValue(crdtRegister));
+    result = sdscatprintf(result, "type: lww_register, gid: %d, timestamp: %lld, vector-clock: %s, val: %s\n",
+            getCrdtLWWRegisterGid(crdtRegister), getCrdtLWWRegisterTimestamp(crdtRegister), vcStr, getCrdtLWWRegisterValue(crdtRegister));
     sdsfree(vcStr);
     return result;
 }
@@ -289,7 +293,7 @@ sds crdtRegisterTombstoneInfo(void *t) {
     CRDT_LWW_RegisterTombstone* tombstone = retrieveCrdtLWWRegisterTombstone(t);
     sds result = sdsempty();
     sds vcStr = vectorClockToSds(getCrdtLWWRegisterTombstoneVectorClock(tombstone));
-    result = sdscatprintf(result, "type: lww_reigster_tomsbtone, gid: %d, timestamp: %lld, vector-clock: %s",
+    result = sdscatprintf(result, "type: lww_reigster_tomsbtone, gid: %d, timestamp: %lld, vector-clock: %s\n",
             getCrdtLWWRegisterTombstoneGid(tombstone), getCrdtLWWRegisterTombstoneTimestamp(tombstone), vcStr);
     sdsfree(vcStr);
     return result;

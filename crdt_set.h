@@ -14,6 +14,9 @@ typedef CrdtObject CRDT_Set;
 int initCrdtSetModule(RedisModuleCtx *ctx);
 RedisModuleType* getCrdtSet();
 RedisModuleType* getCrdtSetTombstone();
+int setStartGc();
+int setStopGc();
+
 
 //set type modulemethod
 void *RdbLoadCrdtSet(RedisModuleIO *rdb, int encver);
@@ -44,21 +47,20 @@ dictEntry* findSetDict(CRDT_Set* set, sds field);
 int removeSetDict(CRDT_Set* set, sds field,  CrdtMeta* meta);
 int addSetDict(CRDT_Set* set, sds field, CrdtMeta* meta);
 int updateSetDict(CRDT_Set* set, dictEntry* de, CrdtMeta* meta);
-size_t getSetDictSize(CRDT_Set* data);
-dictIterator* getSetDictIterator(CRDT_Set* data);
+size_t getSetSize(CRDT_Set* data);
+dictIterator* getSetIterator(CRDT_Set* data);
 int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value);
 int setValueIterPurge(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta);
 int appendSet(CRDT_Set* targe, CRDT_Set* src);
 
 sds getRandomSetKey(CRDT_Set* set);
 //about set tombstone
-int removeSetTombstoneDict(CRDT_SetTombstone* tom, sds field);
 VectorClock getCrdtSetTombstoneLastVc(CRDT_SetTombstone* tom);
 CRDT_SetTombstone* createCrdtSetTombstone();
 int updateCrdtSetTombstoneLastVcByMeta(CRDT_SetTombstone* tom, CrdtMeta* meta);
 int updateCrdtSetTombstoneLastVc(CRDT_SetTombstone* tom, VectorClock vc);
 sds crdtSetInfo(void *data);
-sds setIterInfo(void *data);
+sds setIterInfo(dictEntry* vc);
 
 
 //about method
@@ -74,7 +76,7 @@ static CrdtObjectMethod SetCommonMethod = {
     .filterAndSplit = crdtSetFilter,
     .freefilter = freeSetFilter,
 };
-int addSetTombstoneDictValue(CRDT_Set* data, sds field, CrdtMeta* meta);
+// int addSetTombstoneDictValue(CRDT_Set* data, sds field, CrdtMeta* meta);
 //about tombstone method
 CrdtTombstone* crdtSetTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other);
 CrdtObject** crdtSetTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) ;
@@ -90,16 +92,22 @@ static CrdtTombstoneMethod SetTombstoneCommonMethod = {
     .purge = crdtSetTombstonePurge,
     .info = crdtSetTombstoneInfo,
 };
-int setTombstoneIterPurge(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta);
+int setTryAdd(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta);
+int setAdd(CRDT_Set* current, CRDT_SetTombstone* tombstone, sds field, CrdtMeta* meta);
+int setTryRem(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta);
+int setRem(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta);
+int setDel(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta);
+int setTryDel(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta);
+int isNullSetTombstone(CRDT_SetTombstone* t);
 int purgeSetDelMax(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta);
 VectorClock getCrdtSetTombstoneMaxDelVc(CRDT_SetTombstone* t);
 int updateCrdtSetTombstoneMaxDel(CRDT_SetTombstone* t, VectorClock vc);
 CRDT_SetTombstone* dupCrdtSetTombstone(CRDT_SetTombstone* tom);
 int appendSetTombstone(CRDT_SetTombstone* a, CRDT_SetTombstone* b);
 dictEntry* findSetTombstoneDict(CRDT_SetTombstone* tom, sds field);
-sds setTombstoneIterInfo(void *data);
+sds setTombstoneIterInfo(dictEntry *data);
 
-size_t getSetTombstoneDictSize(CRDT_SetTombstone* data);
+
 static inline int isCrdtSet(void* data) {
     CRDT_Set* set = (CRDT_Set*)data;
     if(set != NULL && (getDataType((CrdtObject*)set) == CRDT_SET_TYPE)) {

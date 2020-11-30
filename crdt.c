@@ -63,16 +63,9 @@ int crdtOvcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_CrdtReplicateVerbatim(gid, ctx);
     if(gid != RedisModule_CurrentGid()) {
         VectorClock vclock = getVectorClockFromString(argv[2]);
-        long long  v = RedisModule_GetOvc(ctx);
-        VectorClock vc = LL2VC(v);
-        VectorClock newVectorClock = vectorClockMerge(vc, vclock);
-        if (!isNullVectorClock(vc)) {
-            freeVectorClock(vc);
-        }
+        RedisModule_UpdateOvc(ctx,  VC2LL(vclock));
         freeVectorClock(vclock);
-        RedisModule_SetOvc(ctx,  VC2LL(newVectorClock));
     }
-    
     return RedisModule_ReplyWithOk(ctx); 
 }
 //crdt.select <gid> <dbid>
@@ -157,7 +150,6 @@ VectorClock getVectorClockFromString(RedisModuleString *vectorClockStr) {
     const char *vcStr = RedisModule_StringPtrLen(vectorClockStr, &vcStrLength);
     sds vclockSds = sdsnewlen(vcStr, vcStrLength);
     VectorClock vclock = stringToVectorClock(vclockSds);
-    // VectorClock vclock = sdsToVectorClock(vclockSds);
     sdsfree(vclockSds);
     return vclock;
 }
@@ -354,6 +346,38 @@ int dataCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_CloseKey(moduleKey);
     return CRDT_OK;
 }
+//
+int crdtGcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if(argc < 3) {return RedisModule_WrongArity(ctx);}
+    long long ll = 0;
+    if(RedisModule_StringToLongLong(argv[2], &ll) != REDISMODULE_OK) {
+        return RedisModule_WrongArity(ctx);
+    }
+    sds module_name = RedisModule_GetSds(argv[1]);
+    int result = 0;
+    if(strcmp(module_name, "rc") == 0) {
+        if(ll) { 
+            result = rcStartGc();
+        } else {
+            result = rcStopGc();
+        }
+    } else if(strcmp(module_name, "zset") == 0) {
+        if(ll) { 
+            result = zsetStartGc();
+        } else {
+            result = zsetStopGc();
+        }
+    } else if(strcmp(module_name, "set") == 0) {
+        if(ll) { 
+            result = setStartGc();
+        } else {
+            result = setStopGc();
+        }
+    }
+    return  RedisModule_ReplyWithLongLong(ctx, result);
+
+    
+}
 /* This function must be present on each Redis module. It is used in order to
  * register the commands into the Redis server. */
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -416,7 +440,9 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         return REDISMODULE_ERR;   
     if (RedisModule_CreateCommand(ctx, "crdt.ovc", 
                                 crdtOvcCommand, "write",  1, 2,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;                      
+        return REDISMODULE_ERR;  
+    if (RedisModule_CreateCommand(ctx, "crdt.debug_gc", crdtGcCommand, "write",  1, 2,1) == REDISMODULE_ERR)  
+        return REDISMODULE_ERR;               
     return REDISMODULE_OK;
 }
 

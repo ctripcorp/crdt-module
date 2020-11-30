@@ -78,6 +78,8 @@ static RedisModuleType *CrdtSS;
 static RedisModuleType *CrdtSST;
 RedisModuleType* getCrdtSS();
 RedisModuleType* getCrdtSST();
+int zsetStopGc();
+int zsetStartGc();
 
 
 //  init redis module
@@ -115,13 +117,20 @@ VectorClock getCrdtSSLastVc(CRDT_SS* data);
 void updateCrdtSSLastVc(CRDT_SS* data, VectorClock vc);
 VectorClock getCrdtSSTLastVc(CRDT_SSTombstone* data);
 void updateCrdtSSTMaxDel(CRDT_SSTombstone* tombstone, VectorClock vc);
+VectorClock getCrdtSSTMaxDelVc(CRDT_SSTombstone* data);
 zskiplistNode* zslInRange(CRDT_SS* current, zrangespec* range, int reverse);
-zskiplistNode* zslInLexRange(CRDT_SS* current, zrangespec* range, int reverse);
+zskiplistNode* zslInLexRange(CRDT_SS* current, zlexrangespec* range, int reverse);
 int initSSTombstoneFromSS(CRDT_SSTombstone* tombstone,CrdtMeta* del_meta, CRDT_SS* value, sds* del_counters);
 zskiplist* zsetGetZsl(CRDT_SS* current);
 int zsetTryAdd(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMeta* meta, sds info);
 int zsetTryIncrby(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field, CrdtMeta* meta, sds info);
 int zsetTryRem(CRDT_SSTombstone* tombstone,CRDT_SS* current, sds info, CrdtMeta* meta);
 int zsetTryDel(CRDT_SS* current,CRDT_SSTombstone* tombstone, CrdtMeta* meta);
+unsigned long  zslDeleteRangeByRank(CRDT_SS* current, CRDT_SSTombstone* tombstone, CrdtMeta* meta, unsigned int start, unsigned int end, sds* callback_items, long long* byte_size);
+unsigned long  zslDeleteRangeByScore(CRDT_SS* current, CRDT_SSTombstone* tombstone, CrdtMeta* meta, zrangespec *range, sds* callback_items, long long* byte_size);
+unsigned long  zslDeleteRangeByLex(CRDT_SS* current, CRDT_SSTombstone* tombstone, CrdtMeta* meta, zlexrangespec *range, sds* callback_items, long long* byte_size);
 void updateCrdtSSTLastVc(CRDT_SSTombstone* data, VectorClock vc);
 unsigned long zsetGetRank(CRDT_SS* current, double score, sds ele);
+dict* getZsetDict(CRDT_SS* current);
+sds getZsetElementInfo(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field);
+int isNullZsetTombstone(CRDT_SSTombstone* tombstone);

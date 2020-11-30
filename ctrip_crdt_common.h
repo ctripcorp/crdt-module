@@ -127,6 +127,7 @@ typedef struct CrdtTombstoneMethod {
 } CrdtTombstoneMethod;
 #define PURGE_VAL 1
 #define PURGE_TOMBSTONE -1
+#define PURGE_NONE 0
 
 
 typedef int (*crdtIsExpireFunc)(void* target, CrdtMeta* meta);
@@ -159,6 +160,7 @@ int getCrdtRdbType(long long crdtRdbHeader);
 
 sds getMetaInfo(CrdtMeta *data);
 long long get_vcu(VectorClock vc, int gid);
+long long get_vcu_from_vc(VectorClock vc, int gid, int* index);
 long long get_vcu_by_meta(CrdtMeta *data);
 
 // int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);

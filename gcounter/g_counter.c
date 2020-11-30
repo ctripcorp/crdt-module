@@ -1,6 +1,7 @@
 #include "g_counter.h"
 #include <assert.h>
-typedef int (*parseFunc)(char* buf, int* len, void* value);
+#include <string.h>
+typedef int (*parseFunc)(char* buf, int len, void* value);
 int read_func(char* buf, int len , char* split_str, void* value, int* is_end, parseFunc func) {
     char* split_index = strstr(buf, split_str);
 
@@ -28,31 +29,31 @@ int read_func(char* buf, int len , char* split_str, void* value, int* is_end, pa
 
 
 
-int read_str_value(char* buf, int len, long long* type, union all_type* value) {
+int read_str_value(char* buf, int len, ctrip_value* value) {
     int offset = 0;
-    int o = read_func(buf + offset, len - offset , ":", type , NULL, string2ll);
+    int o = read_func(buf + offset, len - offset , ":", &value->type , NULL, (parseFunc)string2ll);
     if(o == -1) {return -1;}
     offset += o;
     int is_end = 0;
     
-    switch (*type) {
+    switch (value->type) {
         case VALUE_TYPE_DOUBLE:
         case VALUE_TYPE_LONGLONG:
         case VALUE_TYPE_LONGDOUBLE: 
             o = read_func(buf + offset, len - offset , ",", NULL , &is_end, NULL);
             if(o == -1) return -1;
-            value->s = sdsnewlen(buf + offset , is_end? o : o - 1);
+            value->value.s = sdsnewlen(buf + offset , is_end? o : o - 1);
             offset += o;
             break;
         case VALUE_TYPE_SDS: {
             long long sds_size = 0;
-            o = read_func(buf + offset, len - offset , ":", &sds_size , &is_end, string2ll);
+            o = read_func(buf + offset, len - offset , ":", &sds_size , &is_end, (parseFunc)string2ll);
             if(o == -1) {return -1;}
             offset += o;
             if(sds_size + offset > len) {
                 return -1;
             }
-            value->s = sdsnewlen(buf + offset, sds_size);
+            value->value.s = sdsnewlen(buf + offset, sds_size);
             offset += sds_size;
             if(offset < len) {
                 if(buf[offset] == ',') {
@@ -63,7 +64,7 @@ int read_str_value(char* buf, int len, long long* type, union all_type* value) {
         }
             
         default:
-            printf("[read_str_value] type error: %d", *type);
+            printf("[read_str_value] type error: %lld", value->type);
             return -1;
         break;
     }
@@ -80,9 +81,11 @@ sds value_sds_to_ld(union all_type* value) {
     value->f = ld;
     return result;
 }
+#define LL_STR_MAX 21
 sds value_sds_to_ll(union all_type* value) {
     long long ll = 0;
     sds result = value->s;
+    if(sdslen(result) > LL_STR_MAX) return NULL;
     if(!string2ll(result, sdslen(result), &ll)) {
         return NULL;
     }
@@ -100,7 +103,7 @@ sds value_sds_to_d(union all_type* value) {
 }
 
 sds sds_change_value(int type, union all_type* value) {
-    sds result;
+    sds result = NULL;
     switch (type)
     {
     case VALUE_TYPE_DOUBLE:
@@ -125,12 +128,12 @@ sds sds_change_value(int type, union all_type* value) {
     return result;
 }
 
-sds read_value(char* buf, int len, long long* type, union all_type* value, int* offset) {
-    int o = read_str_value(buf, len , type, value);
-    
+
+sds read_value(char* buf, int len, ctrip_value* value, int* offset) {
+    int o = read_str_value(buf, len , value);
     if(o == -1) {return NULL;}
     *offset = o;
-    return sds_change_value(*type, value);
+    return sds_change_value(value->type, &value->value);
 }
 
 sds write_value(int type, union all_type data) {
@@ -146,11 +149,12 @@ sds write_value(int type, union all_type data) {
         return sdscatprintf(sdsempty(), "%d:%.17Lf", type, data.f);
     break;
     case VALUE_TYPE_SDS:
-        return sdscatprintf(sdsempty(), "%d:%d:%s", type, sdslen(data.s), data.s);
+        return sdscatprintf(sdsempty(), "%d:%zu:%s", type, sdslen(data.s), data.s);
     break;
     default:
         break;
     }
+    return NULL;
 }
 
 g_counter_meta* create_g_counter_meta(long long gid, long long vcu) {
@@ -165,7 +169,7 @@ g_counter_meta* create_g_counter_meta(long long gid, long long vcu) {
 
 void free_g_counater_maeta(g_counter_meta* meta) {
     sdsfree(meta->v);
-    zfree(meta);
+    counter_meta_free(meta);
 }
 
 
@@ -249,6 +253,7 @@ int g_counter_metas_to_str(char*buf, void* data, GetGMetaFunc fun,  int size) {
         if(i + 1 < size) {
             buf[len++] = ',';
         }
+        if(del.v != NULL) sdsfree(del.v);
     }
     if(len == 0) {
         return 0;
@@ -316,31 +321,32 @@ int str_to_g_counter_metas(char* buf, int len, g_counter_meta** metas) {
     printf("[str_to_g_counter_metas] data: %s\n", buf);
     do {
         long long gid; 
-        o = read_func(buf + offset, len - offset, ":", &gid, NULL, string2ll);
+        o = read_func(buf + offset, len - offset, ":", &gid, NULL, (parseFunc)string2ll);
         if(o == -1) {
             printf("[str_to_g_counter_metas] parse gid error: %s\n",buf + offset);
             goto error;
         } 
         offset += o;
         long long vcu;
-        o = read_func(buf + offset, len - offset, ":",  &vcu, NULL, string2ll);
+        o = read_func(buf + offset, len - offset, ":",  &vcu, NULL, (parseFunc)string2ll);
         if(o == -1) {
             printf("[str_to_g_counter_metas] parse vcu error: %s\n",buf + offset);
             goto error;
         } 
         offset += o;
         
-        union all_type value = {.d = 0};
-        long long type = 0;
-        sds v = read_value(buf + offset, len - offset, &type, &value, &o);
+        // union all_type value = {.d = 0};
+        // long long type = 0;
+        ctrip_value value = {.type = 0, .value.i = 0};
+        sds v = read_value(buf + offset, len - offset, &value, &o);
         if(v == NULL)  {
             printf("[str_to_g_counter_metas] parse value error: %s", buf+offset);
             goto error;
         }
         offset += o;
         meta = create_g_counter_meta(gid, vcu);
-        meta->data_type = type;
-        meta->value = value;
+        meta->data_type = value.type;
+        meta->value = value.value;
         meta->v = v;
         metas[meta_len++] = meta;
         meta = NULL;
@@ -356,14 +362,12 @@ error:
     return -1;
 }
 
-int str_2_value_and_g_counter_metas(sds info, long long*type, union all_type* value,  g_counter_meta** g) {
+int str_2_value_and_g_counter_metas(sds info, ctrip_value* value,  g_counter_meta** g) {
     int str_len = sdslen(info);
     int offset = 0;
-    sds str = read_value(info + offset , str_len - offset, type, value, &offset);
-    
+    sds str = read_value(info + offset , str_len - offset, value, &offset);
     if(str == NULL) {return -1;}
-    if(*type != VALUE_TYPE_SDS) { sdsfree(str); }
-    
+    if(value->type != VALUE_TYPE_SDS) {  sdsfree(str); }
     int r = str_to_g_counter_metas(info + offset, str_len - offset, g);
     return r;
 }
@@ -387,6 +391,101 @@ int copy_tag_data_from_all_type(int type, union tag_data* t, union all_type a) {
     }
     return 1;
 }
+
+int value_to_ld(ctrip_value* value) {
+    switch (value->type)
+    {
+    case VALUE_TYPE_SDS:
+        if(value_sds_to_ld(&value->value)) {
+            value->type = VALUE_TYPE_LONGDOUBLE;
+        } else {
+            return 0;
+        }
+        break;
+    case VALUE_TYPE_LONGLONG:
+        value->type = VALUE_TYPE_LONGDOUBLE;
+        value->value.f = (long double)value->value.i;
+        break;
+    case VALUE_TYPE_LONGDOUBLE:
+        break;
+    case VALUE_TYPE_DOUBLE:
+        value->type = VALUE_TYPE_LONGDOUBLE;
+        value->value.f = (long double)value->value.d;
+        break;
+    case VALUE_TYPE_NONE:
+        printf("[value_to_ld] type is none");
+        return 0;
+        break;
+    default:
+        printf("[value_to_ld] type error: %lld", value->type);
+        assert(1 == 0);
+        return 0;
+        break;
+    }
+    return 1;
+}
+
+int value_to_ll(ctrip_value* value) {
+    switch (value->type)
+    {
+    case VALUE_TYPE_SDS:
+        if(value_sds_to_ll(&value->value)) {
+            value->type = VALUE_TYPE_LONGLONG;
+        } else {
+            return 0;
+        }
+        break;
+    case VALUE_TYPE_LONGLONG:
+        return 1;
+        break;
+    case VALUE_TYPE_LONGDOUBLE: {
+        char buf[256];
+        int len = ld2string(buf, sizeof(buf), value->value.f, 1);
+        long long ll = 0;
+        return string2ll(buf, len, &ll);
+    }
+        return 0;
+        break;
+    case VALUE_TYPE_DOUBLE:
+        printf("[value_to_ll] double to ll Code not implemented");
+        return 0;
+        break;
+    case VALUE_TYPE_NONE:
+        printf("[value_to_ll] type is none");
+        return 0;
+        break;
+    default:
+        printf("[value_to_ll] type error: %lld", value->type);
+        assert(1 == 0);
+        return 0;
+        break;
+    }
+    return 1;
+}
+void free_ctrip_value(ctrip_value value) {
+    if(value.type == VALUE_TYPE_SDS) {
+        sdsfree(value.value.s);
+    }
+}
+
+int tag_data_get_ld(int type, union tag_data t, long double* ld) {
+    switch (type)
+    {
+    case VALUE_TYPE_DOUBLE:
+        *ld = (long double)t.f;
+        break;
+    case VALUE_TYPE_LONGLONG:
+        *ld = (long double)t.i;
+        break;
+    case VALUE_TYPE_SDS:
+        return string2ld(t.s, sdslen(t.s), ld);
+    default:
+        return 0;
+        break;
+    }
+    return 1;
+}
+
 
 
 #if defined(PARSE_TEST_MAIN)
@@ -450,9 +549,10 @@ int readTest(void) {
         printf("========[parse Value Long Long]==========\r\n");
         // //test parse LONG LONG
         sds x = sdsnew("1:12354");
-        int type = 0;
         int offset = 0;
-        union all_type value = {.i = 0};
+        // int type = 0;
+        // union all_type value = {.i = 0};
+        ctrip_value value = {.type = VALUE_TYPE_NONE, .value.i = 0};
         // sds s = read_value(x, sdslen(x), &type, &value, &offset);
         // test_cond("parse value long long 1",
         //     offset == 7 && type == VALUE_TYPE_LONGLONG && value.i == 12354)
@@ -507,7 +607,7 @@ int readTest(void) {
 
         printf("========[parse value and meta ]==========\r\n");
         x = sdsnew("3:3:abc,1:1000:2:1.5,2:2000:1:1000");
-        int l = str_2_value_and_g_counter_metas(x, &type, &value, metas);
+        int l = str_2_value_and_g_counter_metas(x, &value, metas);
         test_cond("[meta1] type ", type == 3)
         test_cond("[meta1] check metas len", l == 2)
         printf("vcu %lld \n", metas[0]->vcu);

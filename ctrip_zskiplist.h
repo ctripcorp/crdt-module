@@ -6,6 +6,9 @@
 #include "include/rmutil/util.h"
 #define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^32 elements */
 #define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */
+
+#define zskiplist_free RedisModule_Free
+#define zskiplist_malloc RedisModule_Alloc
 typedef struct zskiplistNode {
     sds ele;
     double score;

@@ -29,8 +29,8 @@ typedef struct crdt_zset_tombstone {
 crdt_zset_tombstone* retrieve_crdt_zset_tombstone(CRDT_SSTombstone* rt);
 
 /******************* crdt_zset tombstone  -*******************/
-//???
-// zskiplistNode *zslFirstInLexRange(zskiplist *zsl, zlexrangespec *range);
+int zset_gc_stats = 1;
+
 
 
 
