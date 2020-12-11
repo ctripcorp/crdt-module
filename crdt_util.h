@@ -29,6 +29,10 @@
 #define REPLICATION_MAX_LONGLONG_LEN  (28)//$(1) + long long max len 21(2) + \r(1) + \n(1) + long long(21) + \r(1) + \n(1)
 #define REPLICATION_MAX_VC_LEN (402) //$(1) + long long(21) + \r(1) + \n(1) + [;(1) + gid(2) + :(1) + long long(21)] * 15 + \r(1) +\n(1)
 
+
+#define crdtAssert(_e) ((_e)?(void)0 : (_crdtAssert(#_e,__FILE__,__LINE__),_exit(1)))
+void _crdtAssert(char *estr, char *file, int line);
+
 int redisModuleStringToGid(RedisModuleCtx *ctx, RedisModuleString *argv, long long *gid);
 CrdtMeta* getMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index);
 int readMeta(RedisModuleCtx *ctx, RedisModuleString **argv, int start_index, CrdtMeta* meta);

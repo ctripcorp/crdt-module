@@ -56,7 +56,7 @@ CRDT_Hash* retrieveCrdtHash(void* t) {
         return NULL;
     }
     CRDT_Hash* result = (CRDT_Hash*)t;
-    assert(result->map != NULL);
+    crdtAssert(result->map != NULL);
     return result;
 }
 
@@ -67,7 +67,7 @@ CRDT_HashTombstone* retrieveCrdtHashTombstone(void* t) {
         return NULL;
     }
     CRDT_HashTombstone* result = (CRDT_HashTombstone*)t;
-    assert(result->map != NULL);
+    crdtAssert(result->map != NULL);
     return result;
 }
 

@@ -152,6 +152,7 @@ void AofRewriteCrdtRegisterTombstone(RedisModuleIO *aof, RedisModuleString *key,
 
 CRDT_RegisterTombstone* createCrdtRegisterTombstone();
 int isRegisterTombstone(void *data);
+int isRegister(void *data);
 CRDT_RegisterTombstone* dupCrdtRegisterTombstone(CRDT_RegisterTombstone* target);
 CRDT_RegisterTombstone* mergeRegisterTombstone(CRDT_RegisterTombstone* target, CRDT_RegisterTombstone* other, int* comapre);
 CRDT_RegisterTombstone** filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time,long long maxsize, int* length);

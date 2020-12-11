@@ -97,7 +97,7 @@ crdt_zset* dup_crdt_zset(crdt_zset* target) {
         dictEntry* rde = dictAddRaw(result->dict, sdsdup(field), NULL);
         dict_set_element(result->dict, rde, rel);
         double score = 0;
-        assert(get_double_score_by_element(rel, &score));
+        crdtAssert(get_double_score_by_element(rel, &score));
         zslInsert(result->zsl, score, sdsdup(field));
     }
     dictReleaseIterator(di);
@@ -106,10 +106,10 @@ crdt_zset* dup_crdt_zset(crdt_zset* target) {
 
 int zset_update_zsl(crdt_zset* ss, double o_score, sds field, crdt_element el) {
     double n_score = 0;
-    assert(get_double_score_by_element(el, &n_score));
+    crdtAssert(get_double_score_by_element(el, &n_score));
     if(n_score != o_score) {
         zskiplistNode* node;
-        assert(zslDelete(ss->zsl, o_score, field, &node));
+        crdtAssert(zslDelete(ss->zsl, o_score, field, &node));
         zslInsert(ss->zsl, n_score, node->ele);
         node->ele = NULL;
         zslFreeNode(node);
@@ -153,7 +153,7 @@ crdt_zset *crdt_zset_merge(crdt_zset *target, crdt_zset *other) {
         sds field = dictGetKey(de);
         crdt_element el = dict_get_element(de);
         double eold_score = 0;
-        assert(get_double_score_by_element(el, &eold_score));
+        crdtAssert(get_double_score_by_element(el, &eold_score));
         dictEntry* rde = dictFind(result->dict, field);
         crdt_element rel;
         if (rde == NULL) {
@@ -161,12 +161,12 @@ crdt_zset *crdt_zset_merge(crdt_zset *target, crdt_zset *other) {
             rde = dictAddRaw(result->dict, sdsdup(field), NULL);
             dict_set_element(result->dict, rde, rel);
             double rscore = 0;
-            assert(get_double_score_by_element(rel, &rscore));
+            crdtAssert(get_double_score_by_element(rel, &rscore));
             zslInsert(result->zsl, rscore, sdsdup(field));
         } else {
             rel = dict_get_element(rde);
             double old_score = 0;
-            assert(get_double_score_by_element(rel, &old_score));
+            crdtAssert(get_double_score_by_element(rel, &old_score));
             rel = merge_crdt_element(rel, el);
             free_external_crdt_element(el);
             dict_set_element(result->dict, rde, rel);
@@ -610,7 +610,7 @@ int crdtZsetTombstonePurge(CrdtTombstone* tombstone, CrdtData* value) {
         crdt_element tel = dict_get_element(tde);
         crdt_element el = dict_get_element(de);
         double old_score = 0;
-        assert(get_double_score_by_element(el, &old_score));
+        crdtAssert(get_double_score_by_element(el, &old_score));
         int result = purge_element(&tel, &el);
         // dict_set_element(tde, tel);
         dict_set_element(zset_tombstone->dict, tde, tel);
@@ -782,7 +782,7 @@ int zset_add_element(crdt_zset* ss,sds field, crdt_element el) {
     // dict_set_element(de,  el);
     dict_set_element(ss->dict, de, el);
     double n_score = 0;
-    assert(get_double_score_by_element(el, &n_score));
+    crdtAssert(get_double_score_by_element(el, &n_score));
     zslInsert(ss->zsl, n_score, sdsdup(field));
     return 1;
 }
@@ -803,7 +803,7 @@ crdt_element element_merge_element(crdt_element el, void* v) {
 int zset_update_element(crdt_zset* ss, dictEntry* de, sds field, void* value, ElementMergeFunc merge_fun) {
     crdt_element el = dict_get_element(de);
     double o_score = 0;
-    assert(get_double_score_by_element(el, &o_score));
+    crdtAssert(get_double_score_by_element(el, &o_score));
     el = merge_fun(el, value);
     // dict_set_element(de, el);
     dict_set_element(ss->dict, de, el);
@@ -827,8 +827,8 @@ int zsetTryAdd(CRDT_SS* value, CRDT_SSTombstone* tombstone, sds field, CrdtMeta*
     // long long type = 0;
     ctrip_value v = {.type = VALUE_TYPE_NONE, .value.i = 0};
     int gcounter_len = str_2_value_and_g_counter_metas(info, &v, gcounters);
-    assert(gcounter_len != -1);
-    assert(v.type == VALUE_TYPE_DOUBLE);
+    crdtAssert(gcounter_len != -1);
+    crdtAssert(v.type == VALUE_TYPE_DOUBLE);
     crdt_tag* b = (crdt_tag*)create_base_tag_by_meta(meta, v);
     crdt_element rel =  create_element_from_vc_and_g_counter(vc, gcounter_len, gcounters, b);
     free_ctrip_value(v);
@@ -928,8 +928,8 @@ int zsetTryRem(CRDT_SSTombstone* tombstone,CRDT_SS* value, sds info, CrdtMeta* m
     // unfree v(ctrip_value)  because field(sds) = v.value.s
     ctrip_value v = {.type = VALUE_TYPE_NONE, .value.i = 0};
     int gcounter_len = str_2_value_and_g_counter_metas(info, &v, gcounters);
-    assert(gcounter_len != -1);
-    assert(v.type == VALUE_TYPE_SDS);
+    crdtAssert(gcounter_len != -1);
+    crdtAssert(v.type == VALUE_TYPE_SDS);
     sds field = v.value.s;
     dictEntry* de = NULL;
     crdt_element rel = create_element_from_vc_and_g_counter(vc, gcounter_len, gcounters, NULL);
@@ -938,7 +938,7 @@ int zsetTryRem(CRDT_SSTombstone* tombstone,CRDT_SS* value, sds info, CrdtMeta* m
         if(de) {
             crdt_element el =  dict_get_element(de);
             double o_score = 0;
-            assert(get_double_score_by_element(el, &o_score));
+            crdtAssert(get_double_score_by_element(el, &o_score));
             int result = purge_element(&rel, &el);
             // dict_set_element(de, el);
             dict_set_element(ss->dict, de, el);
@@ -993,7 +993,7 @@ int zsetTryRem(CRDT_SSTombstone* tombstone,CRDT_SS* value, sds info, CrdtMeta* m
 
 int add_score_is_nan(crdt_element el, double score) {
     double d = 0;
-    assert(get_double_add_counter_score_by_element(el, 0, &d));
+    crdtAssert(get_double_add_counter_score_by_element(el, 0, &d));
     d += score;
     if(isnan(d)) {
         return 1;
@@ -1002,7 +1002,6 @@ int add_score_is_nan(crdt_element el, double score) {
 }
 
 sds zsetAdd(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds field, int* flags, double score, double* newscore) {
-    
     /* Turn options into simple to check vars. */
     int incr = (*flags & ZADD_INCR) != 0;
     int nx = (*flags & ZADD_NX) != 0;
@@ -1029,7 +1028,6 @@ sds zsetAdd(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fie
         b->base_data_type = VALUE_TYPE_DOUBLE;
         b->base_timespace = getMetaTimestamp(meta);
         b->base_vcu = get_vcu_by_meta(meta);
-        printf("[base]:%lld\n", b->base_vcu);
         b->score.f = score;
         rtag = (crdt_tag*)b;
     }
@@ -1041,6 +1039,7 @@ sds zsetAdd(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fie
             if(incr) {
                 if(add_score_is_nan(tel, score)) {
                     *flags = ZADD_NAN; 
+                    free_crdt_tag(rtag);
                     return NULL;
                 }
                 result = element_add_counter_by_tag(&tel, (crdt_tag_add_counter*)rtag);
@@ -1068,9 +1067,10 @@ sds zsetAdd(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fie
             }
             el = dict_get_element(de);
             double old_score = 0;
-            assert(get_double_score_by_element(el, &old_score));
+            crdtAssert(get_double_score_by_element(el, &old_score));
             if(incr) {
                 if(add_score_is_nan(el, score)) {
+                    free_crdt_tag(rtag);
                     *flags = ZADD_NAN; 
                     return NULL;
                 }
@@ -1111,14 +1111,14 @@ sds zsetAdd(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fie
 }
 
 
-sds rem_dict(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds field, double* score) {
+sds delete_set_element(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds field, double* score) {
     crdt_zset* ss = retrieve_crdt_zset(value);
     crdt_zset_tombstone* sst = retrieve_crdt_zset_tombstone(tombstone);
     dictEntry* de = dictUnlink(ss->dict, field);
     if(de == NULL) {
         return NULL;
     }
-    assert(!dictFind(sst->dict, field));
+    crdtAssert(!dictFind(sst->dict, field));
     int gid = getMetaGid(meta);
     // crdt_tag_base* del_tag = create_base_tag(gid);
     // del_tag->base_vcu = get_vcu_by_meta(meta);
@@ -1126,7 +1126,7 @@ sds rem_dict(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fi
     
     crdt_element el = dict_get_element(de);
     if(score != NULL) {
-        assert(get_double_score_by_element(el, score));
+        crdtAssert(get_double_score_by_element(el, score));
     }
 
     
@@ -1154,12 +1154,12 @@ sds rem_dict(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fi
 
 sds zsetRem(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds field) {
     double score = 0;
-    sds result = rem_dict(value, tombstone, meta, field, &score);
+    sds result = delete_set_element(value, tombstone, meta, field, &score);
     if(result == NULL) return NULL;
     crdt_zset* ss = retrieve_crdt_zset(value);
     /* Delete from skiplist. */
     int retval = zslDelete(ss->zsl,score,field,NULL);
-    assert(retval);
+    crdtAssert(retval);
     return result;
 }
 
@@ -1188,7 +1188,7 @@ int zsetTryDel(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta) {
             sds field = dictGetKey(de);
             crdt_element el = dict_get_element(de);
             double old_score = 0;
-            assert(get_double_score_by_element(el, &old_score));
+            crdtAssert(get_double_score_by_element(el, &old_score));
             int deleted = 1;
             crdt_element rel = element_try_clean_by_vc(el, vc, &deleted);
             if(deleted) {
@@ -1221,10 +1221,10 @@ long zsetRank(CRDT_SS* ss, sds ele, int reverse) {
     de = dictFind(zset->dict,ele);
     if (de != NULL) {
         crdt_element el = dict_get_element(de);
-        assert(get_double_score_by_element(el, &score));
+        crdtAssert(get_double_score_by_element(el, &score));
         rank = zslGetRank(zsl,score,ele);
         /* Existing elements always have a rank. */
-        assert(rank != 0);
+        crdtAssert(rank != 0);
         if (reverse)
             return llen-rank;
         else
@@ -1255,8 +1255,8 @@ unsigned long  zslDeleteRangeByRank(CRDT_SS* current, CRDT_SSTombstone* tombston
     while (x && traversed <= end) {
         zskiplistNode *next = x->level[0].forward;
         zslDeleteNode(zset->zsl,x,update);
-        sds callback_item = rem_dict(current, tombstone, meta, x->ele, NULL);
-        assert(callback_item != NULL);
+        sds callback_item = delete_set_element(current, tombstone, meta, x->ele, NULL);
+        crdtAssert(callback_item != NULL);
         byte_size += sdslen(callback_item);
         callback_items[removed++] = callback_item;
         // dictDelete(zset->dict,x->ele);
@@ -1292,8 +1292,8 @@ unsigned long  zslDeleteRangeByScore(CRDT_SS* current, CRDT_SSTombstone* tombsto
     {
         zskiplistNode *next = x->level[0].forward;
         zslDeleteNode(zset->zsl,x,update);
-        sds callback_item = rem_dict(current, tombstone, meta, x->ele, NULL);
-        assert(callback_item != NULL);
+        sds callback_item = delete_set_element(current, tombstone, meta, x->ele, NULL);
+        crdtAssert(callback_item != NULL);
         byte_size += sdslen(callback_item);
         callback_items[removed++] = callback_item;
         // dictDelete(dict,x->ele);
@@ -1326,8 +1326,8 @@ unsigned long  zslDeleteRangeByLex(CRDT_SS* current, CRDT_SSTombstone* tombstone
     while (x && zslLexValueLteMax(x->ele,range)) {
         zskiplistNode *next = x->level[0].forward;
         zslDeleteNode(zset->zsl,x,update);
-        sds callback_item = rem_dict(current, tombstone, meta, x->ele, NULL);
-        assert(callback_item != NULL);
+        sds callback_item = delete_set_element(current, tombstone, meta, x->ele, NULL);
+        crdtAssert(callback_item != NULL);
         byte_size += sdslen(callback_item);
         callback_items[removed++] = callback_item;
         // dictDelete(dict,x->ele);

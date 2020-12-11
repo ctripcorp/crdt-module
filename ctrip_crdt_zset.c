@@ -278,7 +278,6 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     } else {
         appendVCForMeta(&zadd_meta, getCrdtSSLastVc(current));
     }
-    
     for(int i = 0; i < elements; i++) {
         int retflags = flags;
         score = scores[i];
@@ -412,7 +411,7 @@ int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     if (readMeta(ctx, argv, 2, &meta) != CRDT_OK) {
         return 0;
     }
-    assert(meta.gid != 0);
+    crdtAssert(meta.gid != 0);
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSS);
     if(moduleKey == NULL) {
         RedisModule_IncrCrdtConflict(TYPECONFLICT | MODIFYCONFLICT);
@@ -524,7 +523,7 @@ int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
     int len = crdtZsetLength(value);
     sds del_counters[len];
     int dlen = initSSTombstoneFromSS(tombstone, &del_meta, value, del_counters);
-    assert(dlen <= len);
+    crdtAssert(dlen <= len);
     sds vcSds = vectorClockToSds(getMetaVectorClock(&del_meta));
     RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_SS", "sllca", keyRobj, getMetaGid(&del_meta), getMetaTimestamp(&del_meta), vcSds, del_counters, (size_t)dlen);
     // replicationCrdtDelSSCommand(dbId, &del_meta, RedisModule_GetSds(keyRobj), del_counters, dlen);

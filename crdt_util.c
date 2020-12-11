@@ -580,3 +580,15 @@ cleanup:
     listRelease(keys);
 
 }
+
+void _crdtAssert( char *estr,  char *file, int line) {
+    printf("=== ASSERTION FAILED ===\n");
+    printf("==> %s:%d '%s' is not true\n",file,line,estr);
+#ifdef HAVE_BACKTRACE
+    server.assert_failed = estr;
+    server.assert_file = file;
+    server.assert_line = line;
+    printf("(forcing SIGSEGV to print the bug report.)\n");
+#endif
+    *((char*)-1) = 'x';
+}

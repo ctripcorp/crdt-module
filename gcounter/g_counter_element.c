@@ -819,6 +819,7 @@ crdt_tag* merge_add_tag(crdt_tag* target, crdt_tag_add_counter* other) {
             crdt_tag_base_and_add_del_counter* rbad = (crdt_tag_base_and_add_del_counter*)target;
             if(rbad->counter_type != VALUE_TYPE_LONGDOUBLE ) {
                 tag_set_add(rbad, other);
+                printf("bad + a\n");
                 return (crdt_tag*)rbad;
             } 
             crdt_tag_base_and_ld_add_del_counter* rldbad = BAD2LDBAD(rbad);
@@ -1859,10 +1860,12 @@ crdt_element element_clean(crdt_element el, int gid, long long vcu, int add_self
     int added = 0;
     for(int i = 0, len = get_element_len(el); i < len; i++) {
         crdt_tag* tag = element_get_tag_by_index(el, i);
+        long long update_vcu = -1;
         if(tag->gid == gid) {
             added = 1;
+            update_vcu = vcu;
         }
-        tag = clean_crdt_tag(tag, tag->gid == gid? vcu: -1);
+        tag = clean_crdt_tag(tag, update_vcu);
         el = element_set_tag_by_index(el, i, tag);
     }
     if(add_self && added == 0) {
@@ -2741,19 +2744,24 @@ int find_meta_by_gid(int gid, int gcounter_len, g_counter_meta** metas) {
 crdt_element create_element_from_vc_and_g_counter(VectorClock vc, int gcounter_len, g_counter_meta** metas, crdt_tag* base_tag) {
     crdt_element el =  create_crdt_element();
     int added = 0;
+    printf("len: %d <= %d\n", gcounter_len, get_len(vc));
     assert(gcounter_len <= get_len(vc));
     for(int i = 0, len = get_len(vc); i < len; i++) {
         clk* c = get_clock_unit_by_index(&vc, i);
         int gid = get_gid(*c);
         int vcu = get_logic_clock(*c);
         int g_index =  find_meta_by_gid(gid, gcounter_len, metas);
+        printf("[create_element_from_vc_and_g_counter] for-1 %d\n ", g_index);
         crdt_tag* tag = NULL;
         if(base_tag && base_tag->gid == gid) {
+            printf("[create_element_from_vc_and_g_counter] for-2 %d\n ", gid);
             tag = base_tag;
+            base_tag = NULL;
             added = 1;
         }else  {
             crdt_tag_base* b =  create_base_tag(gid);
             b->base_vcu = vcu;
+            printf("[create_element_from_vc_and_g_counter] for-2.1 %d %lld\n ", gid, vcu);
             tag = (crdt_tag*)b;
         } 
         if(g_index != -1) {
@@ -2761,10 +2769,16 @@ crdt_element create_element_from_vc_and_g_counter(VectorClock vc, int gcounter_l
             free_g_counater_maeta(metas[g_index]);
             metas[g_index] = NULL;
         }
+        printf("[create_element_from_vc_and_g_counter] for-4 %d %lld\n ", gid, vcu);
         el = element_add_tag(el, tag);
+        printf("[create_element_from_vc_and_g_counter] for-5 %d %lld\n ", gid, vcu);
     }
+    assert(base_tag == NULL);
     for(int i = 0; i < gcounter_len; i++) {
-        assert(metas[i] == NULL);
+        if(metas[i] != NULL) {
+            printf("[create_element_from_vc_and_g_counter] metas is not null, %d\n", i);
+            assert(1 == 0);
+        }
     }
     return el;
 }
