@@ -673,6 +673,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
                 appendCrdtMeta(m, meta);
                 int r = 0;
                 addRegisterTombstone(tkv, m, &r);
+                freeCrdtMeta(m);
                 dictAdd(tombstone->map, sdsdup(dictGetKey(de)), tkv);
             }
             dictDelete(current->map, dictGetKey(de));
