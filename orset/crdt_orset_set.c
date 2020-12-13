@@ -96,6 +96,51 @@ int dict_add_or_update_vc(dict* d, sds field, VectorClock other, int dup_field) 
     return result;
 }
 
+int purget_vc(VectorClock* stvc, VectorClock* svc) {
+    if (isNullVectorClock(*stvc) ) {
+        return PURGE_TOMBSTONE;
+    }
+    if (isNullVectorClock(*svc)) {
+        return PURGE_VAL;
+    }
+    VectorClock nstvc = newVectorClock(0);
+    VectorClock nsvc = newVectorClock(0);
+    for(int i = 0, len = get_len(*stvc); i < len; i++) {
+        clk* st_clk = get_clock_unit_by_index(stvc, i);
+        unsigned char gid = (unsigned char) get_gid(*st_clk);
+        long long st_vcu = get_logic_clock(*st_clk);
+        int index = 0;
+        long long s_vcu = get_vcu_from_vc(*svc, gid, &index);
+        if (index == -1 || (index != -1 && s_vcu <= st_vcu)) {
+            nstvc = addVectorClockUnit(nstvc, gid, st_vcu);
+        } else {
+            nsvc = addVectorClockUnit(nsvc, gid, s_vcu);
+        }
+    }
+    for(int i = 0, len = get_len(*svc); i < len; i++) {
+        clk* s_clk = get_clock_unit_by_index(svc, i);
+        unsigned char gid = (unsigned char) get_gid(*s_clk);
+        int si = 0, ti = 0;
+        get_vcu_from_vc(nsvc, gid, &si);
+        get_vcu_from_vc(nstvc, gid, &ti);
+        if( si != -1 || ti != -1) {
+            continue;
+        }
+        nsvc = addVectorClockUnit(nsvc, gid, (long long) (get_logic_clock(*s_clk)));
+    }
+    freeVectorClock(*stvc);
+    freeVectorClock(*svc);
+    *stvc = nstvc;
+    *svc = nsvc;
+    if (isNullVectorClock(*stvc) ) {
+        return PURGE_TOMBSTONE;
+    }
+    if (isNullVectorClock(*svc)) {
+        return PURGE_VAL;
+    }
+    return PURGE_NONE;
+}
+
 int dict_try_clean_vc(dict* d, sds field, VectorClock* other) {
     dictEntry* de = dictFind(d, field);
     VectorClock vc;
@@ -131,6 +176,7 @@ int dict_merge_dict(dict* target, dict* other) {
         dict_entry_set_vc(rde, rvc);
     }
     dictReleaseIterator(di);
+    return 1;
 }
 
 #define COMPARE_VECTORCLOCK_LT -1
@@ -449,16 +495,16 @@ CrdtObject *crdtSetMerge(CrdtObject *currentVal, CrdtObject *value) {
     if(target == NULL && other == NULL) {
         return NULL;
     }
-    crdt_orset_set* result = createCrdtSet();
+    crdt_orset_set* result = (crdt_orset_set*)createCrdtSet();
     if (target == NULL) {
-        return replace_set_value(result, other);
+        return (CrdtObject*)replace_set_value(result, other);
     }
     result = replace_set_value(result, target);
-    if(value == NULL) return result;
-    dict* d = getSetDict(other);
-    dict* rd = getSetDict(result);
+    if(value == NULL) return (CrdtObject*)result;
+    dict* d = getSetDict((CRDT_Set*)other);
+    dict* rd = getSetDict((CRDT_Set*)result);
     dict_merge_dict(rd, d);
-    updateCrdtSetLastVc(result, getCrdtSetLastVc(other));
+    updateCrdtSetLastVc((CRDT_Set*)result, getCrdtSetLastVc((CRDT_Set*)other));
     return (CrdtObject*)result;
 }
 // int addSetDict(CRDT_Set* data, sds field, CrdtMeta* meta) {
@@ -487,6 +533,26 @@ dict* getSetTombstoneDict(crdt_orset_set_tombstone* tombstone) {
 VectorClock getCrdtSetTombstoneMaxDelVc(CRDT_SetTombstone* t) {
     crdt_orset_set_tombstone* tom = retrieve_set_tombstone(t);
     return tom->maxDelvectorClock;
+}
+
+int setCrdtSetTombstoneMaxDel(CRDT_SetTombstone* data, VectorClock vc) {
+    crdt_orset_set_tombstone* tom = retrieve_set_tombstone(data);
+    VectorClock old = getCrdtSetTombstoneMaxDelVc(data);
+    if(!isNullVectorClock(old)) {
+        freeVectorClock(old);
+    }
+    tom->maxDelvectorClock = vc;
+    return 1;
+}
+
+int setCrdtSetTombstoneLastVc(CRDT_SetTombstone* data, VectorClock vc) {
+    crdt_orset_set_tombstone* r = retrieve_set_tombstone(data);
+    VectorClock old = getCrdtSetTombstoneLastVc(data);
+    if(!isNullVectorClock(old)) {
+        freeVectorClock(old);
+    } 
+    r->lastVc = vc;
+    return 1;
 }
 
 CRDT_SetTombstone* dupCrdtSetTombstone(CRDT_SetTombstone* t) {
@@ -522,25 +588,9 @@ VectorClock getCrdtSetTombstoneLastVc(CRDT_SetTombstone* t) {
     return tom->lastVc;
 }
 
-int setCrdtSetTombstoneMaxDel(CRDT_SetTombstone* data, VectorClock vc) {
-    crdt_orset_set_tombstone* tom = retrieve_set_tombstone(data);
-    VectorClock old = getCrdtSetTombstoneMaxDelVc(data);
-    if(!isNullVectorClock(old)) {
-        freeVectorClock(old);
-    }
-    tom->maxDelvectorClock = vc;
-    return 1;
-}
 
-int setCrdtSetTombstoneLastVc(CRDT_SetTombstone* data, VectorClock vc) {
-    crdt_orset_set_tombstone* r = retrieve_set_tombstone(data);
-    VectorClock old = getCrdtSetTombstoneLastVc(data);
-    if(!isNullVectorClock(old)) {
-        freeVectorClock(old);
-    } 
-    r->lastVc = vc;
-    return 1;
-}
+
+
 
 int updateCrdtSetTombstoneLastVc(CRDT_SetTombstone* data, VectorClock vc) {
     crdt_orset_set_tombstone* r = retrieve_set_tombstone(data);
@@ -575,7 +625,7 @@ int addOrUpdateSetTombstoneDictValue(CRDT_Set* data, sds field, CrdtMeta* meta) 
 
 
 dictEntry* findSetTombstoneDict(CRDT_SetTombstone* tom, sds field) {
-    dict* map = getSetTombstoneDict(tom);
+    dict* map = getSetTombstoneDict((crdt_orset_set_tombstone *)tom);
     return dictFind(map, field);
 }
 
@@ -748,59 +798,17 @@ sds crdtSetTombstoneInfo(void *data) {
     return result;
 }
 
-int purget_vc(VectorClock* stvc, VectorClock* svc) {
-    if (isNullVectorClock(*stvc) ) {
-        return PURGE_TOMBSTONE;
-    }
-    if (isNullVectorClock(*svc)) {
-        return PURGE_VAL;
-    }
-    VectorClock nstvc = newVectorClock(0);
-    VectorClock nsvc = newVectorClock(0);
-    for(int i = 0, len = get_len(*stvc); i < len; i++) {
-        clk* st_clk = get_clock_unit_by_index(stvc, i);
-        unsigned char gid = (unsigned char) get_gid(*st_clk);
-        long long st_vcu = get_logic_clock(*st_clk);
-        int index = 0;
-        long long s_vcu = get_vcu_from_vc(*svc, gid, &index);
-        if (index == -1 || (index != -1 && s_vcu <= st_vcu)) {
-            nstvc = addVectorClockUnit(nstvc, gid, st_vcu);
-        } else {
-            nsvc = addVectorClockUnit(nsvc, gid, s_vcu);
-        }
-    }
-    for(int i = 0, len = get_len(*svc); i < len; i++) {
-        clk* s_clk = get_clock_unit_by_index(svc, i);
-        unsigned char gid = (unsigned char) get_gid(*s_clk);
-        int si = 0, ti = 0;
-        get_vcu_from_vc(nsvc, gid, &si);
-        get_vcu_from_vc(nstvc, gid, &ti);
-        if( si != -1 || ti != -1) {
-            continue;
-        }
-        nsvc = addVectorClockUnit(nsvc, gid, (long long) (get_logic_clock(*s_clk)));
-    }
-    freeVectorClock(*stvc);
-    freeVectorClock(*svc);
-    *stvc = nstvc;
-    *svc = nsvc;
-    if (isNullVectorClock(*stvc) ) {
-        return PURGE_TOMBSTONE;
-    }
-    if (isNullVectorClock(*svc)) {
-        return PURGE_VAL;
-    }
-    return PURGE_NONE;
-}
+
 
 // abdout tombstone and set purge
 int crdtSetTombstonePurge(CrdtTombstone* tombstone, CrdtData* data) {
     if(!isCrdtSetTombstone(tombstone) || !isCrdtSet(data)) {
         return 0;
     }
-    crdt_orset_set* set = retrieve_crdt_orset_set(data);
+    // crdt_orset_set* set = retrieve_crdt_orset_set(data);
+    crdt_orset_set_tombstone* tom = retrieve_set_tombstone(tombstone);
     dict* sd = getSetDict(data);
-    dict* std = getSetTombstoneDict(tombstone);
+    dict* std = getSetTombstoneDict(tom);
     dictIterator* di = dictGetSafeIterator(sd);
     VectorClock maxdel = getCrdtSetTombstoneMaxDelVc(tombstone);
     dictEntry* de = NULL;
@@ -840,7 +848,8 @@ int crdtSetTombstonePurge(CrdtTombstone* tombstone, CrdtData* data) {
 
 VectorClock delVectorClockUnit(VectorClock vc, int gid) {
     int index = 0;
-    long long vcu = get_vcu_from_vc(vc, gid, &index);
+    // long long vcu = ;
+    get_vcu_from_vc(vc, gid, &index);
     if(index == -1) return vc;
     int len = get_len(vc);
     VectorClock nvc = newVectorClock(len - 1);
@@ -870,15 +879,16 @@ int dict_try_clean_vcu(dict* d, sds field, int gid, long long vcu) {
 }
 // about set method
 int setTryAdd(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta) {
-    crdt_orset_set* set = retrieve_crdt_orset_set(s);
+    // crdt_orset_set* set = retrieve_crdt_orset_set(s);
     int gid = getMetaGid(meta);
     long long vcu = get_vcu_by_meta(meta);
     if(t) { 
+        crdt_orset_set_tombstone* tom = retrieve_set_tombstone(t);
         VectorClock maxdel =  getCrdtSetTombstoneMaxDelVc(t);
         if(get_vcu(maxdel, gid) > vcu) {
             return 0;
         }
-        dict* td = getSetTombstoneDict(t);
+        dict* td = getSetTombstoneDict(tom);
         if(dict_try_clean_vcu(td, field, gid, vcu) == 0) {
             return 0;
         }
@@ -888,11 +898,12 @@ int setTryAdd(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta) {
 }
 
 int setAdd(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta) {
-    crdt_orset_set* set = retrieve_crdt_orset_set(s);
+    // crdt_orset_set* set = retrieve_crdt_orset_set(s);
     int gid = getMetaGid(meta);
     long long vcu = get_vcu_by_meta(meta);
     if(t) {
-        dict* td = getSetTombstoneDict(t);
+        crdt_orset_set_tombstone* tom = retrieve_set_tombstone(t);
+        dict* td = getSetTombstoneDict(tom);
         dict_try_clean_vcu(td, field, gid, vcu);
     }
     dict* sd = getSetDict(s);
@@ -905,7 +916,7 @@ int setTryRem(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta) {
     crdt_orset_set_tombstone* tom = retrieve_set_tombstone(t);
     VectorClock vc = dupVectorClock(getMetaVectorClock(meta));
     if(s) {
-        crdt_orset_set* set = retrieve_crdt_orset_set(s);
+        // crdt_orset_set* set = retrieve_crdt_orset_set(s);
         dict* sd = getSetDict(s);
         if(dict_try_clean_vc(sd, field, &vc) == PURGE_TOMBSTONE) {
             freeVectorClock(vc);
@@ -917,7 +928,7 @@ int setTryRem(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta) {
         freeVectorClock(vc);
         return 0;
     }
-    dict* td = getSetTombstoneDict(t);
+    dict* td = getSetTombstoneDict(tom);
     int result = dict_add_or_update_vc(td, field, vc, 1);
     freeVectorClock(vc);
     return result;
@@ -929,7 +940,7 @@ int setRem(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta) {
     crdt_orset_set_tombstone* tom = retrieve_set_tombstone(t);
     VectorClock vc = getMetaVectorClock(meta);
     if(s) {
-        crdt_orset_set* set = retrieve_crdt_orset_set(s);
+        // crdt_orset_set* set = retrieve_crdt_orset_set(s);
         dict* sd = getSetDict(s);
         vc = dupVectorClock(vc);
         int result = dict_try_clean_vc(sd, field, &vc);
@@ -938,7 +949,7 @@ int setRem(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta) {
             return 0;
         }
         assert(result == PURGE_VAL);
-        dict* td = getSetTombstoneDict(t);
+        dict* td = getSetTombstoneDict(tom);
         dict_add_or_update_vc(td, field, vc, 1);
         freeVectorClock(vc);
         return 1;
@@ -971,7 +982,7 @@ int setTryDel(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta) {
         return 0;
     }
     if(s) {
-        crdt_orset_set* set = retrieve_crdt_orset_set(s);
+        // crdt_orset_set* set = retrieve_crdt_orset_set(s);
         dict* sd = getSetDict(s);
         dictIterator* sdi = dictGetSafeIterator(sd);
         dictEntry* de = NULL;
@@ -987,7 +998,7 @@ int setTryDel(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta) {
         dictReleaseIterator(sdi);
     }
     
-    dict* td = getSetTombstoneDict(t);
+    dict* td = getSetTombstoneDict(tom);
     dictIterator* tdi = dictGetSafeIterator(td);
     dictEntry* tde = NULL;
     while((tde = dictNext(tdi)) != NULL) {
@@ -1021,22 +1032,22 @@ crdt_orset_set_tombstone* replace_set_tombstone_value(crdt_orset_set_tombstone* 
 }
 
 CrdtTombstone* crdtSetTombstoneMerge(CrdtTombstone* currentVal, CrdtTombstone* value) {
-    crdt_orset_set_tombstone* target = retrieveCrdtSetTombstone(currentVal);
-    crdt_orset_set_tombstone* other = retrieveCrdtSetTombstone(value);
+    crdt_orset_set_tombstone* target = retrieve_set_tombstone(currentVal);
+    crdt_orset_set_tombstone* other = retrieve_set_tombstone(value);
     if(target == NULL && other == NULL) {
         return NULL;
     }
-    crdt_orset_set_tombstone* result = createCrdtSetTombstone();
+    crdt_orset_set_tombstone* result = (crdt_orset_set_tombstone*)createCrdtSetTombstone();
     if (target == NULL) {
-        return replace_set_tombstone_value(result, other);
+        return (CrdtTombstone*)replace_set_tombstone_value(result, other);
     }
     result = replace_set_tombstone_value(result, target);
-    if(other == NULL) return result;
+    if(other == NULL) return (CrdtTombstone*)result;
     dict* d = getSetTombstoneDict(other);
     dict* rd = getSetTombstoneDict(result);
     dict_merge_dict(rd, d);
-    updateCrdtSetTombstoneLastVc(result, getCrdtSetTombstoneLastVc(other));
-    updateCrdtSetTombstoneMaxDel(result, getCrdtSetTombstoneMaxDelVc(other));
+    updateCrdtSetTombstoneLastVc((CrdtTombstone*)result, getCrdtSetTombstoneLastVc((CRDT_SetTombstone*)other));
+    updateCrdtSetTombstoneMaxDel((CrdtTombstone*)result, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)other));
 
     return (CrdtTombstone*)result;
 }
@@ -1061,8 +1072,9 @@ int updateCrdtSetTombstoneMaxDel(CRDT_SetTombstone* t, VectorClock vc) {
 }
 
 int isNullSetTombstone(CRDT_SetTombstone* t) {
+    crdt_orset_set_tombstone* st = retrieve_set_tombstone(t);
     int is_null = 1;
-    dict* map = getSetTombstoneDict(t);
+    dict* map = getSetTombstoneDict(st);
     if(dictSize(map) != 0) {
         is_null = 0;
     }

@@ -402,7 +402,7 @@ CrdtObject** crdtSSFilter(CrdtObject* data, int gid, long long logic_time, long 
         }
         int memory = get_crdt_element_memory(el);
         if(memory + sdslen(field) > maxsize) {
-            freeSSFilter(result, *num);
+            freeSSFilter((CrdtObject**)result, *num);
             printf("[filter crdt_zset] memory error: key-%s \n", field);
             *num = -1;
             return NULL;
@@ -1020,7 +1020,7 @@ sds zsetAdd2(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fi
     if(incr) {
         a.add_counter.f = score;
         a.add_vcu = get_vcu_by_meta(meta);
-        init_crdt_add_tag_head(&a, gid);
+        init_crdt_add_tag_head((crdt_tag*)&a, gid);
     } else {
         b.base_timespace = getMetaTimestamp(meta);
         b.base_vcu = get_vcu_by_meta(meta);
@@ -1085,10 +1085,10 @@ sds zsetAdd2(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fi
         } else if(!xx) {
             el = create_crdt_element();
             if(incr) {
-                el = element_add_tag(el, dup_crdt_tag(&a));
-                result = get_add_value_sds_from_tag(&a);
+                el = element_add_tag(el, dup_crdt_tag((crdt_tag*)&a));
+                result = get_add_value_sds_from_tag((crdt_tag*)&a);
             } else {
-                el = element_add_tag(el, dup_crdt_tag(&b));
+                el = element_add_tag(el, dup_crdt_tag((crdt_tag*)&b));
                 result = get_base_value_sds_from_element(el, gid);
             }
             zset_add_element(ss, field, el);
@@ -1478,7 +1478,7 @@ int isNullZsetTombstone(CRDT_SSTombstone* tom) {
     if(zst == NULL) {
         return result;
     }
-    if(zsetTombstoneLength(zst) != 0) {
+    if(zsetTombstoneLength(tom) != 0) {
         return 0;
     }
     if(!isNullVectorClock(zst->maxdelvc)) {

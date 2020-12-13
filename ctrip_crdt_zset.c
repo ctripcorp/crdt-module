@@ -1127,13 +1127,13 @@ int zscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 #define ZRANGE_SCORE 1
 #define ZRANGE_LEX 2
 int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int rangetype) {
-    RedisModuleString *key = argv[1];
+    
 
     int keyremoved = 0;
     unsigned long deleted = 0;
     zrangespec range;
     zlexrangespec lexrange;
-    long start, end, llen;
+    long long start, end, llen;
 
     /* Step 1: Parse the range. */
     if (rangetype == ZRANGE_RANK) {
@@ -1199,7 +1199,6 @@ int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
     }
     initIncrMeta(&meta);
     appendVCForMeta(&meta, getCrdtSSLastVc(current));
-    int length = 0;
     
     long long callback_byte_size = 0;
     switch(rangetype) {
@@ -1252,7 +1251,6 @@ int zremrangebyrankCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
 int crdtZscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
     RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
-    double result = 0;
     if(moduleKey == NULL) {
         goto error;
     }

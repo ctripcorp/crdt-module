@@ -520,6 +520,22 @@ int replicationCrdtSetCommand(RedisModuleCtx* ctx, sds key, sds val, CrdtMeta* s
     return 1;
 }
 
+int add_rc2(RedisModuleCtx* ctx, void* val, void* tom, CrdtMeta* meta, RedisModuleString* key, sds value, char* buf) {
+    CRDT_RC* rc = val;
+    if(rc == NULL) {
+        rc = createCrdtRc();
+        CRDT_RCTombstone* tombstone = tom;
+        if (tombstone && isCrdtRcTombstone(tombstone)) {
+            initCrdtRcFromTombstone(rc, tombstone);
+            // RedisModule_DeleteTombstone(moduleKey);
+            RedisModule_DeleteTombstoneByKey(ctx, key);
+        }
+        RedisModule_DbSetValue(ctx, key, CrdtRC, rc);
+    } 
+    return rcAdd2(rc, meta, value, buf);
+    // return rcAdd(rc, meta, value);
+}
+
 int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags, RedisModuleString* key, RedisModuleString* val, RedisModuleString* expire, int unit, int sendtype) {
     int result = 0;
     //get value
@@ -932,21 +948,7 @@ int msetGeneric(RedisModuleCtx* ctx, char* head, MSetExecFunc exec, int len, Red
 
 
 
-int add_rc2(RedisModuleCtx* ctx, void* val, void* tom, CrdtMeta* meta, RedisModuleString* key, sds value, char* buf) {
-    CRDT_RC* rc = val;
-    if(rc == NULL) {
-        rc = createCrdtRc();
-        CRDT_RCTombstone* tombstone = tom;
-        if (tombstone && isCrdtRcTombstone(tombstone)) {
-            initCrdtRcFromTombstone(rc, tombstone);
-            // RedisModule_DeleteTombstone(moduleKey);
-            RedisModule_DeleteTombstoneByKey(ctx, key);
-        }
-        RedisModule_DbSetValue(ctx, key, CrdtRC, rc);
-    } 
-    return rcAdd2(rc, meta, value, buf);
-    // return rcAdd(rc, meta, value);
-}
+
 
 int max_del_counter_size = (21 + 17 + 3) * 16 ;
 int replicationFeedCrdtMsetCommandByRc(RedisModuleCtx* ctx, char* cmdbuf, int len,  RedisModuleString** keys, void** crdt_vals, void** crdt_toms, sds* values, CrdtMeta* mset_meta) {
@@ -996,15 +998,8 @@ CRDT_Register* add_reg2(RedisModuleCtx* ctx, void* val, void* tom, CrdtMeta* met
     CRDT_Register* reg = val;
     if(reg == NULL) {
         reg = createCrdtRegister();
-        CRDT_RegisterTombstone* tombstone = tom;
-        // if(tombstone && isRegisterTombstone(tombstone)) {
-        //     appendVCForMeta(meta, getCrdtRegisterTombstoneLastVc(tombstone));
-        //     RedisModule_DeleteTombstoneByKey(ctx, key);
-        // } else {
-        //     long long vc = RedisModule_CurrentVectorClock();
-        //     appendVCForMeta(meta, LL2VC(vc));
-        // }
-        CrdtMeta m = {.gid = getMetaGid(meta), .timestamp = getMetaTimestamp(meta), .vectorClock = RedisModule_CurrentVectorClock()};
+        long long vcll = RedisModule_CurrentVectorClock();
+        CrdtMeta m = {.gid = getMetaGid(meta), .timestamp = getMetaTimestamp(meta), .vectorClock = LL2VC(vcll)};
         crdtRegisterSetValue(reg, &m, value);
         // RedisModule_ModuleTypeSetValue(moduleKey, getCrdtRegister(), reg);
         RedisModule_DbSetValue(ctx, key, getCrdtRegister(), reg);
@@ -1039,7 +1034,7 @@ int replicationFeedCrdtMsetCommandByReg(RedisModuleCtx* ctx, char* cmdbuf, int l
     return cmdlen;
 }
 
-int msetGenericByReg(RedisModuleCtx* ctx, int len, RedisModuleString* keys, void** crdt_vals, void* crdt_toms,  sds* values, CrdtMeta* mset_meta, size_t size) {
+int msetGenericByReg(RedisModuleCtx* ctx, int len, RedisModuleString** keys, void** crdt_vals, void* crdt_toms,  sds* values, CrdtMeta* mset_meta, size_t size) {
     // (char *)crdt_mset_head,
     int alllen = strlen(crdt_mset_head) + size + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + 8;
     if(alllen > MAXSTACKSIZE) {

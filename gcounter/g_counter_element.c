@@ -2551,7 +2551,6 @@ sds get_base_value_sds_from_tag(crdt_tag* tag) {
 
 int write_base_value_to_buf(crdt_element el, int gid, char* buf) {
     int max_len = 21 + 1 + 256;
-    int len = 0;
     crdt_tag* tag = element_get_tag_by_gid(el, gid, NULL);
     assert(tag != NULL);
     union all_type v = {.f = 0};
@@ -2871,7 +2870,7 @@ sds element_add_counter_by_tag2(crdt_element* el, crdt_tag_add_counter* rtag) {
         *el = element_set_tag_by_index(*el, index, tag);
         return get_add_value_sds_from_tag(tag);
     } else {
-        *el = element_add_tag(*el, dup_crdt_tag(rtag));
+        *el = element_add_tag(*el, dup_crdt_tag((crdt_tag*)rtag));
         return get_add_value_sds_from_tag((crdt_tag*)rtag);
     }
 }
