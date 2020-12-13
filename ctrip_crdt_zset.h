@@ -2,7 +2,6 @@
 #include "./include/redismodule.h"
 #include "./ctrip_crdt_common.h"
 #include "./ctrip_zskiplist.h"
-#include "./gcounter/crdt_g_counter.h"
 #include "./include/rmutil/sds.h"
 
 /* Input flags. */
@@ -103,7 +102,7 @@ void freeCrdtSST(void* ss);
 void crdtSSTDigestFunc(RedisModuleDigest *md, void *value);
 // functions
 sds zsetAdd(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds field, int* flags, double score, double* newscore);
-// int zsetAdd(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, int* flags, double score, double* newscore, sds* callback_items, int* callback_len, int* callback_byte_size);
+sds zsetAdd2(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds field, int* flags, double score,  double* newscore);
 double zsetIncr(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field, double score);
 sds zsetRem(CRDT_SS* ss, CRDT_SSTombstone* sst, CrdtMeta* meta, sds field);
 size_t crdtZsetLength(CRDT_SS* ss);

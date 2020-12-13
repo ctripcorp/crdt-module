@@ -1001,6 +1001,108 @@ int add_score_is_nan(crdt_element el, double score) {
     return 0;
 }
 
+sds zsetAdd2(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds field, int* flags, double score,  double* newscore) {
+    int incr = (*flags &ZADD_INCR) != 0;
+    int nx = (*flags  & ZADD_NX) != 0;
+    int xx = (*flags & ZADD_XX) != 0;
+    *flags = 0; /* We'll return our response flags. */
+    /* NaN as input is an error regardless of all the other parameters. */
+    if (isnan(score)) {
+        *flags = ZADD_NAN;
+        return 0;
+    }
+    crdt_zset* ss = retrieve_crdt_zset(value);
+    crdt_zset_tombstone* sst = retrieve_crdt_zset_tombstone(tombstone);
+    int gid = getMetaGid(meta);
+    crdt_tag_base b = {.base_data_type = VALUE_TYPE_DOUBLE};
+    crdt_tag_add_counter a = {.counter_type = VALUE_TYPE_DOUBLE}; 
+    sds result ;
+    if(incr) {
+        a.add_counter.f = score;
+        a.add_vcu = get_vcu_by_meta(meta);
+        init_crdt_add_tag_head(&a, gid);
+    } else {
+        b.base_timespace = getMetaTimestamp(meta);
+        b.base_vcu = get_vcu_by_meta(meta);
+        b.score.f = score;
+        init_crdt_base_tag_head(&b, gid);
+    }
+     updateCrdtSSLastVc((CRDT_SS*)ss, getMetaVectorClock(meta));
+    if(sst) {
+        dictEntry* tde = dictUnlink(sst->dict, field);
+        if(tde) {
+            crdt_element tel = dict_get_element(tde);
+            if(incr) {
+                if(add_score_is_nan(tel, score)) {
+                    *flags = ZADD_NAN; 
+                    return NULL;
+                }
+                result = element_add_counter_by_tag2(&tel, &a);
+            } else {
+                tel = element_merge_tag2(tel, &b);
+                result = get_base_value_sds_from_element(tel, gid);
+            }
+            // dict_set_element(tde, create_crdt_element());
+            dict_clean_element(sst->dict, tde);
+            dictFreeUnlinkedEntry(sst->dict, tde);
+            zset_add_element(ss, field, tel);
+            *newscore = score;
+            *flags |= ZADD_ADDED;
+            return result;
+        }
+    }
+    crdt_element el;
+    if(ss) {
+        dictEntry* de = dictFind(ss->dict, field);
+        if(de) {
+            if (nx) {
+                *flags |= ZADD_NOP;
+                return sdsempty();
+            }
+            el = dict_get_element(de);
+            double old_score = 0;
+            crdtAssert(get_double_score_by_element(el, &old_score));
+            if(incr) {
+                if(add_score_is_nan(el, score)) {
+                    *flags = ZADD_NAN; 
+                    return NULL;
+                }
+                result = element_add_counter_by_tag2(&el, &a);
+                get_double_score_by_element(el, newscore);
+            } else {
+                el = element_clean(el, -1, 0, 0);
+                el = element_merge_tag2(el, &b);
+                result = get_base_value_sds_from_element(el, gid);
+                // result = sdscatprintf(result, ",%s", get_delete_counter_sds_from_element(el));
+                *newscore = score;
+            }
+            // dict_set_element(de, el);
+            dict_set_element(ss->dict, de, el);
+            if(zset_update_zsl(ss, old_score, field, el)) {
+                *flags |= ZADD_UPDATED;
+            }
+            return result;
+        } else if(!xx) {
+            el = create_crdt_element();
+            if(incr) {
+                el = element_add_tag(el, dup_crdt_tag(&a));
+                result = get_add_value_sds_from_tag(&a);
+            } else {
+                el = element_add_tag(el, dup_crdt_tag(&b));
+                result = get_base_value_sds_from_element(el, gid);
+            }
+            zset_add_element(ss, field, el);
+            *newscore = score;
+            *flags |= ZADD_ADDED;
+            return result;
+        } else {
+            *flags |= ZADD_NOP;
+            return sdsempty();
+        }
+    }
+    return NULL;
+}
+
 sds zsetAdd(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds field, int* flags, double score, double* newscore) {
     /* Turn options into simple to check vars. */
     int incr = (*flags & ZADD_INCR) != 0;

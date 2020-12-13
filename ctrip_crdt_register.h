@@ -155,6 +155,7 @@ int get_crdt_tag_add_value(CRDT_RC* rc, int gid, ctrip_value* value);
 sds rcIncrby(CRDT_RC* data,  CrdtMeta* meta, int type, union all_type* value);
 int rcTryIncrby(CRDT_RC* current, CRDT_RCTombstone* tombstone,  CrdtMeta* meta,  sds value);
 sds rcAdd(CRDT_RC* data, CrdtMeta* meta, sds value);
+int rcAdd2(CRDT_RC* data, CrdtMeta* meta, sds val, char* buf);
 int rcTryAdd(CRDT_RC* data, CRDT_RCTombstone* tombstone, CrdtMeta* meta, sds value);
 int rcTryDel(CRDT_RC* current,CRDT_RCTombstone* tombstone, CrdtMeta* meta, sds value);
 

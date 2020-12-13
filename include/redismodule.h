@@ -430,6 +430,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(CrdtMultiWrappedReplicate);
     REDISMODULE_GET_API(DeleteKey);
     REDISMODULE_GET_API(DeleteTombstone);
+    REDISMODULE_GET_API(DeleteTombstoneByKey);
     REDISMODULE_GET_API(UnlinkKey);
     REDISMODULE_GET_API(StringSet);
     REDISMODULE_GET_API(StringDMA);

@@ -174,19 +174,16 @@ sds crdtRcInfo(void* value) {
 }
 
 CrdtObject** crdtRcFilter(CrdtObject* target, int gid, long long logic_time, long long maxsize, int* length) {
-    printf("[crdtRcFilter] start\n");
     crdt_orset_rc* rc = retrieve_crdt_rc(target);
     crdt_element el = get_element_from_rc(rc);
     if(element_get_vcu_by_gid(el, gid) < logic_time) {
         return NULL;
     }
-    printf("[crdtRcFilter] 1\n");
     //value + gid + time + vectorClock
     if (get_crdt_element_memory(el) > maxsize) {
         *length  = -1;
         return NULL;
     }
-    printf("[crdtRcFilter] 2\n");
     *length = 1;
     CrdtObject** re = RedisModule_Alloc(sizeof(crdt_orset_rc*));
     re[0] = target;
@@ -318,22 +315,32 @@ void initCrdtRcFromTombstone(CRDT_RC* rc, CRDT_RCTombstone* t) {
 
 
 
+
+int rcAdd2(CRDT_RC* data, CrdtMeta* meta, sds val, char* buf) {
+    crdt_orset_rc* rc = retrieve_crdt_rc(data);
+    int gid = getMetaGid(meta);
+    crdt_element el = get_element_from_rc(rc);
+    el = element_clean(el, -1, 0, 0);
+    crdt_tag_base b = {.base_data_type = VALUE_TYPE_SDS, .base_timespace = getMetaTimestamp(meta), .base_vcu = get_vcu_by_meta(meta), .score.s = val};
+    init_crdt_base_tag_head(&b, gid);
+    el = element_merge_tag2(el, &b);
+    append_meta_vc_from_element(meta, el);
+    set_rc_from_element(rc, el);
+    return write_base_value_to_buf(el, gid, buf);
+}
+
 sds rcAdd(CRDT_RC* data,  CrdtMeta* meta, sds val) {
     crdt_orset_rc* rc = retrieve_crdt_rc(data);
     int gid = getMetaGid(meta);
-    crdt_tag_base* b = create_base_tag(gid);
-    b->base_data_type = VALUE_TYPE_SDS;
-    b->base_timespace = getMetaTimestamp(meta);
-    b->base_vcu = get_vcu_by_meta(meta);
-    b->score.s = sdsdup(val);
-
+    
     crdt_element el = get_element_from_rc(rc);
     el = element_clean(el, -1, 0, 0);
-    el = element_merge_tag(el, b);
-    
-    VectorClock vc = element_get_vc(el);
-    appendVCForMeta(meta, vc);
-    freeVectorClock(vc);
+    crdt_tag_base b = {.base_data_type = VALUE_TYPE_SDS, .base_timespace = getMetaTimestamp(meta), .base_vcu = get_vcu_by_meta(meta), .score.s = val};
+    init_crdt_base_tag_head(&b, gid);
+    el = element_merge_tag2(el, &b);
+
+    append_meta_vc_from_element(meta, el);
+
     sds result = get_base_value_sds_from_element(el, gid);
     set_rc_from_element(rc, el);
     return result;

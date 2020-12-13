@@ -108,7 +108,7 @@ int dict_try_clean_vc(dict* d, sds field, VectorClock* other) {
         } 
         return result;
     } 
-    return PURGE_VAL;
+    return -2;
 }
 
 int dict_merge_dict(dict* target, dict* other) {

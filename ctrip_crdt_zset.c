@@ -281,7 +281,7 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     for(int i = 0; i < elements; i++) {
         int retflags = flags;
         score = scores[i];
-        sds callback_item = zsetAdd(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[i*2 + scoreidx + 1]), &retflags, score, &newscore);
+        sds callback_item = zsetAdd2(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[i*2 + scoreidx + 1]), &retflags, score, &newscore);
         if(callback_item == NULL) {
             RedisModule_ReplyWithError(ctx, nanerr);
             goto cleanup;

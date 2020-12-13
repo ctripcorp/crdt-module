@@ -140,11 +140,15 @@ int get_tag_gid(crdt_tag* tag) {
 
 //abdout create tag
 //create base tag
-crdt_tag_base* create_base_tag(int gid) {
-    crdt_tag_base* b = counter_malloc(sizeof(crdt_tag_base));
+
+void init_crdt_base_tag_head(crdt_tag_base* b, int gid) {
     set_tag_gid((crdt_tag*)b, gid);
     set_tag_type((crdt_tag*)b, TAG_B);
     set_tag_data_type((crdt_tag*)b, VALUE_TAG);
+}
+crdt_tag_base* create_base_tag(int gid) {
+    crdt_tag_base* b = counter_malloc(sizeof(crdt_tag_base));
+    init_crdt_base_tag_head(b, gid);
     b->base_timespace = DELETED_TIME;
     b->base_vcu = 0;
     b->base_data_type = VALUE_TYPE_NONE;
@@ -189,26 +193,33 @@ crdt_tag_base_ld_add_del_tombstone* create_base_ld_add_del_tombstone(int gid) {
     return tldbad;
 }
 
-#define init_add_counter(tag)  {\
-    set_tag_gid((crdt_tag*)tag, gid);\
-    set_tag_type((crdt_tag*)tag, TAG_A);\
-    set_tag_data_type((crdt_tag*)tag, VALUE_TAG);\
+
+
+void init_crdt_add_tag_head(crdt_tag* tag, int gid) {
+    set_tag_gid(tag, gid);
+    set_tag_type(tag, TAG_A);
+    set_tag_data_type(tag, VALUE_TAG);
+}
+
+#define init_add_counter(tag, gid)  {\
+    init_crdt_add_tag_head((crdt_tag*)tag, gid);\
     tag->add_vcu = 0;\
-    tag->counter_type = VALUE_TYPE_NONE;\
 }
 //create add tag 
 crdt_tag_add_counter* create_add_tag(int gid) {
     crdt_tag_add_counter* a = counter_malloc(sizeof(crdt_tag_add_counter));
-    init_add_counter(a);
+    init_add_counter(a, gid);
     a->add_counter.i = 0;
+    a->counter_type = VALUE_TYPE_NONE;
     return a;
 }
 
+
 crdt_tag_ld_add_counter* create_ld_add_tag(int gid) {
     crdt_tag_ld_add_counter* lda = counter_malloc(sizeof(crdt_tag_ld_add_counter));
-    init_add_counter(lda);
-    lda->counter_type = VALUE_TYPE_LONGDOUBLE;
+    init_add_counter(lda, gid);
     lda->add_counter = 0;
+    lda->counter_type = VALUE_TYPE_LONGDOUBLE;
     return lda;
 }
 
@@ -2538,6 +2549,51 @@ sds get_base_value_sds_from_tag(crdt_tag* tag) {
     return r;
 }
 
+int write_base_value_to_buf(crdt_element el, int gid, char* buf) {
+    int max_len = 21 + 1 + 256;
+    int len = 0;
+    crdt_tag* tag = element_get_tag_by_gid(el, gid, NULL);
+    assert(tag != NULL);
+    union all_type v = {.f = 0};
+    int data_type = 0;
+    switch(get_tag_type(tag)) {
+        case TAG_B: {
+            crdt_tag_base* b = (crdt_tag_base*)tag;
+            get_all_type_from_base(b, data_type, v);
+        }
+        break;
+        case TAG_BA: {
+            crdt_tag_base_and_add_counter* ba = (crdt_tag_base_and_add_counter*)tag;
+            get_all_type_from_base(ba, data_type, v);
+        }
+        break;
+        case TAG_BAD: {
+            crdt_tag_base_and_add_del_counter* bad = (crdt_tag_base_and_add_del_counter*)tag;
+            get_all_type_from_base(bad, data_type, v);
+        }
+        break;
+        default:
+            printf("[get_base_value_sds_from_tag] type error :%d \n", get_tag_type(tag));
+            assert(1 == 0);
+        break;
+    }
+    if(data_type == VALUE_TYPE_SDS) {
+        max_len += sdslen(v.s);
+    }
+    int alllen = 0;
+    alllen +=  value_to_str(buf, data_type, v);
+    int elmenet_len = get_element_len(el);
+    int max_len1 = elmenet_len * (21 + 5 + 17);
+    char meta_buf[max_len1];
+    int meta_len =  g_counter_metas_to_str(meta_buf, &el, tag_to_g_counter_meta, elmenet_len);
+    if(meta_len > 0) {
+        buf[alllen++] = ',';
+        memcpy(buf + alllen , meta_buf, meta_len);
+        alllen += meta_len;
+    }
+    return alllen;
+}
+
 sds get_base_value_sds_from_element(crdt_element el, int gid) {
     int max_len = 21 + 1 + 256;
     int len = 0;
@@ -2673,6 +2729,20 @@ crdt_element element_merge_tag(crdt_element el, void* v) {
     return el;
 }
 
+crdt_element element_merge_tag2(crdt_element el, void* v_unfree) {
+    crdt_tag* tag = (crdt_tag*)v_unfree;
+    int gid = get_tag_gid(tag);
+    int index = 0;
+    crdt_tag* ntag = element_get_tag_by_gid(el, gid, &index);
+    if(ntag) {
+        ntag = merge_crdt_tag(ntag, tag);
+        el = element_set_tag_by_index(el, index, ntag);
+    } else {
+        el = element_add_tag(el, dup_crdt_tag(tag));
+    }
+    return el;
+}
+
 long long get_tag_vcu(crdt_tag* tag) {
     switch(get_tag_type(tag)) {
         case TAG_A: {
@@ -2744,24 +2814,20 @@ int find_meta_by_gid(int gid, int gcounter_len, g_counter_meta** metas) {
 crdt_element create_element_from_vc_and_g_counter(VectorClock vc, int gcounter_len, g_counter_meta** metas, crdt_tag* base_tag) {
     crdt_element el =  create_crdt_element();
     int added = 0;
-    printf("len: %d <= %d\n", gcounter_len, get_len(vc));
     assert(gcounter_len <= get_len(vc));
     for(int i = 0, len = get_len(vc); i < len; i++) {
         clk* c = get_clock_unit_by_index(&vc, i);
         int gid = get_gid(*c);
         int vcu = get_logic_clock(*c);
         int g_index =  find_meta_by_gid(gid, gcounter_len, metas);
-        printf("[create_element_from_vc_and_g_counter] for-1 %d\n ", g_index);
         crdt_tag* tag = NULL;
         if(base_tag && base_tag->gid == gid) {
-            printf("[create_element_from_vc_and_g_counter] for-2 %d\n ", gid);
             tag = base_tag;
             base_tag = NULL;
             added = 1;
         }else  {
             crdt_tag_base* b =  create_base_tag(gid);
             b->base_vcu = vcu;
-            printf("[create_element_from_vc_and_g_counter] for-2.1 %d %lld\n ", gid, vcu);
             tag = (crdt_tag*)b;
         } 
         if(g_index != -1) {
@@ -2769,14 +2835,11 @@ crdt_element create_element_from_vc_and_g_counter(VectorClock vc, int gcounter_l
             free_g_counater_maeta(metas[g_index]);
             metas[g_index] = NULL;
         }
-        printf("[create_element_from_vc_and_g_counter] for-4 %d %lld\n ", gid, vcu);
         el = element_add_tag(el, tag);
-        printf("[create_element_from_vc_and_g_counter] for-5 %d %lld\n ", gid, vcu);
     }
     assert(base_tag == NULL);
     for(int i = 0; i < gcounter_len; i++) {
         if(metas[i] != NULL) {
-            printf("[create_element_from_vc_and_g_counter] metas is not null, %d\n", i);
             assert(1 == 0);
         }
     }
@@ -2795,6 +2858,20 @@ sds element_add_counter_by_tag(crdt_element* el,  crdt_tag_add_counter* rtag) {
         return get_add_value_sds_from_tag(tag);
     } else {
         *el = element_add_tag(*el, (crdt_tag*)rtag);
+        return get_add_value_sds_from_tag((crdt_tag*)rtag);
+    }
+}
+
+sds element_add_counter_by_tag2(crdt_element* el, crdt_tag_add_counter* rtag) {
+    int gid = get_tag_gid((crdt_tag*)rtag);
+    int index = 0;
+    crdt_tag* tag = element_get_tag_by_gid(*el, gid, &index);
+    if(tag) {
+        tag = tag_add_tag(tag, rtag);
+        *el = element_set_tag_by_index(*el, index, tag);
+        return get_add_value_sds_from_tag(tag);
+    } else {
+        *el = element_add_tag(*el, dup_crdt_tag(rtag));
         return get_add_value_sds_from_tag((crdt_tag*)rtag);
     }
 }
@@ -3121,6 +3198,7 @@ int plus_or_minus_ctrip_value(ctrip_value* a, ctrip_value* b, int plus) {
                 a->type = VALUE_TYPE_LONGDOUBLE;
                 return plus_or_minus_ld(a, b, plus);
             }
+            return 0;
         }
         break;
         case VALUE_TYPE_LONGLONG: {
@@ -3373,4 +3451,27 @@ crdt_tag_base* create_base_tag_by_meta(CrdtMeta* meta, ctrip_value v) {
     copy_tag_data_from_all_type(v.type, &b->score, v.value);
     assert(get_tag_gid((crdt_tag*)b) == getMetaGid(meta));
     return b;
+}
+
+void append_meta_vc_from_element(CrdtMeta* meta, crdt_element el) {
+    VectorClock vc = getMetaVectorClock(meta);
+    if(isNullVectorClock(vc)) {
+        meta->vectorClock = element_get_vc(el);
+        return;
+    }
+    for(int i = 0, len = get_element_len(el); i < len; i++) {
+        crdt_tag* tag = element_get_tag_by_index(el, i);
+        int index = 0;
+        int gid = get_tag_gid(tag);
+        long long e_vcu = get_tag_vcu(tag);
+        long long c_vcu = get_vcu_from_vc(vc, gid, &index);
+        if(index != -1) {
+            if(c_vcu < e_vcu) {
+                set_clock_unit_by_index(&vc, index, init_clock(gid, e_vcu));
+            }
+        } else {
+            vc = addVectorClockUnit(vc, gid, e_vcu);
+        }
+    }
+    meta->vectorClock = vc;
 }

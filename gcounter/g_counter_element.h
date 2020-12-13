@@ -188,8 +188,11 @@ int is_tombstone_tag(crdt_tag* tag);
 int is_deleted_tag(crdt_tag* tag);
 int get_tag_gid(crdt_tag* tag);
 //abdout create tag
+void init_crdt_base_tag_head(crdt_tag_base* b, int gid);
 crdt_tag_base* create_base_tag(int gid);
 crdt_tag_base* create_base_tag_by_meta(CrdtMeta* meta, ctrip_value v);
+//add tag
+void init_crdt_add_tag_head(crdt_tag* a, int gid);
 crdt_tag_ld_add_counter* create_ld_add_tag(int gid);
 crdt_tag_add_counter* create_add_tag(int gid);
 crdt_tag* create_add_tag_from_all_type(int gid, int type, union all_type value);
@@ -233,6 +236,7 @@ crdt_element element_clean(crdt_element el, int gid, long long vcu, int add_self
 crdt_element element_try_clean_by_vc(crdt_element el, VectorClock vc, int* is_deleted);
 crdt_element merge_crdt_element(crdt_element a, crdt_element b);
 crdt_element element_merge_tag(crdt_element el, void* v);
+crdt_element element_merge_tag2(crdt_element el, void* v);
 long long element_get_vcu_by_gid(crdt_element el, int gid);
 crdt_element move_crdt_element(crdt_element* rc, crdt_element el);
 int reset_crdt_element(crdt_element* rc);
@@ -248,11 +252,13 @@ int tag_to_g_counter_meta(void* data, int index, g_counter_meta* value);
 sds get_add_value_sds_from_tag(crdt_tag* tag);
 sds get_delete_counter_sds_from_element(crdt_element el);
 sds get_base_value_sds_from_element(crdt_element el, int gid);
+int write_base_value_to_buf(crdt_element el, int gid, char* buf);
 crdt_element create_element_from_vc_and_g_counter(VectorClock vc, int gcounter_len, g_counter_meta** metas, crdt_tag* base_tag);
 sds element_add_counter_by_tag(crdt_element* el,  crdt_tag_add_counter* rtag);
-
+sds element_add_counter_by_tag2(crdt_element* el, crdt_tag_add_counter* rtag);
 
 int get_tag_base_value(crdt_tag* tag, long long* current_time, ctrip_value* current_value);
 int get_tag_counter_value(crdt_tag* tag, ctrip_value* value, int had_del);
 sds get_field_and_delete_counter_str(sds field, crdt_element del_el, int must_field) ;
 VectorClock element_get_vc(crdt_element r);
+void append_meta_vc_from_element(CrdtMeta* meta, crdt_element el);
