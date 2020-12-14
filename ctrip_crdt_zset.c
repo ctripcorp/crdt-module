@@ -249,11 +249,25 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     }
     // scores = RedisModule_Alloc(sizeof(double)*elements);
     double scores[elements];
+    sds keys[elements];
     // double scores[elements];
     for(int i = 0; i < elements; i+=1) {
         if(RedisModule_StringToDouble(argv[i * 2 + scoreidx], &scores[i]) != REDISMODULE_OK) {
             RedisModule_ReplyWithError(ctx, "ERR value is not a valid float");
             goto error;
+        }
+        
+        int add = 1;
+        sds key = RedisModule_GetSds(argv[i * 2 + scoreidx + 1]);
+        for(int j = i + 1; j < elements; j+=1) {
+            if(sdscmp(key, RedisModule_GetSds(argv[j * 2 + scoreidx + 1])) == 0) {
+                add = 0;
+            }
+        }
+        if(add) {
+            keys[i] = key;
+        } else {
+            keys[i] = NULL;
         }
     }
 
@@ -279,17 +293,18 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
         appendVCForMeta(&zadd_meta, getCrdtSSLastVc(current));
     }
     for(int i = 0; i < elements; i++) {
+        if(keys[i] == NULL) { continue; }
         int retflags = flags;
         score = scores[i];
-        sds callback_item = zsetAdd2(current, tombstone, &zadd_meta, RedisModule_GetSds(argv[i*2 + scoreidx + 1]), &retflags, score, &newscore);
+        sds callback_item = zsetAdd2(current, tombstone, &zadd_meta, keys[i], &retflags, score, &newscore);
         if(callback_item == NULL) {
             RedisModule_ReplyWithError(ctx, nanerr);
             goto cleanup;
         }
         if(sdslen(callback_item) != 0) {
-            callback_items[callback_len++] = sdsdup(RedisModule_GetSds(argv[i*2 + scoreidx + 1]));
+            callback_items[callback_len++] = sdsdup(keys[i]);
             callback_items[callback_len++] = callback_item;
-            callback_byte_size += sdslen(RedisModule_GetSds(argv[i*2 + scoreidx + 1])) + sdslen(callback_item);
+            callback_byte_size += sdslen(keys[i]) + sdslen(callback_item);
         } else {
             sdsfree(callback_item);
         }

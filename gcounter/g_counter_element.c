@@ -1894,7 +1894,7 @@ crdt_element element_try_clean_by_vc(crdt_element el, VectorClock vc, int* is_de
         crdt_tag* tag = element_get_tag_by_index(el, i);
         long long c_vcu = get_vcu(vc, tag->gid);
         if(c_vcu == 0) {
-            if(is_deleted) *is_deleted = 0;
+            if(is_deleted && !is_deleted_tag(tag)) *is_deleted = 0;
             rel = element_add_tag(rel, tag);
             continue;
         } 

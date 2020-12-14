@@ -176,7 +176,7 @@ int replicationFeedCrdtRCCommand2(RedisModuleCtx* ctx, char* cmdbuf,sds key,Crdt
     return cmdlen;
 }
 int replicationCrdtRcCommand2(RedisModuleCtx* ctx, sds key, CrdtMeta* meta, char* value, int value_len, long long expire) {
-    size_t alllen = sdslen(key) + sdslen(value) + crdt_rc_basic_str_len;
+    size_t alllen = sdslen(key) + value_len + crdt_rc_basic_str_len;
     if(alllen > MAXSTACKSIZE) {
         char* cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtRCCommand2(ctx, cmdbuf, key , meta, value, value_len, expire);

@@ -908,8 +908,7 @@ int setAdd(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta) {
     }
     dict* sd = getSetDict(s);
     int result = dict_try_add_vcu(sd, field, gid, vcu);
-    assert(result >= 0);
-    return result;
+    return result == 1? 1: 0;
 }
 
 int setTryRem(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta) {
