@@ -54,6 +54,7 @@ size_t replicationFeedCrdtExpireAtCommand(RedisModuleCtx* ctx, char* cmdbuf, con
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
+
 int expireAt(RedisModuleCtx* ctx, RedisModuleString *key, long long expireTime) {
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, key, REDISMODULE_WRITE);
     CrdtData *data = NULL;
@@ -88,15 +89,27 @@ end:
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     return RedisModule_ReplyWithLongLong(ctx, result);
 }
+
 int expireAtCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
     if (argc < 3) return RedisModule_WrongArity(ctx);
     long long time;
     if ((RedisModule_StringToLongLong(argv[2],&time) != REDISMODULE_OK)) {
-        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+        return RedisModule_ReplyWithError(ctx,"ERR value is not an integer or out of range");
+    }
+    return expireAt(ctx, argv[1], time * 1000);
+}
+
+int pexpireAtCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
+    RedisModule_AutoMemory(ctx);
+    if (argc < 3) return RedisModule_WrongArity(ctx);
+    long long time;
+    if ((RedisModule_StringToLongLong(argv[2],&time) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx,"ERR value is not an integer or out of range");
     }
     return expireAt(ctx, argv[1], time);
 }
+
 int trySetExpire(RedisModuleKey* moduleKey, RedisModuleString* key, long long  time, int type, long long expireTime) {
     CrdtData* data = RedisModule_ModuleTypeGetValue(moduleKey);
     if(data == NULL) {
@@ -121,16 +134,28 @@ int trySetExpire(RedisModuleKey* moduleKey, RedisModuleString* key, long long  t
     }
     return CRDT_OK;
 }
+
 //expire <key> <time>
 int expireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
     if (argc < 3) return RedisModule_WrongArity(ctx);
     long long time;
     if ((RedisModule_StringToLongLong(argv[2],&time) != REDISMODULE_OK)) {
-        return RedisModule_ReplyWithError(ctx,"ERR invalid value: must be a signed 64 bit integer");
+        return RedisModule_ReplyWithError(ctx,"ERR value is not an integer or out of range");
     }
     return expireAt(ctx, argv[1], RedisModule_Milliseconds() + time * 1000);
 }
+
+int pexpireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
+    RedisModule_AutoMemory(ctx);
+    if (argc < 3) return RedisModule_WrongArity(ctx);
+    long long time;
+    if ((RedisModule_StringToLongLong(argv[2],&time) != REDISMODULE_OK)) {
+        return RedisModule_ReplyWithError(ctx,"ERR value is not an integer or out of range");
+    }
+    return expireAt(ctx, argv[1], RedisModule_Milliseconds() + time);
+}
+
 //CRDT.EXPIRE key gid time  expireTime type
 int crdtExpireCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     RedisModule_AutoMemory(ctx);
@@ -228,8 +253,16 @@ int initCrdtExpireModule(RedisModuleCtx *ctx) {
         expireCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
+    if (RedisModule_CreateCommand(ctx, "PEXPIRE", 
+        pexpireCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
+        return REDISMODULE_ERR;
+    }
     if (RedisModule_CreateCommand(ctx, "EXPIREAT", 
         expireAtCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
+        return REDISMODULE_ERR;
+    }
+    if (RedisModule_CreateCommand(ctx, "PEXPIREAT", 
+        pexpireAtCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx, "PERSIST", 

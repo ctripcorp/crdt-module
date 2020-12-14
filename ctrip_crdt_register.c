@@ -560,12 +560,12 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
     if (expire) {
         if (RedisModule_StringToLongLong(expire, &milliseconds) != REDISMODULE_OK) {
             result = 0;
-            if(sendtype) RedisModule_ReplyWithSimpleString(ctx, "ERR syntax error\r\n");
+            if(sendtype) RedisModule_ReplyWithSimpleString(ctx, "ERR syntax error");
             goto error;
         }
         if (milliseconds <= 0) {
             result = 0;
-            if(sendtype) RedisModule_ReplyWithSimpleString(ctx,"invalid expire time in set\r\n");
+            if(sendtype) RedisModule_ReplyWithSimpleString(ctx,"invalid expire time in set");
             goto error;
         }
         if (unit == UNIT_SECONDS) milliseconds *= 1000;
@@ -602,6 +602,16 @@ error:
 int setexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(argc < 4) return RedisModule_WrongArity(ctx);
     int result = setGenericCommand(ctx, NULL, OBJ_SET_NO_FLAGS | OBJ_SET_EX, argv[1], argv[3], argv[2], UNIT_SECONDS, 1);
+    if(result == CRDT_OK) {
+        return RedisModule_ReplyWithOk(ctx);
+    } else {
+        return CRDT_ERROR;
+    } 
+}
+
+int psetexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if(argc < 4) return RedisModule_WrongArity(ctx);
+    int result = setGenericCommand(ctx, NULL, OBJ_SET_NO_FLAGS | OBJ_SET_EX, argv[1], argv[3], argv[2], UNIT_MILLISECONDS, 1);
     if(result == CRDT_OK) {
         return RedisModule_ReplyWithOk(ctx);
     } else {
@@ -974,8 +984,8 @@ int replicationFeedCrdtMsetCommandByRc(RedisModuleCtx* ctx, char* cmdbuf, int le
         cmdlen += feedVectorClock2Buf(cmdbuf + cmdlen, getMetaVectorClock(&m));
         freeVectorClock(getMetaVectorClock(&m));
         // sdsfree(value);
-        //RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "del", key);
-        //RedisModule_SignalModifiedKey(ctx, key);
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", keys[i]);
+        RedisModule_SignalModifiedKey(ctx, keys[i]);
     }
     // RedisModule_Debug(logLevel, "cmd: %d - %s", cmdlen, cmdbuf);
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
@@ -1028,6 +1038,8 @@ int replicationFeedCrdtMsetCommandByReg(RedisModuleCtx* ctx, char* cmdbuf, int l
         cmdlen += feedStr2Buf(cmdbuf + cmdlen , key, sdslen(key));
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, values[i], sdslen(values[i]));
         cmdlen += feedVectorClock2Buf(cmdbuf + cmdlen, getCrdtRegisterLastVc(reg));
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", keys[i]);
+        RedisModule_SignalModifiedKey(ctx, keys[i]);
     }
     // RedisModule_Debug(logLevel, "cmd: %d - %s", cmdlen, cmdbuf);
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
@@ -1328,6 +1340,9 @@ int initRcModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "SETEX", 
                                     setexCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "PSETEX", 
+                                    psetexCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "incrby",
                                     incrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
