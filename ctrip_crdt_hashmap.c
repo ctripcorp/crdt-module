@@ -904,6 +904,26 @@ int hgetallCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return genericHgetallCommand(ctx, argv, argc, OBJ_HASH_KEY|OBJ_HASH_VALUE);
 }
 
+int hlenCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
+    if(argc != 2) return RedisModule_WrongArity(ctx);
+    CRDT_Hash *crdtHash;
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+
+    if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
+        RedisModule_CloseKey(key);
+        return RedisModule_ReplyWithLongLong(ctx, 0);
+    } else if (RedisModule_ModuleTypeGetType(key) != CrdtHash) {
+        RedisModule_CloseKey(key);
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    } else {
+        crdtHash = RedisModule_ModuleTypeGetValue(key);
+    }
+    long long length = dictSize((const dict*)crdtHash->map);
+    RedisModule_ReplyWithLongLong(ctx, length);
+    RedisModule_CloseKey(key);
+    return REDISMODULE_OK;
+}
+
 /*
  * Init Hash Module 
  */
@@ -981,6 +1001,10 @@ int initCrdtHashModule(RedisModuleCtx *ctx) {
 
     if (RedisModule_CreateCommand(ctx,"CRDT.REM_HASH",
                                   CRDT_RemHashCommand,"write",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+
+    if (RedisModule_CreateCommand(ctx,"hlen",
+                                  hlenCommand,"write",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     return REDISMODULE_OK;
