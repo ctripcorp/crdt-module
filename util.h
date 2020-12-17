@@ -35,7 +35,7 @@
 #include "include/rmutil/sds.h"
 #include "include/rmutil/util.h"
 #include <assert.h>
-
+#define MAX_LONG_DOUBLE_CHARS 5*1024
 int stringmatchlen(const char *p, int plen, const char *s, int slen, int nocase);
 int stringmatch(const char *p, const char *s, int nocase);
 long long memtoll(const char *p, int *err);

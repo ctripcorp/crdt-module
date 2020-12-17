@@ -179,6 +179,24 @@ int copy_sds_to_buf(char* buf, sds value) {
 }
 
 #define MAX_LL_SIZE 21
+#define MAX_LONG_DOUBLE_CHARS 5*1024
+int get_value_max_len(int data_type, union all_type v) {
+    switch (data_type)
+    {
+    case VALUE_TYPE_SDS:
+        return sdslen(v.s) + MAX_LL_SIZE + 1;
+        break;
+    case VALUE_TYPE_DOUBLE:
+    case VALUE_TYPE_LONGDOUBLE:
+        return MAX_LONG_DOUBLE_CHARS + MAX_LL_SIZE + 1; 
+    case VALUE_TYPE_LONGLONG:
+        return MAX_LL_SIZE + MAX_LL_SIZE + 1;
+    default:
+        printf("[get_value_max_len]type error %d\n", data_type);
+        assert(1 == 0);
+        break;
+    }
+}
 int value_to_str(char* buf, int data_type, union all_type v) {
     int len = 0;
     len += ll2string(buf + len, MAX_LL_SIZE, data_type);
@@ -190,13 +208,13 @@ int value_to_str(char* buf, int data_type, union all_type v) {
         len += copy_sds_to_buf(buf + len , v.s);
     break;
     case VALUE_TYPE_DOUBLE:
-        len += d2string(buf + len, 256, v.d);
+        len += d2string(buf + len, MAX_LONG_DOUBLE_CHARS, v.d);
     break;
     case VALUE_TYPE_LONGDOUBLE:
-        len += ld2string(buf + len, 256, v.f, 1);
+        len += ld2string(buf + len, MAX_LONG_DOUBLE_CHARS, v.f, 1);
     break;
     case VALUE_TYPE_LONGLONG:
-        len += ld2string(buf + len, 256, v.i, 1);
+        len += ll2string(buf + len, MAX_LL_SIZE, v.i);
     break;
     default:
         printf("[value_to_str]type error:%d", data_type);
@@ -207,10 +225,7 @@ int value_to_str(char* buf, int data_type, union all_type v) {
 }
 
 sds value_to_sds(int data_type, union all_type v) {
-    int max_len = 256;
-    if(data_type == VALUE_TYPE_SDS) {
-        max_len += sdslen(v.s);
-    }
+    int max_len = get_value_max_len(data_type, v);
     char buf[max_len];
     int len = value_to_str(buf, data_type, v);
     return sdsnewlen(buf, len);

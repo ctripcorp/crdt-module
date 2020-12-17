@@ -2516,6 +2516,7 @@ int tag_to_g_counter_meta(void* data, int index, g_counter_meta* value) {
         break;\
         default:\
             printf("[get_all_type_from_base]type Unimplemented code \n");\
+            assert( 1 == 0);\
         break;\
     }\
 } while(0)
@@ -2576,13 +2577,12 @@ int write_base_value_to_buf(crdt_element el, int gid, char* buf) {
             assert(1 == 0);
         break;
     }
-    if(data_type == VALUE_TYPE_SDS) {
-        max_len += sdslen(v.s);
-    }
+    max_len += get_value_max_len(data_type, v);
     int alllen = 0;
     alllen +=  value_to_str(buf, data_type, v);
     int elmenet_len = get_element_len(el);
-    int max_len1 = elmenet_len * (21 + 5 + 17);
+    //gid(2) + :(1) + vcu(21) + :(1) + type(1) + :(1) + value(1024*5) 
+    int max_len1 = elmenet_len * (1024 * 5 + 4 + 21 + 2);
     char meta_buf[max_len1];
     int meta_len =  g_counter_metas_to_str(meta_buf, &el, tag_to_g_counter_meta, elmenet_len);
     if(meta_len > 0) {
@@ -2621,9 +2621,7 @@ sds get_base_value_sds_from_element(crdt_element el, int gid) {
             assert(1 == 0);
         break;
     }
-    if(data_type == VALUE_TYPE_SDS) {
-        max_len += sdslen(v.s);
-    }
+    max_len += get_value_max_len(data_type, v);
     char buf[max_len];
     len += value_to_str(buf + len, data_type, v);
     sds dr = get_delete_counter_sds_from_element(el);
@@ -2650,7 +2648,8 @@ sds get_base_value_sds_from_element(crdt_element el, int gid) {
                 v.s = tag->add_counter.s;\
             break;\
             default:\
-                printf("[get_all_type_from_base]type Unimplemented code \n");\
+                printf("[get_all_type_from_add]type Unimplemented code \n");\
+                assert(1 == 0);\
             break;\
         }\
     } else {\
@@ -2689,7 +2688,7 @@ sds get_add_value_sds_from_tag(crdt_tag* tag) {
 
 sds get_delete_counter_sds_from_element(crdt_element el) {
     int elmenet_len = get_element_len(el);
-    int max_len = elmenet_len * (21 + 5 + 17);
+    int max_len = elmenet_len * (1024 * 5 + 4 + 21 + 2);
     char buf[max_len];
     int len =  g_counter_metas_to_str(buf, &el, tag_to_g_counter_meta, elmenet_len);
     if(len == 0) return NULL;
@@ -2896,10 +2895,18 @@ int plus_or_minus_ll_ll(ctrip_value* a, ctrip_value* b, int plus) {
     assert(b->type == VALUE_TYPE_LONGLONG);
     long long old_value = a->value.i;
     long long incr = b->value.i;
-    if ((incr < 0 && old_value < 0 && incr < (LLONG_MIN-old_value)) ||
-        (incr > 0 && old_value > 0 && incr > (LLONG_MAX-old_value))) {
-        return PLUS_ERROR_OVERFLOW;
+    if(plus == 1) {
+        if ((incr < 0 && old_value < 0 && incr < (LLONG_MIN-old_value)) ||
+            (incr > 0 && old_value > 0 && incr > (LLONG_MAX-old_value))) {
+            return PLUS_ERROR_OVERFLOW;
+        }
+    } else {
+        if ((incr > 0 && old_value < 0 && incr > (old_value - LLONG_MIN)) ||
+            (incr < 0 && old_value > 0 && incr < (old_value - LLONG_MAX))) {
+            return PLUS_ERROR_OVERFLOW;
+        }
     }
+    
 
     if(plus) {
         a->value.i += b->value.i;
@@ -3197,7 +3204,7 @@ int plus_or_minus_ctrip_value(ctrip_value* a, ctrip_value* b, int plus) {
                 a->type = VALUE_TYPE_LONGDOUBLE;
                 return plus_or_minus_ld(a, b, plus);
             }
-            return 0;
+            return SDS_PLUS_ERR;
         }
         break;
         case VALUE_TYPE_LONGLONG: {

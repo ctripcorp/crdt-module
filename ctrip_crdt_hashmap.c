@@ -479,7 +479,7 @@ end:
     
 }
 
-void add_tombstone(CRDT_HashTombstone* tombstone, sds field, CrdtMeta* meta) {
+void tombstone_add_element(CRDT_HashTombstone* tombstone, sds field, CrdtMeta* meta) {
     dictEntry* de = dictFind(tombstone->map, field);
     CRDT_RegisterTombstone* d = NULL;
     if(de) {
@@ -534,7 +534,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
                 // add_tombstone(tombstone, field, tkv);
                 for (int i = 6; i < argc; i+=2) {
                     sds field = RedisModule_GetSds(argv[i]);
-                    add_tombstone(tombstone, field, meta);
+                    tombstone_add_element(tombstone, field, meta);
                 }
             } 
             goto end;
@@ -668,13 +668,14 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
         }
         if(result > COMPARE_META_EQUAL) {
             if(result > COMPARE_META_VECTORCLOCK_GT) {
-                CRDT_RegisterTombstone* tkv = createCrdtRegisterTombstone();
-                CrdtMeta* m = dupMeta(getCrdtRegisterTombstoneMeta(kv));
-                appendCrdtMeta(m, meta);
-                int r = 0;
-                addRegisterTombstone(tkv, m, &r);
-                freeCrdtMeta(m);
-                dictAdd(tombstone->map, sdsdup(dictGetKey(de)), tkv);
+                // CRDT_RegisterTombstone* tkv = createCrdtRegisterTombstone();
+                // CrdtMeta* m = dupMeta(getCrdtRegisterTombstoneMeta(kv));
+                // appendCrdtMeta(m, meta);
+                // int r = 0;
+                // addRegisterTombstone(tkv, m, &r);
+                // freeCrdtMeta(m);
+                // dictAdd(tombstone->map, sdsdup(dictGetKey(de)), tkv);
+                tombstone_add_element(tombstone, dictGetKey(de), meta);
             }
             dictDelete(current->map, dictGetKey(de));
             deleted++;

@@ -567,9 +567,21 @@ int get_crdt_rc_value(CRDT_RC* rc, ctrip_value* value) {
     return element_get_value(el, value);
 }
 
-int get_crdt_tag_add_value(CRDT_RC* rc, int gid, ctrip_value* value) {
-    crdt_element el = get_element_from_rc((crdt_orset_rc*)rc);
+
+int get_tag_add_value(crdt_element el, int gid, ctrip_value* value) {
     crdt_tag* tag = element_get_tag_by_gid(el, gid, NULL);
     if(tag == NULL) return 0;
     return get_tag_counter_value(tag, value, 0);
 }
+
+int get_rc_tag_add_value(CRDT_RC* rc, int gid, ctrip_value* value) {
+    crdt_element el = get_element_from_rc(retrieve_crdt_rc(rc));
+    return get_tag_add_value(el, gid, value);
+}
+
+int get_rc_tombstone_tag_add_value(CRDT_RCTombstone* rct, int gid, ctrip_value* value) {
+    crdt_element el = get_element_from_rc_tombstone(retrieve_crdt_rc_tombstone(rct));
+    return get_tag_add_value(el, gid, value);
+}
+
+

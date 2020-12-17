@@ -214,6 +214,23 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString* key, int type, 
     if(tom != NULL && !isCrdtRcTombstone(tom)) {
         tom = NULL;
     }
+    if(tom) {
+        if(type == VALUE_TYPE_LONGLONG) {
+            ctrip_value add_value = {.type = VALUE_TYPE_NONE, .value.i = 0};
+            if(get_rc_tombstone_tag_add_value(tom, getMetaGid(&set_meta), &add_value)) {
+                switch(plus_or_minus_ctrip_value(&add_value, &incr_value, 1)) {
+                    case PLUS_ERROR_NAN: 
+                        RedisModule_ReplyWithError(ctx, "ERR increment would produce NaN or Infinity");
+                        goto error;
+                    break;
+                    case PLUS_ERROR_OVERFLOW:
+                        RedisModule_ReplyWithError(ctx, "ERR increment or decrement would overflow");
+                        goto error;
+                    break;
+                }
+            }
+        }
+    }
     if (current == NULL) {
         rc = createCrdtRc();
         initCrdtRcFromTombstone(rc, tom);
@@ -229,7 +246,7 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString* key, int type, 
                 goto error;
             }
             ctrip_value add_value = {.type = VALUE_TYPE_NONE, .value.i = 0};
-            if(get_crdt_tag_add_value(rc, getMetaGid(&set_meta), &add_value)) {
+            if(get_rc_tag_add_value(rc, getMetaGid(&set_meta), &add_value)) {
                 switch(plus_or_minus_ctrip_value(&add_value, &incr_value, 1)) {
                     case PLUS_ERROR_NAN: 
                         RedisModule_ReplyWithError(ctx, "ERR increment would produce NaN or Infinity");
@@ -237,6 +254,10 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString* key, int type, 
                     break;
                     case PLUS_ERROR_OVERFLOW:
                         RedisModule_ReplyWithError(ctx, "ERR increment or decrement would overflow");
+                        goto error;
+                    break;
+                    case SDS_PLUS_ERR:
+                        RedisModule_ReplyWithError(ctx, "ERR value is not an integer or out of range");
                         goto error;
                     break;
                 }
@@ -250,6 +271,14 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString* key, int type, 
             break;
             case PLUS_ERROR_OVERFLOW:
                 RedisModule_ReplyWithError(ctx, "ERR increment or decrement would overflow");
+                goto error;
+            break;
+            case SDS_PLUS_ERR:
+                if(type ==VALUE_TYPE_LONGLONG) {
+                    RedisModule_ReplyWithError(ctx, "ERR value is not an integer or out of range");
+                } else {
+                    RedisModule_ReplyWithError(ctx, "ERR value is not a valid float");
+                }
                 goto error;
             break;
         }
@@ -326,7 +355,7 @@ int incrbyfloatCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     sds v = RedisModule_GetSds(argv[2]);
     ctrip_value value = {.type = VALUE_TYPE_SDS, .value.s = v};
     if(!value_to_ld(&value)) {
-        RedisModule_ReplyWithError(ctx,"ERR value is not an float or out of range");
+        RedisModule_ReplyWithError(ctx,"ERR value is not a valid float");
         return 0;
     }
     return incrbyGenericCommand(ctx, argv[1], VALUE_TYPE_LONGDOUBLE, value);
@@ -538,6 +567,7 @@ int add_rc2(RedisModuleCtx* ctx, void* val, void* tom, CrdtMeta* meta, RedisModu
 
 int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags, RedisModuleString* key, RedisModuleString* val, RedisModuleString* expire, int unit, int sendtype) {
     int result = 0;
+    CrdtMeta set_meta = {.gid = 0};
     //get value
     if(moduleKey == NULL) {
         moduleKey = RedisModule_OpenKey(ctx, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
@@ -548,8 +578,7 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         if(sendtype) RedisModule_ReplyWithNull(ctx);   
         goto error;
     }
-    // RedisModuleType* mtype= RedisModule_ModuleTypeGetType(moduleKey) ;
-    CrdtMeta set_meta = {.gid = 0};
+   
     sds callback_item;
     int type = check_type(RedisModule_GetSds(val), moduleKey);
     if(type == TYPE_ERR) {
@@ -607,6 +636,12 @@ int setexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     } else {
         return CRDT_ERROR;
     } 
+}
+
+int setnxCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if(argc < 3) return RedisModule_WrongArity(ctx);
+    int result = setGenericCommand(ctx, NULL, OBJ_SET_NO_FLAGS | OBJ_SET_NX, argv[1], argv[2], NULL, UNIT_SECONDS, 0);
+    return RedisModule_ReplyWithLongLong(ctx, result);
 }
 
 int psetexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -1088,7 +1123,11 @@ int check_type2(sds val, CrdtObject* crdt_val, CrdtTombstone* crdt_tom) {
     }
     return CRDT_REGISTER_TYPE;
 }
-int msetGenericCommand2(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+int msetGenericCommand2(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int is_nx) {
+    if (argc % 2 != 1 || argc < 3) {
+        RedisModule_WrongArity(ctx);
+        return CRDT_ERROR;
+    }
     int arraylen = (argc-1)/2;
     void* regs[arraylen];
     void* reg_toms[arraylen];
@@ -1117,6 +1156,10 @@ int msetGenericCommand2(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
             #endif
             // RedisModuleKey* moduleKey =  RedisModule_OpenKey(ctx, argv[i], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
             void* current = RedisModule_ModuleGetValue(ctx, argv[i]);
+            if(current && is_nx) {
+                RedisModule_ReplyWithLongLong(ctx, 0);
+                return CRDT_NO;
+            }
             void* tombstone = RedisModule_ModuleGetTombstone(ctx, argv[i]);
             sds val  = RedisModule_GetSds(argv[i+1]);
             int type = check_type2(val, current, tombstone);
@@ -1160,6 +1203,10 @@ int msetGenericCommand2(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
 }
 
 int msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc % 2 != 1 || argc < 3) {
+        RedisModule_WrongArity(ctx);
+        return CRDT_ERROR;
+    }
     int arraylen = (argc-1)/2;
     RedisModuleKey* regs[arraylen];
     int regs_len = 0;
@@ -1224,13 +1271,18 @@ int msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     return CRDT_OK;
 }
 
+int msetnxCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if(msetGenericCommand2(ctx, argv, argc, 1) == CRDT_OK) {
+        return RedisModule_ReplyWithLongLong(ctx, 1);
+    }
+    return CRDT_ERROR;
+}
+
 int msetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if (argc < 3) return RedisModule_WrongArity(ctx);
-    if (argc % 2 != 1) return RedisModule_WrongArity(ctx);
     // if(msetGenericCommand(ctx, argv, argc) == CRDT_OK) {
     //     return RedisModule_ReplyWithOk(ctx);
     // }
-    if(msetGenericCommand2(ctx, argv, argc) == CRDT_OK) {
+    if(msetGenericCommand2(ctx, argv, argc, 0) == CRDT_OK) {
         return RedisModule_ReplyWithOk(ctx);
     }
     return CRDT_ERROR;
@@ -1297,6 +1349,7 @@ int crdtGetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_OK;
 }
 
+
 /******************    init command  -************************/
 int initRcModule(RedisModuleCtx *ctx) {
     RedisModuleTypeMethods tm = {
@@ -1341,6 +1394,9 @@ int initRcModule(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx, "SETEX", 
                                     setexCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "SETNX", 
+                                    setnxCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "PSETEX", 
                                     psetexCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
@@ -1364,6 +1420,9 @@ int initRcModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "MSET", 
                                     msetCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "MSETNX", 
+                                    msetnxCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "MGET", 
                                     mgetCommand, "readonly fast",1,1,1) == REDISMODULE_ERR)

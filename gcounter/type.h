@@ -9,6 +9,7 @@
 
 #define PLUS_ERROR_NAN -1
 #define PLUS_ERROR_OVERFLOW -2
+#define SDS_PLUS_ERR -3
 
 
 #define COUNTER_MAX (LLONG_MAX>>4)
