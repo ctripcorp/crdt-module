@@ -454,12 +454,14 @@ int value_to_ll(ctrip_value* value) {
         return 1;
         break;
     case VALUE_TYPE_LONGDOUBLE: {
-        char buf[256];
+        char buf[MAX_LONG_DOUBLE_CHARS];
         int len = ld2string(buf, sizeof(buf), value->value.f, 1);
+        if(len > MAX_LL_SIZE) {
+            return 0;
+        }
         long long ll = 0;
         return string2ll(buf, len, &ll);
     }
-        return 0;
         break;
     case VALUE_TYPE_DOUBLE:
         printf("[value_to_ll] double to ll Code not implemented");
