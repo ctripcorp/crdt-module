@@ -786,14 +786,20 @@ int getGeneric(RedisModuleCtx* ctx, RedisModuleString *key, int sendtype) {
             case VALUE_TYPE_SDS:
                 RedisModule_ReplyWithStringBuffer(ctx, value.value.s, sdslen(value.value.s));
             break;
-            case VALUE_TYPE_LONGDOUBLE:
-                RedisModule_ReplyWithLongDouble(ctx, value.value.f);
+            case VALUE_TYPE_LONGDOUBLE: {
+                // RedisModule_ReplyWithLongDouble(ctx, value.value.f);
+                char buf[MAX_LONG_DOUBLE_CHARS];
+                int len = ld2string(buf, sizeof(buf), value.value.f, 1);
+                RedisModule_ReplyWithStringBuffer(ctx, buf, len);
+            }
             break;
-            case VALUE_TYPE_LONGLONG:
-                // RedisModuleString* result = RedisModule_CreateStringFromLongLong(ctx, value.value.i);
-                // RedisModule_ReplyWithString(ctx, result);
-                // RedisModule_FreeString(ctx, result);
-                RedisModule_ReplyWithLongLong(ctx, value.value.i);
+            case VALUE_TYPE_LONGLONG: {
+                // RedisModule_ReplyWithLongLong(ctx, value.value.i);
+                //noncrdt redis callback  string not int
+                char buf[256];
+                int len = ll2string(buf, sizeof(buf), value.value.i);
+                RedisModule_ReplyWithStringBuffer(ctx, buf, len);
+            }
             break;
             default:
                 RedisModule_ReplyWithError(ctx, "[CRDT_RC][Get] type error");
