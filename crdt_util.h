@@ -56,7 +56,7 @@ size_t feedVectorClock2Buf(char *buf, VectorClock vc);
 size_t feedMeta2Buf(char *buf, int gid, long long time, VectorClock vc);
 size_t feedArgc(char* buf, int argc);
 size_t feedKV2Buf(char *buf,const char* keystr, size_t keylen,const char* valstr, size_t vallen);
-RedisModuleKey* getRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type, int mode);
+RedisModuleKey* getRedisModuleKey(RedisModuleCtx *ctx, RedisModuleString *argv, RedisModuleType* redismodule_type, int mode, int* replyed);
 
 //about dict
 uint64_t dictSdsHash(const void *key);
@@ -66,7 +66,8 @@ void dictSdsDestructor(void *privdata, void *val);
 
 //cursor
 int parseScanCursorOrReply(RedisModuleCtx *ctx, RedisModuleString *inputCursor, unsigned long *cursor);
-void scanGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, dict *ht, int type, unsigned long cursor);
+typedef void (*ScanCallbackFunc)(void *privdata, const dictEntry *de);
+void scanGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, dict *ht, int has_value, unsigned long cursor, ScanCallbackFunc scanCallback);
 
 
 // object utils

@@ -362,7 +362,6 @@ int rcTryAdd(CRDT_RC* data, CRDT_RCTombstone* tombstone, CrdtMeta* meta, sds val
         crdt_element tel = get_element_from_rc_tombstone(rct);
         int result = purge_element(&tel, &rel);
         if(result == PURGE_VAL) {
-            rel = move_crdt_element(&tel, rel);
             set_rc_tombstone_from_element(rct, tel);
             free_external_crdt_element(rel);
             return PURGE_VAL;

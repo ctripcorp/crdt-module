@@ -1112,13 +1112,28 @@ int zlexcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return RedisModule_ReplyWithLongLong(ctx, count);
 }
 
+void zscanCallback(void *privdata, const dictEntry *de) {
+    void **pd = (void**) privdata;
+    list *keys = pd[0];
+    sds key = NULL, val = NULL;
+    key = sdsdup(dictGetKey(de));
+    double score = getZScoreByDictEntry(de);
+    char buf[MAX_LONG_DOUBLE_CHARS];
+    int len = d2string(buf, sizeof(buf), score);
+    val = sdsnewlen(buf, len);
+    listAddNodeTail(keys, key);
+    listAddNodeTail(keys, val);
+}
+
+
 //zscan key 
 int zscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_WRITE);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
-        RedisModule_ReplyWithStringBuffer(ctx, "0", 1);
-        RedisModule_ReplyWithArray(ctx, 0);
+        if(replyed) return CRDT_ERROR;
+        replyEmptyScan(ctx);
         return CRDT_ERROR;
     }
     CRDT_SS* zset = getCurrentValue(moduleKey);
@@ -1128,10 +1143,9 @@ int zscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         return REDISMODULE_OK;
     }
     unsigned long cursor;
-
     if (parseScanCursorOrReply(ctx, argv[2], &cursor) == CRDT_ERROR) return 0;
 
-    scanGenericCommand(ctx, argv, argc, getZsetDict(zset), CRDT_SET_TYPE, cursor);
+    scanGenericCommand(ctx, argv, argc, getZsetDict(zset), 1, cursor, zscanCallback);
 
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     return REDISMODULE_OK;

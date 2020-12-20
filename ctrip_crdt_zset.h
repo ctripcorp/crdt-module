@@ -133,3 +133,4 @@ unsigned long zsetGetRank(CRDT_SS* current, double score, sds ele);
 dict* getZsetDict(CRDT_SS* current);
 sds getZsetElementInfo(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field);
 int isNullZsetTombstone(CRDT_SSTombstone* tombstone);
+double getZScoreByDictEntry(dictEntry* de);

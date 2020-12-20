@@ -305,13 +305,6 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
         //delete different tombstone
         RedisModule_DeleteTombstone(moduleKey);
     }else{
-        if(!isRegister(current)) {
-            RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
-                            RedisModule_GetSds(key),getDataType(current));
-            RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
-            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);
-            return NULL;
-        }
         int result = compareCrdtMeta(getCrdtRegisterLastMeta(current), meta);
         if(result == COMPARE_META_VECTORCLOCK_LT) { return current; }
         sds prev = NULL;
@@ -435,6 +428,14 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         meta.gid = gid;
         meta.timestamp = timestamp;
         meta.vectorClock = vclock;
+        if(current) {
+            if(!isRegister(current)) {
+                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
+                                RedisModule_GetSds(argv[i]),getDataType(current));
+                RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);
+                continue;
+            }
+        }
         current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, &meta, argv[i], RedisModule_GetSds(argv[i+1]));
         RedisModule_MergeVectorClock(gid, VC2LL(meta.vectorClock));
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
@@ -530,7 +531,18 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         tombstone = NULL;
     }
     CRDT_Register* current = getCurrentValue(moduleKey);
-    
+    if(current) {
+        if(current) {
+            if(!isRegister(current)) {
+                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
+                                RedisModule_GetSds(argv[1]),getDataType(current));
+                RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+                RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);
+                status = CRDT_ERROR;
+                goto end; 
+            }
+        }
+    }
     current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, &meta, argv[1], RedisModule_GetSds(argv[2]));
     if(expire_time != -2) {
         trySetExpire(moduleKey, argv[1], getMetaTimestamp(&meta),  CRDT_REGISTER_TYPE, expire_time);

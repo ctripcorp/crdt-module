@@ -333,7 +333,6 @@ int str_to_g_counter_metas(char* buf, int len, g_counter_meta** metas) {
     g_counter_meta* meta = NULL;
     int meta_len = 0;
     int o = 0;
-    printf("[str_to_g_counter_metas] data: %s\n", buf);
     do {
         long long gid; 
         o = read_func(buf + offset, len - offset, ":", &gid, NULL, (parseFunc)string2ll);

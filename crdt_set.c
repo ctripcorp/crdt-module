@@ -35,15 +35,14 @@ int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
 
 int sismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
         RedisModule_ReplyWithLongLong(ctx, 0);
         return CRDT_ERROR;
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
-    if(current == NULL) {
-        return RedisModule_ReplyWithLongLong(ctx, 0); 
-    } 
     sds field = RedisModule_GetSds(argv[2]);
     dictEntry* de = findSetDict(current, field);
     RedisModule_CloseKey(moduleKey);
@@ -56,31 +55,28 @@ int sismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 int scardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
+        if(replyed) return REDISMODULE_ERR;
         return RedisModule_ReplyWithLongLong(ctx, 0); 
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
     RedisModule_CloseKey(moduleKey);
-    if(current == NULL) {
-        return RedisModule_ReplyWithLongLong(ctx, 0); 
-    } 
     return RedisModule_ReplyWithLongLong(ctx, getSetSize(current));
 }
 
 
 int smembersCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
         RedisModule_ReplyWithArray(ctx, 0);
         return CRDT_ERROR;
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
-    if(current == NULL) {
-        RedisModule_CloseKey(moduleKey);
-        return RedisModule_ReplyWithNull(ctx);
-    }
     size_t length = getSetSize(current);
     RedisModule_ReplyWithArray(ctx, length);
     dictEntry* de = NULL;
@@ -94,12 +90,20 @@ int smembersCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_OK;
 }
 
+
+void sscanCallback(void *privdata, const dictEntry *de) {
+    void **pd = (void**) privdata;
+    list *keys = pd[0];
+    sds key = dictGetKey(de);
+    listAddNodeTail(keys, sdsdup(key));
+}
 int sscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
-        RedisModule_ReplyWithStringBuffer(ctx, "0", 1);
-        RedisModule_ReplyWithArray(ctx, 0);
+        if(replyed) return CRDT_ERROR;
+        replyEmptyScan(ctx);
         return CRDT_ERROR;
     }
     CRDT_Set* set = getCurrentValue(moduleKey);
@@ -112,7 +116,7 @@ int sscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     if (parseScanCursorOrReply(ctx, argv[2], &cursor) == CRDT_ERROR) return 0;
 
-    scanGenericCommand(ctx, argv, argc, getSetDict(set), CRDT_SET_TYPE, cursor);
+    scanGenericCommand(ctx, argv, argc, getSetDict(set), 0, cursor, sscanCallback);
 
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     return REDISMODULE_OK;
@@ -165,10 +169,15 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
     int diff_algo = 1;
 
     for (j = 0; j < setnum; j++) {
+        int replyed = 0;
         RedisModuleKey* moduleKey = dstkey ?
-                        getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_WRITE) :
-                        getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_READ);
+                        getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_WRITE, NULL) :
+                        getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_READ, &replyed);
         if (moduleKey == NULL) {
+            if(replyed) {
+                zfree(target_sets);
+                return CRDT_ERROR;
+            }
             target_sets[j] = NULL;
             continue;
         }
@@ -359,12 +368,6 @@ int sremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     appendVCForMeta(&meta, getCrdtSetLastVc(current));
     for(int i = 2; i < argc; i += 1) {
         sds field = RedisModule_GetSds(argv[i]);
-        // dictEntry* de = findSetDict(current, field);
-        // int r = removeSetDict(current, field, &meta);
-        // if(r) {
-        //     addSetTombstoneDictValue(tombstone, field, &meta);
-        //     result += 1;
-        // }
         result += setRem(current, tombstone, field, &meta);
     }
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "srem", argv[1]);

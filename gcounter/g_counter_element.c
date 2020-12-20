@@ -561,7 +561,9 @@ crdt_tag_base_and_add_counter* A2BA(crdt_tag_add_counter* a) {
         return ba;
     } else {
         crdt_tag_base_and_ld_add_counter* ldba = create_base_ld_add(get_tag_gid((crdt_tag*)a));
-        dup_tag_ld_add_from_nld_add(ldba, a);
+        crdt_tag_ld_add_counter* lda = (crdt_tag_ld_add_counter*)a; 
+        ldba->add_vcu = lda->add_vcu;
+        ldba->add_counter = lda->add_counter;
         free_crdt_tag((crdt_tag*)a);
         return (crdt_tag_base_and_add_counter*)ldba;
     }

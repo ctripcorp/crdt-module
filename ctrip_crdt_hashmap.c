@@ -925,6 +925,41 @@ int hlenCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_OK;
 }
 
+void hscanCallback(void *privdata, const dictEntry *de) {
+    void **pd = (void**) privdata;
+    list *keys = pd[0];
+    sds key = NULL, val = NULL;
+    key = sdsdup(dictGetKey(de));
+    CRDT_Register *crdtRegister = dictGetVal(de);
+    val = sdsdup(getCrdtRegisterLastValue(crdtRegister));
+    listAddNodeTail(keys, key);
+    listAddNodeTail(keys, val);
+}
+
+int hscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc < 3) return RedisModule_WrongArity(ctx);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtHash, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
+        replyEmptyScan(ctx);
+        return CRDT_ERROR;
+    }
+    CRDT_Hash* hash = getCurrentValue(moduleKey);
+    if(hash == NULL) {
+        replyEmptyScan(ctx);
+        RedisModule_CloseKey(moduleKey);
+        return REDISMODULE_OK;
+    }
+    unsigned long cursor;
+
+    if (parseScanCursorOrReply(ctx, argv[2], &cursor) == CRDT_ERROR) return 0;
+
+    scanGenericCommand(ctx, argv, argc, hash->map, 1, cursor, hscanCallback);
+
+    if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
+    return REDISMODULE_OK;
+}
 /*
  * Init Hash Module 
  */
@@ -1005,9 +1040,11 @@ int initCrdtHashModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"hlen",
-                                  hlenCommand,"write",1,1,1) == REDISMODULE_ERR)
+                                  hlenCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
-
+    if (RedisModule_CreateCommand(ctx,"hscan",
+                                  hscanCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
 /**

@@ -88,7 +88,6 @@ int crdtSelectCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (RedisModule_CrdtSelectDb(ctx, gid, id) != REDISMODULE_OK) {
         RedisModule_ReplyWithError(ctx,"DB index is out of range");
         return CRDT_ERROR;
-    
     }
     return RedisModule_ReplyWithOk(ctx);
 }

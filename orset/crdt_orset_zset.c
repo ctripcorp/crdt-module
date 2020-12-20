@@ -834,6 +834,8 @@ int zsetTryAdd(CRDT_SS* value, CRDT_SSTombstone* tombstone, sds field, CrdtMeta*
     free_ctrip_value(v);
     if(sst) {
         if(isVectorClockMonoIncr(vc, sst->maxdelvc) ) {
+            free_internal_crdt_element(rel);
+            free_external_crdt_element(rel);
             return 0;
         }
         dictEntry* tde = dictFind(sst->dict, field);
@@ -1310,6 +1312,13 @@ int zsetTryDel(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta) {
         dictReleaseIterator(di);
     }
     return 1;
+}
+
+double getZScoreByDictEntry(dictEntry* de) {
+    crdt_element el = dict_get_element(de);
+    double score = 0;
+    crdtAssert(get_double_score_by_element(el, &score));
+    return score;
 }
 
 long zsetRank(CRDT_SS* ss, sds ele, int reverse) {
