@@ -789,7 +789,7 @@ int zrankGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
     if(argc != 3) { return RedisModule_WrongArity(ctx);}
     RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
     if(moduleKey == NULL) {
-        RedisModule_ReplyWithArray(ctx , 0);
+        RedisModule_ReplyWithNull(ctx);
         goto end;
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
