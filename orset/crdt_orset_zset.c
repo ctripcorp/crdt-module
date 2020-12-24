@@ -175,11 +175,10 @@ crdt_zset *crdt_zset_merge(crdt_zset *target, crdt_zset *other) {
         zslDelete(other->zsl, eold_score, field, NULL);
         // dict_set_element(de, create_crdt_element());
         dict_clean_element(other->dict, de);
+        result->lastvc = append_vc_from_element(result->lastvc, rel);
     }
     dictReleaseIterator(di);
-    VectorClock old_vc = result->lastvc;
-    result->lastvc = vectorClockMerge(result->lastvc, other->lastvc);
-    freeVectorClock(old_vc);
+    updateCrdtSSLastVc(result, other->lastvc);
     return result;
 }
 
@@ -221,6 +220,7 @@ VectorClock getCrdtSSLastVc(CRDT_SS* data) {
 }
 
 void updateCrdtSSLastVc(CRDT_SS* data, VectorClock vc) {
+    if(isNullVectorClock(vc)) return;
     crdt_zset* zset = retrieve_crdt_zset(data);
     VectorClock old_vc = zset->lastvc;
     zset->lastvc = vectorClockMerge(zset->lastvc, vc);
@@ -336,18 +336,11 @@ crdt_zset_tombstone* crdt_zset_tombstone_merge(crdt_zset_tombstone* target, crdt
         }
         dict_set_element(result->dict, rde, rel);
         dict_clean_element(other->dict, de);
+        result->lastvc = append_vc_from_element(result->lastvc, rel);
     }
     dictReleaseIterator(di);
-    VectorClock vc = result->lastvc;
-    result->lastvc = vectorClockMerge(result->lastvc , other->lastvc);
-    if(!isNullVectorClock(vc)) {
-        freeVectorClock(vc);
-    }
-    vc = result->maxdelvc;
-    result->maxdelvc = vectorClockMerge(vc, other->maxdelvc);
-    if(!isNullVectorClock(vc)) {
-        freeVectorClock(vc);
-    }
+    updateCrdtSSTLastVc(result, other->lastvc);
+    updateCrdtSSTMaxDel(result, other->maxdelvc);
     return result;
 }
 
@@ -625,14 +618,16 @@ int crdtZsetTombstonePurge(CrdtTombstone* tombstone, CrdtData* value) {
         }
     }
     dictReleaseIterator(tdi);
-    updateCrdtSSLastVc((CRDT_SS*)zset, zset_tombstone->lastvc);
-    updateCrdtSSTLastVc((CRDT_SSTombstone*)zset_tombstone, zset->lastvc);
     if(dictSize(zset_tombstone->dict) == 0) {
+        updateCrdtSSLastVc((CRDT_SS*)zset, zset_tombstone->lastvc);
         return PURGE_TOMBSTONE;
     }
     if(dictSize(zset->dict) == 0) {
+        updateCrdtSSTLastVc((CRDT_SSTombstone*)zset_tombstone, zset->lastvc);
         return PURGE_VAL;
     }
+    updateCrdtSSLastVc((CRDT_SS*)zset, zset_tombstone->lastvc);
+    updateCrdtSSTLastVc((CRDT_SSTombstone*)zset_tombstone, zset->lastvc);
     return 0;
 }
 
@@ -659,6 +654,7 @@ size_t zsetTombstoneLength(CRDT_SSTombstone* ss) {
 }
 
 void updateCrdtSSTMaxDel(CRDT_SSTombstone* data, VectorClock vc) {
+    if(isNullVectorClock(vc)) return;
     crdt_zset_tombstone* zset_tombstone = retrieve_crdt_zset_tombstone(data);
     VectorClock old_vc = zset_tombstone->maxdelvc;
     zset_tombstone->maxdelvc = vectorClockMerge(zset_tombstone->maxdelvc, vc);
@@ -673,6 +669,7 @@ VectorClock getCrdtSSTMaxDelVc(CRDT_SSTombstone* data) {
 }
 
 void updateCrdtSSTLastVc(CRDT_SSTombstone* data, VectorClock vc) {
+    if(isNullVectorClock(vc)) return;
     crdt_zset_tombstone* zset_tombstone = retrieve_crdt_zset_tombstone(data);
     VectorClock old_vc = zset_tombstone->lastvc;
     zset_tombstone->lastvc = vectorClockMerge(zset_tombstone->lastvc, vc);
@@ -1040,10 +1037,13 @@ sds zsetAdd2(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fi
                     return NULL;
                 }
                 result = element_add_counter_by_tag2(&tel, &a);
+                crdtAssert(get_len(getMetaVectorClock(meta)) >= get_element_len(tel));
             } else {
                 tel = element_merge_tag2(tel, &b);
                 result = get_base_value_sds_from_element(tel, gid);
+                crdtAssert(get_len(getMetaVectorClock(meta)) >=  get_element_len(tel));
             }
+
             // dict_set_element(tde, create_crdt_element());
             dict_clean_element(sst->dict, tde);
             dictFreeUnlinkedEntry(sst->dict, tde);
@@ -1071,12 +1071,14 @@ sds zsetAdd2(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fi
                 }
                 result = element_add_counter_by_tag2(&el, &a);
                 get_double_score_by_element(el, newscore);
+                crdtAssert(get_len(getMetaVectorClock(meta)) >= get_element_len(el));
             } else {
                 el = element_clean(el, -1, 0, 0);
                 el = element_merge_tag2(el, &b);
                 result = get_base_value_sds_from_element(el, gid);
                 // result = sdscatprintf(result, ",%s", get_delete_counter_sds_from_element(el));
                 *newscore = score;
+                crdtAssert(get_len(getMetaVectorClock(meta)) >= get_element_len(el));
             }
             // dict_set_element(de, el);
             dict_set_element(ss->dict, de, el);
@@ -1086,12 +1088,15 @@ sds zsetAdd2(CRDT_SS* value, CRDT_SSTombstone* tombstone, CrdtMeta* meta, sds fi
             return result;
         } else if(!xx) {
             el = create_crdt_element();
+            el = element_complete_by_vc(el, getMetaVectorClock(meta), gid);
             if(incr) {
                 el = element_add_tag(el, dup_crdt_tag((crdt_tag*)&a));
                 result = get_add_value_sds_from_tag((crdt_tag*)&a);
+                crdtAssert(get_len(getMetaVectorClock(meta)) >= get_element_len(el));
             } else {
                 el = element_add_tag(el, dup_crdt_tag((crdt_tag*)&b));
                 result = get_base_value_sds_from_element(el, gid);
+                crdtAssert(get_len(getMetaVectorClock(meta)) >= get_element_len(el));
             }
             zset_add_element(ss, field, el);
             *newscore = score;

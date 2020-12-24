@@ -801,8 +801,16 @@ int getGeneric(RedisModuleCtx* ctx, RedisModuleString *key, int sendtype) {
                 RedisModule_ReplyWithStringBuffer(ctx, buf, len);
             }
             break;
-            default:
-                RedisModule_ReplyWithError(ctx, "[CRDT_RC][Get] type error");
+            default: {
+                sds info = crdtRcInfo(rc);
+                RedisModule_Debug(logLevel, "[CRDT_RC] value type error %d,  key: %s ,info: %s", value.type, RedisModule_GetSds(key),  info);
+                sdsfree(info);
+                if(sendtype) {
+                    RedisModule_ReplyWithError(ctx, "[CRDT_RC][Get] type error");
+                } else {
+                    RedisModule_ReplyWithNull(ctx);
+                }
+            }
             break;
         }
     }

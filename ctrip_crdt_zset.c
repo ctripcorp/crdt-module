@@ -441,9 +441,6 @@ int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     int need_add = 0;
     if(current == NULL) {
         current = create_crdt_zset();
-        if(tombstone) {
-            updateCrdtSSLastVc(current, getCrdtSSTLastVc(tombstone));
-        }
         need_add = 1;
     } 
     int result = 0;

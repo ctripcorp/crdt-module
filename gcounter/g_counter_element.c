@@ -1849,7 +1849,9 @@ int purge_element(crdt_element* tel, crdt_element* el) {
             free_crdt_tag(tag);
             continue;
         }
-        purge_tag_value = 0;
+        if(!is_deleted_tag(tag)) {
+            purge_tag_value = 0;
+        }
         rel = element_add_tag(rel, tag);
     }
     free_internal_crdt_element_array(*el);
@@ -1889,6 +1891,23 @@ crdt_element element_clean(crdt_element el, int gid, long long vcu, int add_self
     return el;
 }
 
+crdt_element element_complete_by_vc(crdt_element el, VectorClock vc, int ignore_gid) {
+    for(int i = 0, len = get_len(vc); i < len; i++) {
+        clk* c = get_clock_unit_by_index(&vc, i);
+        int c_gid = get_gid(*c);
+        if(c_gid == ignore_gid) {
+            continue;
+        }
+        if(element_get_tag_by_gid(el, c_gid, NULL)) {
+            continue;
+        }
+        long long vcu = get_logic_clock(*c);
+        crdt_tag_base* b = create_base_tag(c_gid);
+        b->base_vcu = vcu;
+        el = element_add_tag(el, (crdt_tag*)b);
+    }
+    return el;
+}   
 
 crdt_element element_try_clean_by_vc(crdt_element el, VectorClock vc, int* is_deleted) {
     crdt_element rel = create_crdt_element();
@@ -3461,11 +3480,9 @@ crdt_tag_base* create_base_tag_by_meta(CrdtMeta* meta, ctrip_value v) {
     return b;
 }
 
-void append_meta_vc_from_element(CrdtMeta* meta, crdt_element el) {
-    VectorClock vc = getMetaVectorClock(meta);
+VectorClock append_vc_from_element(VectorClock vc, crdt_element el) {
     if(isNullVectorClock(vc)) {
-        meta->vectorClock = element_get_vc(el);
-        return;
+        return element_get_vc(el);
     }
     for(int i = 0, len = get_element_len(el); i < len; i++) {
         crdt_tag* tag = element_get_tag_by_index(el, i);
@@ -3481,5 +3498,10 @@ void append_meta_vc_from_element(CrdtMeta* meta, crdt_element el) {
             vc = addVectorClockUnit(vc, gid, e_vcu);
         }
     }
-    meta->vectorClock = vc;
+    return vc;
+}
+
+void append_meta_vc_from_element(CrdtMeta* meta, crdt_element el) {
+    VectorClock vc = getMetaVectorClock(meta);
+    meta->vectorClock = append_vc_from_element(vc, el);
 }

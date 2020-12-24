@@ -445,7 +445,7 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             deleted++;  
         }
     }
-    if (crdtHtNeedsResize(current->map)) dictResize(current->map);
+    
     
     if(deleted > 0) {
         changeCrdtHash(current, &hdel_meta);
@@ -456,6 +456,8 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         deleteall = CRDT_OK;
         RedisModule_DeleteKey(moduleKey);
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
+    } else {
+        if (crdtHtNeedsResize(current->map)) dictResize(current->map);
     }
 end:
     if(hdel_meta.gid != 0) {
@@ -699,11 +701,11 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
         }
     }
     dictReleaseIterator(di);
-    
-    /* Always check if the dictionary needs a resize after a delete. */
-    if (crdtHtNeedsResize(current->map)) dictResize(current->map);
     if (dictSize(current->map) == 0) {
         RedisModule_DeleteKey(moduleKey);
+    } else {
+        /* Always check if the dictionary needs a resize after a delete. */
+        if (crdtHtNeedsResize(current->map)) dictResize(current->map);
     }
     RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
@@ -808,13 +810,15 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     }
     changeCrdtHashTombstone(tombstone, meta);
     if(current != NULL) {
-        if(deleted > 0 && crdtHtNeedsResize(current->map)) {
-            changeCrdtHash(current, meta);
-            dictResize(current->map);
-        }
+        
         if (dictSize(current->map) == 0) {
             RedisModule_DeleteKey(moduleKey);
             keyremoved = CRDT_OK;
+        } else {
+            if(deleted > 0 && crdtHtNeedsResize(current->map)) {
+                changeCrdtHash(current, meta);
+                dictResize(current->map);
+            }
         }
     }
     
