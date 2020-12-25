@@ -127,6 +127,7 @@ void setCrdtLWWRegisterTombstoneMeta(CRDT_LWW_RegisterTombstone* t, CrdtMeta* me
 }
 void initLWWReigster(CRDT_LWW_Register *crdtRegister) {
     crdtRegister->type = 0;
+    initCrdtObject((CrdtObject*)crdtRegister);
     setType((CrdtObject*)crdtRegister, CRDT_DATA);
     setDataType((CrdtObject*)crdtRegister, CRDT_REGISTER_TYPE);
     crdtRegister->vectorClock = newVectorClock(0);
@@ -204,9 +205,9 @@ int compareLWWCrdtRegisterAndDelMeta(CRDT_Register* current, CrdtMeta* meta) {
 }
 CRDT_LWW_RegisterTombstone* createCrdtLWWRegisterTombstone() {
     CRDT_LWW_RegisterTombstone *tombstone = RedisModule_Alloc(sizeof(CRDT_LWW_RegisterTombstone));
-    tombstone->type = 0;
     tombstone->timestamp = 0;
     tombstone->gid = 0;
+    initCrdtObject((CrdtObject*)tombstone);
     setType((CrdtObject*)tombstone, CRDT_TOMBSTONE);
     setDataType((CrdtObject*)tombstone, CRDT_REGISTER_TYPE);
     tombstone->vectorClock = newVectorClock(0);

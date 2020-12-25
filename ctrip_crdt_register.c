@@ -774,9 +774,7 @@ int getGeneric(RedisModuleCtx* ctx, RedisModuleString *key, int sendtype) {
             RedisModule_ReplyWithNull(ctx);
             goto error;
         }
-        RedisModuleString *result = RedisModule_CreateString(ctx, val, sdslen(val));
-        RedisModule_ReplyWithString(ctx, result);
-        RedisModule_FreeString(ctx, result);
+        RedisModule_ReplyWithStringBuffer(ctx, val, sdslen(val));
         goto next;
     }
     if(rc) {

@@ -179,6 +179,11 @@ void setDataType(CrdtObject* obj, int type) {
 int getDataType(CrdtObject* obj) {
     return obj->dataType;
 }
+int initCrdtObject(CrdtObject* obj) {
+    obj->type = 0;
+    obj->dataType = 0;
+    obj->reserved = 0;
+}
 /**
  * CrdtMeta Get Set Functions
  */ 

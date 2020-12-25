@@ -105,7 +105,7 @@ void updateLastVCLWWHash(void* data, VectorClock vc) {
 
 void* createCrdtLWWHash() {
     CRDT_LWW_Hash *crdtHash = RedisModule_Alloc(sizeof(CRDT_LWW_Hash));
-    crdtHash->type = 0;
+    initCrdtObject((CrdtObject*)crdtHash);
     setType((CrdtObject*)crdtHash , CRDT_DATA);
     setDataType((CrdtObject*)crdtHash , CRDT_HASH_TYPE);
     dict *hash = dictCreate(&crdtHashDictType, NULL);
@@ -166,6 +166,7 @@ void* createCrdtLWWHashTombstone() {
     crdtHashTombstone->type = 0;
     crdtHashTombstone->maxDelGid = 0;
     crdtHashTombstone->maxDelTimestamp = 0;
+    initCrdtObject((CrdtObject*)crdtHashTombstone);
     setDataType((CrdtObject*)crdtHashTombstone, CRDT_HASH_TYPE);
     setType((CrdtObject*)crdtHashTombstone,  CRDT_TOMBSTONE);
     dict *hash = dictCreate(&crdtHashTombstoneDictType, NULL);

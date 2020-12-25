@@ -20,6 +20,7 @@ crdt_rc_tombstone* retrieve_crdt_rc_tombstone(CRDT_RCTombstone* rct) {
 
 
 void reset_rc_type(CRDT_RC* rc) {
+    initCrdtObject((CrdtObject*)rc);
     setDataType((CrdtObject*)rc, CRDT_RC_TYPE);
     setType((CrdtObject*)rc, CRDT_DATA);
 }
@@ -91,6 +92,7 @@ crdt_orset_rc* load_rc_by_rdb(RedisModuleIO *rdb) {
 
 //crdt_rc_tombstone
 void reset_rc_tombstone_type(CRDT_RCTombstone* rct) {
+    initCrdtObject((CrdtObject*)rct);
     setDataType((CrdtObject*)rct, CRDT_RC_TYPE);
     setType((CrdtObject*)rct, CRDT_TOMBSTONE);
 }
@@ -264,7 +266,7 @@ int rcTryIncrby(CRDT_RC* data, CRDT_RCTombstone* tombstone, CrdtMeta* meta, sds 
                 return PURGE_VAL;
             }  
         } else {
-            tel = element_add_tag(tel, tag);
+            tel = element_add_tag(tel, a);
         }
         move_crdt_element(&el, tel);
         reset_crdt_element(&tel);

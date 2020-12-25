@@ -41,9 +41,9 @@ void save_zset_dict_to_rdb(RedisModuleIO *rdb, dict* d) {
 
 /******************* crdt_zset function +*******************/
 
-CRDT_SS* create_crdt_zset() {
+CRDT_SS* createCrdtZset() {
     struct crdt_zset* s = RedisModule_Alloc(sizeof(crdt_zset));
-    s->type = 0;
+    initCrdtObject((CrdtObject*)s);
     setDataType((CrdtObject*)s, CRDT_ZSET_TYPE);
     setType((CrdtObject*)s, CRDT_DATA);
     s->dict = dictCreate(&crdtZSetDictType, NULL);
@@ -64,7 +64,7 @@ void free_crdt_zset(crdt_zset* zset) {
 }
 
 void *load_zset_by_rdb(RedisModuleIO *rdb, int version, int encver) {
-    crdt_zset* set = (crdt_zset*)create_crdt_zset();
+    crdt_zset* set = (crdt_zset*)createCrdtZset();
     VectorClock lastvc = rdbLoadVectorClock(rdb, version);
     set->lastvc = lastvc;
     uint64_t len = RedisModule_LoadUnsigned(rdb);
@@ -86,7 +86,7 @@ void *load_zset_by_rdb(RedisModuleIO *rdb, int version, int encver) {
 }
 
 crdt_zset* dup_crdt_zset(crdt_zset* target) {
-    crdt_zset* result = (crdt_zset*)create_crdt_zset();
+    crdt_zset* result = (crdt_zset*)createCrdtZset();
     result->lastvc = dupVectorClock(target->lastvc);
     dictIterator* di = dictGetIterator(target->dict);
     dictEntry* de = NULL;
@@ -135,7 +135,7 @@ crdt_zset* zset_replace_value(crdt_zset* target, crdt_zset* other) {
 }
 //only used peer sync merge object
 crdt_zset *crdt_zset_merge(crdt_zset *target, crdt_zset *other) {
-    crdt_zset* result = (crdt_zset*)create_crdt_zset();
+    crdt_zset* result = (crdt_zset*)createCrdtZset();
     if (target == NULL && other ==  NULL) {
         return NULL;
     }
@@ -233,9 +233,9 @@ void updateCrdtSSLastVc(CRDT_SS* data, VectorClock vc) {
 
 /******************* crdt_zset tombstone function +*******************/
 
-CRDT_SSTombstone* create_crdt_zset_tombstone() {
+CRDT_SSTombstone* createCrdtZsetTombstone() {
     crdt_zset_tombstone* st = RedisModule_Alloc(sizeof(crdt_zset_tombstone));
-    st->type = 0;
+    initCrdtObject((CrdtObject*)st);
     setDataType((CrdtObject*)st, CRDT_ZSET_TYPE);
     setType((CrdtObject*)st, CRDT_TOMBSTONE);
     st->dict = dictCreate(&crdtZSetDictType, NULL);
@@ -256,7 +256,7 @@ void free_crdt_zset_tombstone(crdt_zset_tombstone* tombstone) {
 }
 
 void * load_zset_tombstone_by_rdb(RedisModuleIO *rdb, int version, int encver) {
-    crdt_zset_tombstone* zset_tombstone = (crdt_zset_tombstone*)create_crdt_zset_tombstone();
+    crdt_zset_tombstone* zset_tombstone = (crdt_zset_tombstone*)createCrdtZsetTombstone();
     VectorClock lastvc = rdbLoadVectorClock(rdb, version);
     zset_tombstone->lastvc = lastvc;
     zset_tombstone->maxdelvc = rdbLoadVectorClock(rdb, version);
@@ -275,7 +275,7 @@ void * load_zset_tombstone_by_rdb(RedisModuleIO *rdb, int version, int encver) {
 }
 
 crdt_zset_tombstone* dup_crdt_zset_tombstone(crdt_zset_tombstone* target) {
-    crdt_zset_tombstone* result = (crdt_zset_tombstone*)create_crdt_zset_tombstone();
+    crdt_zset_tombstone* result = (crdt_zset_tombstone*)createCrdtZsetTombstone();
     result->lastvc = dupVectorClock(target->lastvc);
     result->maxdelvc = dupVectorClock(target->maxdelvc);
     dictIterator* di = dictGetIterator(target->dict);
@@ -308,7 +308,7 @@ crdt_zset_tombstone* replace_zset_tombstone_value(crdt_zset_tombstone* target, c
 }
 
 crdt_zset_tombstone* crdt_zset_tombstone_merge(crdt_zset_tombstone* target, crdt_zset_tombstone* other) {
-    crdt_zset_tombstone* result = (crdt_zset_tombstone*)create_crdt_zset_tombstone();
+    crdt_zset_tombstone* result = (crdt_zset_tombstone*)createCrdtZsetTombstone();
     if (target == NULL && other ==  NULL) {
         return NULL;
     }
@@ -404,7 +404,7 @@ CrdtObject** crdtSSFilter(CrdtObject* data, int gid, long long logic_time, long 
             current = NULL;
         }
         if(current == NULL) {
-            current = (crdt_zset*)create_crdt_zset();
+            current = (crdt_zset*)createCrdtZset();
             current_memory = 0;
             (*num)++;
             if(result) {
@@ -503,7 +503,7 @@ CrdtTombstone** crdtSSTFilter(CrdtTombstone* target, int gid, long long logic_ti
             current = NULL;
         }
         if(current == NULL) {
-            current = (crdt_zset_tombstone*)create_crdt_zset_tombstone();
+            current = (crdt_zset_tombstone*)createCrdtZsetTombstone();
             current_memory = 0;
             (*num)++;
             if(result) {
@@ -524,7 +524,7 @@ CrdtTombstone** crdtSSTFilter(CrdtTombstone* target, int gid, long long logic_ti
         if(vcu < logic_time) {
             return NULL;
         } 
-        current = (crdt_zset_tombstone*)create_crdt_zset_tombstone();
+        current = (crdt_zset_tombstone*)createCrdtZsetTombstone();
         result = RedisModule_Alloc(sizeof(crdt_zset*));
         result[0] = current;
         *num = 1;
@@ -677,6 +677,8 @@ void updateCrdtSSTLastVc(CRDT_SSTombstone* data, VectorClock vc) {
         freeVectorClock(old_vc);
     }
 }
+
+
 
 int initSSTombstoneFromSS(CRDT_SSTombstone* tombstone,CrdtMeta* del_meta, CRDT_SS* value, sds* del_counters) {
     crdt_zset_tombstone* sst = retrieve_crdt_zset_tombstone(tombstone);
@@ -1499,4 +1501,18 @@ int isNullZsetTombstone(CRDT_SSTombstone* tom) {
         return 0;
     }
     return result;
+}
+
+void zsetTombstoneTryResizeDict(CRDT_SSTombstone* tombstone) {
+    crdt_zset_tombstone* sst =  retrieve_crdt_zset_tombstone(tombstone);
+    if(htNeedsResize(sst->dict)) {
+        dictResize(sst->dict);
+    } 
+}
+
+void zsetTryResizeDict(CRDT_SS* current) {
+    crdt_zset* ss = retrieve_crdt_zset(current);
+    if(htNeedsResize(ss->dict)) {
+        dictResize(ss->dict);
+    } 
 }

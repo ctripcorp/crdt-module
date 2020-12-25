@@ -23,7 +23,7 @@
 
 #define CRDT_SS_DATATYPE_NAME "crdt_ss_v"
 #define CRDT_SS_TOMBSTONE_DATATYPE_NAME "crdt_ss_t"
-typedef CrdtObject CRDT_SS;
+typedef CrdtData CRDT_SS;
 typedef CrdtTombstone CRDT_SSTombstone;
 /* ZSETs use a specialized version of Skiplists */
 
@@ -83,8 +83,8 @@ int zsetStartGc();
 
 //  init redis module
 int initCrdtSSModule(RedisModuleCtx *ctx);
-CRDT_SS* create_crdt_zset();
-CRDT_SSTombstone* create_crdt_zset_tombstone();
+CRDT_SS* createCrdtZset();
+CRDT_SSTombstone* createCrdtZsetTombstone();
 // ===== sorted set ========
 void *RdbLoadCrdtSS(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtSS(RedisModuleIO *rdb, void *value);
@@ -134,3 +134,5 @@ dict* getZsetDict(CRDT_SS* current);
 sds getZsetElementInfo(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field);
 int isNullZsetTombstone(CRDT_SSTombstone* tombstone);
 double getZScoreByDictEntry(dictEntry* de);
+void zsetTombstoneTryResizeDict(CRDT_SSTombstone* tombstone);
+void zsetTryResizeDict(CRDT_SS* current);

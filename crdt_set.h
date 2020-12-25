@@ -139,5 +139,6 @@ static inline CRDT_SetTombstone* retrieveCrdtSetTombstone(void* t) {
     return result;
 }
 
-
+void setTombstoneTryResizeDict(CRDT_SetTombstone* tombstone);
+void setTryResizeDict(CRDT_Set* current);
 #endif

@@ -492,18 +492,25 @@ int saddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     if(current == NULL) {
         current = createCrdtSet();
-        if(tombstone) {
-            updateCrdtSetLastVc(current, getCrdtSetTombstoneLastVc(tombstone));
-        }
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtSet, current);
-    } 
-    appendVCForMeta(&meta, getCrdtSetLastVc(current));
+        if(tombstone) {
+            appendVCForMeta(&meta, getCrdtSetTombstoneLastVc(tombstone));
+        }
+    } else {
+        appendVCForMeta(&meta, getCrdtSetLastVc(current));
+    }
+   
     for(int i = 2; i < argc; i += 1) {
         sds field = RedisModule_GetSds(argv[i]);
         result += setAdd(current, tombstone, field, &meta);
     }
-    if(tombstone && isNullSetTombstone(tombstone)) {
-        RedisModule_DeleteTombstone(moduleKey);
+    if(tombstone) {
+        if(isNullSetTombstone(tombstone)) {
+            RedisModule_DeleteTombstone(moduleKey);
+        } else {
+            setTombstoneTryResizeDict(tombstone);
+        }
+        
     }
     updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "sadd", argv[1]);
@@ -552,8 +559,12 @@ int crdtSaddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         // dictEntry* de = findSetDict(current, field);
         result += setTryAdd(current, tombstone, field, &meta);
     }
-    if(tombstone && isNullSetTombstone(tombstone)) {
-        RedisModule_DeleteTombstone(moduleKey);
+    if(tombstone) {
+        if(isNullSetTombstone(tombstone)) {
+            RedisModule_DeleteTombstone(moduleKey);
+        } else {
+            setTombstoneTryResizeDict(tombstone);
+        }
     }
     updateCrdtSetLastVcuByVectorClock(current, getMetaGid(&meta), getMetaVectorClock(&meta));
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
@@ -596,6 +607,9 @@ int crdtSremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     CRDT_Set* current = getCurrentValue(moduleKey);
     if(tombstone == NULL) {
         tombstone = createCrdtSetTombstone();
+        if(current) {
+            updateCrdtSetTombstoneLastVc(tombstone, getCrdtSetLastVc(current));
+        }
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
     }
     int result = 0;
@@ -604,13 +618,14 @@ int crdtSremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         // dictEntry* de = findSetDict(current, field);
         result += setTryRem(current, tombstone, field, &meta);
     }
-    if(current) {
+    if(current && result) {
         if(getSetSize(current) == 0) {
             RedisModule_DeleteKey(moduleKey);
             RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "del", argv[1]);
             current = NULL;
         } else {
             updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
+            setTryResizeDict(current);
         }
     }
     updateCrdtSetTombstoneLastVc(tombstone, getMetaVectorClock(&meta));
@@ -703,21 +718,26 @@ int crdtDelSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     CRDT_Set* current = getCurrentValue(moduleKey);
     if(tombstone == NULL) {
         tombstone = createCrdtSetTombstone();
+        if(current) {
+            updateCrdtSetTombstoneLastVc(tombstone, getCrdtSetLastVc(current));
+        }
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
     }
 
     if(setTryDel(current, tombstone, &meta)) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "srem", argv[1]);
+        if(current) {
+            if(getSetSize(current) == 0) {
+                RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "del", argv[1]);
+                RedisModule_DeleteKey(moduleKey);
+                current = NULL;
+            } else {
+                updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
+                setTryResizeDict(current);
+            }
+        }
     }
     updateCrdtSetTombstoneLastVc(tombstone, getMetaVectorClock(&meta));
-    if(current && getSetSize(current) == 0) {
-        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "del", argv[1]);
-        RedisModule_DeleteKey(moduleKey);
-        current = NULL;
-    }
-    if(current) {
-        updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
-    }
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
 
 end:

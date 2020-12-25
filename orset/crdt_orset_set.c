@@ -223,7 +223,7 @@ sds set_element_info(dictEntry* de) {
 /****************  set  public  function +****************/
 CRDT_Set* createCrdtSet() {
     crdt_orset_set* set = RedisModule_Alloc(sizeof(crdt_orset_set));
-    set->type = 0;
+    initCrdtObject((CrdtObject*)set);
     setType((CrdtObject*)set , CRDT_DATA);
     setDataType((CrdtObject*)set , CRDT_SET_TYPE);
     dict *map = dictCreate(&crdtSetDictType, NULL);
@@ -517,6 +517,7 @@ CrdtObject *crdtSetMerge(CrdtObject *currentVal, CrdtObject *value) {
 CRDT_SetTombstone* createCrdtSetTombstone() {
     crdt_orset_set_tombstone* tombstone = RedisModule_Alloc(sizeof(crdt_orset_set_tombstone));
     tombstone->type = 0;
+    initCrdtObject((CrdtObject*)tombstone);
     setType((CrdtObject*)tombstone , CRDT_TOMBSTONE);
     setDataType((CrdtObject*)tombstone , CRDT_SET_TYPE);
     dict *map = dictCreate(&crdtSetDictType, NULL);
@@ -1081,4 +1082,18 @@ int isNullSetTombstone(CRDT_SetTombstone* t) {
         is_null = 0;
     }
     return is_null;
+}
+
+void setTombstoneTryResizeDict(CRDT_SetTombstone* tombstone) {
+    crdt_orset_set_tombstone* st =  retrieve_set_tombstone(tombstone);
+    if(htNeedsResize(st->dict)) {
+        dictResize(st->dict);
+    }
+}
+
+void setTryResizeDict(CRDT_Set* current) {
+    crdt_orset_set* s = retrieve_crdt_orset_set(current);
+    if(htNeedsResize(s->dict)) {
+        dictResize(s->dict);
+    }
 }

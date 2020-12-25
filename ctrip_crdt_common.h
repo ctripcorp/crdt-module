@@ -77,6 +77,7 @@ int getDataType(CrdtObject *obj);
 void setDataType(CrdtObject *obj, int type);
 void setType(CrdtObject *obj, int type);
 int getType(CrdtObject *obj);
+int initCrdtObject(CrdtObject* obj);
 typedef CrdtObject CrdtData;
 typedef CrdtObject CrdtTombstone;
 typedef CrdtObject *(*crdtMergeFunc)(CrdtObject *curVal, CrdtObject *value);

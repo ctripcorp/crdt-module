@@ -53,7 +53,7 @@
 #define UNIT_SECONDS 0
 #define UNIT_MILLISECONDS 1
 
-typedef CrdtObject CRDT_RC;
+typedef CrdtData CRDT_RC;
 typedef CrdtTombstone CRDT_RCTombstone;
 //========================= Register moduleType functions =======================
 
