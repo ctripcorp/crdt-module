@@ -150,7 +150,7 @@ sds initRcTombstoneFromRc(CRDT_RCTombstone *tombstone, CrdtMeta* meta, CRDT_RC* 
     crdt_element tel = get_element_from_rc_tombstone(rct);
     el = move_crdt_element(&tel, el);
     set_rc_tombstone_from_element(rct, tel);
-    reset_crdt_element(&el);
+    // reset_crdt_element(&el);
     set_rc_from_element(rc, el);
     return get_delete_counter_sds_from_element(tel);
 }
@@ -226,7 +226,7 @@ void rc_tombstone_2_rc(CRDT_RC* data, CRDT_RCTombstone* tombstone) {
     crdt_element tel = get_element_from_rc_tombstone(rct);
     crdt_element el = get_element_from_rc(rc);
     tel = move_crdt_element(&el, tel);
-    reset_crdt_element(&tel);
+    // reset_crdt_element(&tel);
     set_rc_from_element(rc, el);
     set_rc_tombstone_from_element(rct, tel);
     // *rc = *rct;
@@ -268,8 +268,8 @@ int rcTryIncrby(CRDT_RC* data, CRDT_RCTombstone* tombstone, CrdtMeta* meta, sds 
         } else {
             tel = element_add_tag(tel, a);
         }
-        move_crdt_element(&el, tel);
-        reset_crdt_element(&tel);
+        tel = move_crdt_element(&el, tel);
+        // reset_crdt_element(&tel);
         set_rc_tombstone_from_element(rct, tel);
         set_rc_from_element(rc, el);
         return PURGE_TOMBSTONE;

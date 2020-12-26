@@ -372,6 +372,18 @@ int crdtGcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         } else {
             result = setStopGc();
         }
+    } else if(strcmp(module_name, "hash") == 0) {
+        if(ll) {
+            result = hashStartGc();
+        } else {
+            result = hashStopGc();
+        }
+    } else if(strcmp(module_name, "register") == 0) {
+        if(ll) {
+            result = registerStartGc();
+        } else {
+            result = registerStopGc();
+        }
     }
     return  RedisModule_ReplyWithLongLong(ctx, result);
 

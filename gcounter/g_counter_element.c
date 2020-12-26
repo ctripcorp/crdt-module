@@ -1819,9 +1819,12 @@ crdt_element dup_crdt_element(crdt_element el) {
 sds get_element_info(crdt_element el) {
     sds result = sdsempty();
     for(int i = 0 ,len = get_element_len(el); i < len; i++) {
+        if(i != 0) {
+            result = sdscat(result, "\n");
+        }
         crdt_tag* tag = element_get_tag_by_index(el, i);
         sds tag_info = get_tag_info(tag);
-        result = sdscatprintf(result,"   %s\n", tag_info);
+        result = sdscatprintf(result,"   %s", tag_info);
         sdsfree(tag_info);
     }
     return result;

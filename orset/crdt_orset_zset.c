@@ -189,14 +189,19 @@ sds crdtZSetInfo(void *data) {
     sds result = sdsempty();
     long long size = dictSize(zset->dict);
     sds vc_info = vectorClockToSds(zset->lastvc);
-    result = sdscatprintf(result, "1) type: orset_zset, vc: %s, size: %lld\n", vc_info, size);
+    result = sdscatprintf(result, "type: orset_zset, vc: %s, size: %lld", vc_info, size);
     sdsfree(vc_info);
-    while((de = dictNext(it)) != NULL) {
+    int num = 5;
+    while((de = dictNext(it)) != NULL && num > 0) {
         crdt_element element = dict_get_element(de);
         sds element_info = get_element_info(element);
-        result = sdscatprintf(result, "2)  key: %s \n", dictGetKey(de));
-        result = sdscatprintf(result, "%s", element_info);
+        result = sdscatprintf(result, "\n1)  key: %s ", dictGetKey(de));
+        result = sdscatprintf(result, "\n%s", element_info);
         sdsfree(element_info);
+        num--;
+    } 
+    if(num == 0 && de != NULL) {
+        result = sdscatprintf(result, "\n...\n");
     } 
     dictReleaseIterator(it);
     return result;
@@ -550,16 +555,21 @@ sds crdtZsetTombstoneInfo(void* tombstone) {
     long long size = dictSize(zset_tombstone->dict);
     sds vc_info = vectorClockToSds(zset_tombstone->lastvc);
     sds max_vc_info = vectorClockToSds(zset_tombstone->maxdelvc);
-    result = sdscatprintf(result, "1) type: orset_zset_tombstone, vc: %s, maxvc:%s, size: %lld\n", vc_info, max_vc_info, size);
+    result = sdscatprintf(result, "type: orset_zset_tombstone, vc: %s, maxvc:%s, size: %lld", vc_info, max_vc_info, size);
     sdsfree(vc_info);
     sdsfree(max_vc_info);
+    int num = 5;
     while((de = dictNext(it)) != NULL) {
         crdt_element element = dict_get_element(de);
         sds element_info = get_element_info(element);
-        result = sdscatprintf(result, "2)  key: %s \n", dictGetKey(de));
-        result = sdscatprintf(result, "%s", element_info);
+        result = sdscatprintf(result, "\n1) tombstone key: %s ", dictGetKey(de));
+        result = sdscatprintf(result, "\n%s", element_info);
         sdsfree(element_info);
+        num--;
     } 
+    if(num == 0 && de != NULL) {
+        result = sdscatprintf(result, "\n   ...\n");
+    }
     dictReleaseIterator(it);
     return result;
 }

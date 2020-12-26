@@ -409,10 +409,15 @@ sds crdtSetInfo(void *data) {
             vcStr);
     dictIterator* di = dictGetIterator(set->dict);
     dictEntry* de = NULL;
-    while((de = dictNext(di)) != NULL) {
+    int num = 5;
+    while((de = dictNext(di)) != NULL && num > 0) {
         sds info = set_element_info(de);
         result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
         sdsfree(info);
+        num--;
+    }
+    if(num == 0 && de != NULL) {
+        result = sdscatprintf(result, "  ...\n");
     }
     dictReleaseIterator(di);
     sdsfree(vcStr);
@@ -790,10 +795,15 @@ sds crdtSetTombstoneInfo(void *data) {
     sdsfree(maxVcStr);
     dictIterator* di = dictGetIterator(tom->dict);
     dictEntry* de;
-    while((de = dictNext(di)) != NULL) {
+    int num = 5;
+    while((de = dictNext(di)) != NULL && num > 0) {
         sds info = set_element_info(de);
         result = sdscatprintf(result, "  key: %s, vc: %s\n", dictGetKey(de), info);
         sdsfree(info);
+        num--;
+    }
+    if(num == 0 && de != NULL) {
+        result = sdscatprintf(result, "  ...\n");
     }
     dictReleaseIterator(di);
     return result;

@@ -40,6 +40,8 @@
 
 #define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
 #define CRDT_REGISTER_TOMBSTONE_DATATYPE_NAME "crdt_regt"
+int registerStartGc();
+int registerStopGc();
 
 typedef CrdtObject CRDT_Register ;
 int getCrdtRegisterLastGid(CRDT_Register* r);

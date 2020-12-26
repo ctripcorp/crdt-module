@@ -285,12 +285,25 @@ void crdtLWWHashTombstoneDigestFunc(RedisModuleDigest *md, void *value) {
     //todo: currently do nothing when digest
 }
 sds crdtHashInfo(void* data) {
-    // CRDT_LWW_Hash* hash = retrieveCrdtLWWHash(data);
+    CRDT_LWW_Hash* hash = retrieveCrdtLWWHash(data);
     sds result = sdsempty();
     sds vcStr = vectorClockToSds(getCrdtHashLastVc((CRDT_Hash*)data));
     result = sdscatprintf(result, "type: lww_hash,  last-vc: %s\n",
             vcStr);
     sdsfree(vcStr);
+    dictIterator* di = dictGetIterator(hash->map);
+    dictEntry* de = NULL;
+    int num = 5;
+    while((de = dictNext(di)) != NULL && num > 0) {
+        sds info = crdtRegisterInfo(dictGetVal(de));
+        result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
+        sdsfree(info);
+        num--;
+    }
+    if(num == 0 && de != NULL) {
+        result = sdscatprintf(result, "  ...\n");
+    }
+    dictReleaseIterator(di);
     return result;
 }
 sds crdtHashTombstoneInfo(void* data) {
@@ -309,6 +322,20 @@ sds crdtHashTombstoneInfo(void* data) {
             maxDelVcStr);
         sdsfree(maxDelVcStr);
     }
+    dictIterator* di = dictGetIterator(tombstone->map);
+    dictEntry* de = NULL;
+    int num = 5;
+    while((de = dictNext(di)) != NULL && num > 0) {
+        sds info = crdtRegisterTombstoneInfo(dictGetVal(de));
+        result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
+        sdsfree(info);
+        num--;
+    }
+    if(num == 0 && de != NULL) {
+        result = sdscatprintf(result, "  ...\n");
+    }
+    dictReleaseIterator(di);
+
     sdsfree(vcStr);
     return result;
 }

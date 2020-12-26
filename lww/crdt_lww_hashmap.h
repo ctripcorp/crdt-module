@@ -139,7 +139,22 @@ CRDT_HashTombstone* dupCrdtHashTombstone(void* data) {
     return dupCrdtLWWHashTombstone(data);
 }
 int gcCrdtLWWHashTombstone(void* data, VectorClock clock);
+int hash_gc_stats = 1;
+
+int hashStartGc() {
+    hash_gc_stats = 1;
+    return hash_gc_stats;
+}
+
+int hashStopGc() {
+    hash_gc_stats = 0;
+    return hash_gc_stats;
+}
+
 int gcCrdtHashTombstone(void* data, VectorClock clock) {
+    if(!hash_gc_stats) {
+        return 0;
+    }
     return gcCrdtLWWHashTombstone(data, clock);
 }
 VectorClock getCrdtLWWHashTombstoneLastVc(CRDT_LWW_HashTombstone* t);

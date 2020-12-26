@@ -607,6 +607,70 @@ int CRDT_HGetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_CloseKey(key);
     return REDISMODULE_OK;
 }
+
+int CRDT_HDataInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 3) return RedisModule_WrongArity(ctx);
+
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+
+    CRDT_Hash *crdtHash = NULL;
+
+    if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
+        // RedisModule_CloseKey(key);
+        // return RedisModule_ReplyWithNull(ctx);
+    } else if (RedisModule_ModuleTypeGetType(key) != CrdtHash) {
+        RedisModule_CloseKey(key);
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    } else {
+        crdtHash = RedisModule_ModuleTypeGetValue(key);
+    }
+    
+    sds fld = RedisModule_GetSds(argv[2]);
+    if(fld == NULL) {
+        RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+        return RedisModule_ReplyWithNull(ctx);
+    }
+    if(crdtHash) {
+        dictEntry* de = dictFind(crdtHash->map, fld);
+        if(de) {
+            CRDT_Register *crdtRegister = dictGetVal(de);
+            sds info = crdtRegisterInfo(crdtRegister);
+            RedisModule_ReplyWithStringBuffer(ctx, info, sdslen(info));
+            sdsfree(info);
+            goto end;
+        }
+    }
+
+    
+    
+    CRDT_HashTombstone* tom =  getTombstone(key);
+    if(!isCrdtHashTombstone(tom)) {
+        RedisModule_ReplyWithNull(ctx);
+        goto end;
+    }
+    if(tom) {
+        dictEntry* de = dictFind(tom->map, fld);
+        if(de) {
+            CRDT_RegisterTombstone *reg = dictGetVal(de);
+            sds info = crdtRegisterTombstoneInfo(reg);
+            RedisModule_ReplyWithStringBuffer(ctx, info, sdslen(info));
+            sdsfree(info);
+            goto end;
+        }
+    }
+    RedisModule_ReplyWithNull(ctx);
+    // sds value =  getCrdtRegisterLastValue(crdtRegister);
+    // RedisModule_ReplyWithArray(ctx, 4);
+    // RedisModule_ReplyWithStringBuffer(ctx, value, sdslen(value)); 
+    // RedisModule_ReplyWithLongLong(ctx, getCrdtRegisterLastGid(crdtRegister));
+    // RedisModule_ReplyWithLongLong(ctx, getCrdtRegisterLastTimestamp(crdtRegister));
+    // sds vclockSds = vectorClockToSds(getCrdtRegisterLastVc(crdtRegister));
+    // RedisModule_ReplyWithStringBuffer(ctx, vclockSds, sdslen(vclockSds));
+    // sdsfree(vclockSds);
+end:
+    RedisModule_CloseKey(key);
+    return REDISMODULE_OK;
+}
 //CRDT.DEL_HASH <key> gid timestamp <del-op-vclock> <max-deleted-vclock>
 // 0              1    2     3           4                  5
 //CRDT.DEL_HASH <key> gid timestamp <del-op-vclock> <max-vclock> <expireVc>  
@@ -1033,6 +1097,9 @@ int initCrdtHashModule(RedisModuleCtx *ctx) {
 
     if (RedisModule_CreateCommand(ctx,"CRDT.HGET",
                                   CRDT_HGetCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"CRDT.hdatainfo",
+                                  CRDT_HDataInfoCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.DEL_HASH",
