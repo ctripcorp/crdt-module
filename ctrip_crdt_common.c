@@ -183,6 +183,7 @@ int initCrdtObject(CrdtObject* obj) {
     obj->type = 0;
     obj->dataType = 0;
     obj->reserved = 0;
+    return 1;
 }
 /**
  * CrdtMeta Get Set Functions

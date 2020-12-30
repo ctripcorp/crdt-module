@@ -1153,7 +1153,7 @@ void zscanCallback(void *privdata, const dictEntry *de) {
     list *keys = pd[0];
     sds key = NULL, val = NULL;
     key = sdsdup(dictGetKey(de));
-    double score = getZScoreByDictEntry(de);
+    double score = getZScoreByDictEntry((dictEntry *)de);
     char buf[MAX_LONG_DOUBLE_CHARS];
     int len = d2string(buf, sizeof(buf), score);
     val = sdsnewlen(buf, len);

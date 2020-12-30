@@ -266,7 +266,7 @@ int rcTryIncrby(CRDT_RC* data, CRDT_RCTombstone* tombstone, CrdtMeta* meta, sds 
                 return PURGE_VAL;
             }  
         } else {
-            tel = element_add_tag(tel, a);
+            tel = element_add_tag(tel, (crdt_tag*)a);
         }
         tel = move_crdt_element(&el, tel);
         // reset_crdt_element(&tel);

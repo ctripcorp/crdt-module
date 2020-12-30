@@ -178,7 +178,7 @@ crdt_zset *crdt_zset_merge(crdt_zset *target, crdt_zset *other) {
         result->lastvc = append_vc_from_element(result->lastvc, rel);
     }
     dictReleaseIterator(di);
-    updateCrdtSSLastVc(result, other->lastvc);
+    updateCrdtSSLastVc((CRDT_SS *)result, other->lastvc);
     return result;
 }
 
@@ -201,8 +201,9 @@ sds crdtZSetInfo(void *data) {
         num--;
     } 
     if(num == 0 && de != NULL) {
-        result = sdscatprintf(result, "\n...\n");
+        result = sdscatprintf(result, "\n...");
     } 
+    result = sdscatprintf(result, "\n");
     dictReleaseIterator(it);
     return result;
 }
@@ -344,8 +345,8 @@ crdt_zset_tombstone* crdt_zset_tombstone_merge(crdt_zset_tombstone* target, crdt
         result->lastvc = append_vc_from_element(result->lastvc, rel);
     }
     dictReleaseIterator(di);
-    updateCrdtSSTLastVc(result, other->lastvc);
-    updateCrdtSSTMaxDel(result, other->maxdelvc);
+    updateCrdtSSTLastVc((CRDT_SSTombstone *)result, other->lastvc);
+    updateCrdtSSTMaxDel((CRDT_SSTombstone *)result, other->maxdelvc);
     return result;
 }
 
