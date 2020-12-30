@@ -1,6 +1,5 @@
 #include "../ctrip_crdt_zset.h"
 #include "../ctrip_vector_clock.h"
-#include "../include/rmutil/zskiplist.h"
 #include "../crdt_util.h"
 #include "../gcounter/g_counter_element.h"
 

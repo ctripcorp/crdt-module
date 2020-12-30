@@ -1,62 +1,67 @@
-/*
- * Copyright (c) 2009-2012, Pieter Noordhuis <pcnoordhuis at gmail dot com>
- * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *   * Redistributions of source code must retain the above copyright notice,
- *     this list of conditions and the following disclaimer.
- *   * Redistributions in binary form must reproduce the above copyright
- *     notice, this list of conditions and the following disclaimer in the
- *     documentation and/or other materials provided with the distribution.
- *   * Neither the name of Redis nor the names of its contributors may be used
- *     to endorse or promote products derived from this software without
- *     specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
 
-#ifndef _ZIPLIST_H
-#define _ZIPLIST_H
-
-#define ZIPLIST_HEAD 0
-#define ZIPLIST_TAIL 1
+#include "ziplist.h"
+// #include "include/rmutil/zskiplist.h"
+#include "sds.h"
 #include "../redismodule.h"
-#define zskiplist_malloc(size) RedisModule_Alloc(size)
-#define zskiplist_calloc(count) RedisModule_Calloc(count, 1)
-#define zskiplist_realloc(ptr, size) RedisModule_Realloc(ptr, size)
-#define zskiplist_free(ptr) RedisModule_Free(ptr)
+#include "util.h"
+#define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^32 elements */
+#define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */
 
-unsigned char *ziplistNew(void);
-unsigned char *ziplistMerge(unsigned char **first, unsigned char **second);
-unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where);
-unsigned char *ziplistIndex(unsigned char *zl, int index);
-unsigned char *ziplistNext(unsigned char *zl, unsigned char *p);
-unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p);
-unsigned int ziplistGet(unsigned char *p, unsigned char **sval, unsigned int *slen, long long *lval);
-unsigned char *ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
-unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p);
-unsigned char *ziplistDeleteRange(unsigned char *zl, int index, unsigned int num);
-unsigned int ziplistCompare(unsigned char *p, unsigned char *s, unsigned int slen);
-unsigned char *ziplistFind(unsigned char *p, unsigned char *vstr, unsigned int vlen, unsigned int skip);
-unsigned int ziplistLen(unsigned char *zl);
-size_t ziplistBlobLen(unsigned char *zl);
-void ziplistRepr(unsigned char *zl);
+#define zskiplist_free RedisModule_Free
+#define zskiplist_malloc RedisModule_Alloc
+typedef struct zskiplistNode {
+    sds ele;
+    double score;
+    struct zskiplistNode *backward;
+    struct zskiplistLevel {
+        struct zskiplistNode *forward;
+        unsigned int span;
+    } level[];
+} zskiplistNode;
 
-#ifdef REDIS_TEST
-int ziplistTest(int argc, char *argv[]);
-#endif
+typedef struct zskiplist {
+    struct zskiplistNode *header, *tail;
+    unsigned long length;
+    int level;
+} zskiplist;
 
-#endif /* _ZIPLIST_H */
+typedef struct {
+    double min, max;
+    int minex, maxex; /* are min or max exclusive? */
+} zrangespec;
+
+typedef struct {
+    sds min, max;     /* May be set to shared.(minstring|maxstring) */
+    int minex, maxex; /* are min or max exclusive? */
+} zlexrangespec;
+
+struct sharedZsetStruct {
+    sds minstring, maxstring;
+};
+
+
+struct sharedZsetStruct zset_shared;  
+void initZsetShard();
+
+zskiplist *zslCreate(void);
+void zslFree(zskiplist *zsl);
+zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele);
+void zslFreeNode(zskiplistNode *node);
+int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node);
+void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update);
+int zslParseRange(sds min, sds max, zrangespec *spec);
+zskiplistNode *zslLastInRange(zskiplist *zsl, zrangespec *range);
+zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec *range);
+unsigned long zslGetRank(zskiplist* zsl, double score, sds ele);
+int zslParseLexRange(sds min, sds max, zlexrangespec *spec);
+zskiplistNode *zslLastInLexRange(zskiplist *zsl, zlexrangespec *range);
+zskiplistNode *zslFirstInLexRange(zskiplist *zsl, zlexrangespec *range);
+void zslFreeLexRange(zlexrangespec *spec);
+
+int zslValueGteMin(double value, zrangespec *spec);
+int zslValueLteMax(double value, zrangespec *spec);
+
+int zslLexValueLteMax(sds value, zlexrangespec *spec);
+int zslLexValueGteMin(sds value, zlexrangespec *spec);
+
+zskiplistNode* zslGetElementByRank(zskiplist *zsl, unsigned long rank);

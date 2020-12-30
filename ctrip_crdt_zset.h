@@ -1,7 +1,7 @@
 #include "./ctrip_vector_clock.h"
 #include "./include/redismodule.h"
 #include "./ctrip_crdt_common.h"
-#include "./ctrip_zskiplist.h"
+#include "./include/rmutil/zskiplist.h"
 #include "./include/rmutil/sds.h"
 
 /* Input flags. */
