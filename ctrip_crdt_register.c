@@ -612,6 +612,7 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         // sdsfree(callback_item);
     } else if(type == CRDT_REGISTER_TYPE) {
         callback_item = add_reg(moduleKey, &set_meta, RedisModule_GetSds(val));
+        // callback_item = add_reg2(ctx, getCurrentValue(moduleKey), getTombstone(moduleKey), &set_meta, key, RedisModule_GetSds(val));
         sdsfree(callback_item);
         expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
         replicationCrdtSetCommand(ctx, RedisModule_GetSds(key), RedisModule_GetSds(val), &set_meta,  expire_time);
@@ -1214,74 +1215,74 @@ int msetGenericCommand2(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
     return CRDT_OK;
 }
 
-int msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if (argc % 2 != 1 || argc < 3) {
-        RedisModule_WrongArity(ctx);
-        return CRDT_ERROR;
-    }
-    int arraylen = (argc-1)/2;
-    RedisModuleKey* regs[arraylen];
-    int regs_len = 0;
-    sds reg_vals[arraylen];
-    sds reg_keys[arraylen];
-    RedisModuleKey* rcs[arraylen];
-    int rcs_len = 0;
-    sds rc_vals[arraylen];
-    sds rc_keys[arraylen];
-    int budget_reg_key_val_strlen = 0;
-    int budget_rc_key_val_strlen = 0;
-    for(int i = 1; i < argc; i += 2) {
-        sds key = RedisModule_GetSds(argv[i]);
-        int need_add = 1;
-        for(int j = i + 2; j < argc; j += 2) {
-            sds other = RedisModule_GetSds(argv[j]);
-            if(sdscmp(key, other) == 0) {
-                need_add = 0;
-            }
-        }
-        if(need_add == 1) {
-            #if defined(MSET_STATISTICS)    
-                get_modulekey_start();
-            #endif
-            RedisModuleKey* moduleKey =  RedisModule_OpenKey(ctx, argv[i], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
-            sds val  = RedisModule_GetSds(argv[i+1]);
-            int type = check_type(val, moduleKey);
-            if (type == CRDT_REGISTER_TYPE) {
-                reg_keys[regs_len] = key;
-                reg_vals[regs_len] = val;
-                regs[regs_len++] = moduleKey;
-                budget_reg_key_val_strlen += sdslen(key) + sdslen(val) + REPLICATION_MAX_VC_LEN;
-            } else if (type == CRDT_RC_TYPE) {
-                rc_keys[rcs_len] = key;
-                rc_vals[rcs_len] = val;
-                rcs[rcs_len++] = moduleKey;
-                budget_rc_key_val_strlen += sdslen(key) + sdslen(val) + REPLICATION_MAX_VC_LEN;
-            } else if (type == TYPE_ERR){
-                RedisModule_ReplyWithError(ctx,"mset value type error");
-                return CRDT_ERROR;
-            }  
-            #if defined(MSET_STATISTICS)    
-                get_modulekey_end();
-            #endif
-        }
-    }
-    CrdtMeta mset_meta;
-    initIncrMeta(&mset_meta);
+// int msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+//     if (argc % 2 != 1 || argc < 3) {
+//         RedisModule_WrongArity(ctx);
+//         return CRDT_ERROR;
+//     }
+//     int arraylen = (argc-1)/2;
+//     RedisModuleKey* regs[arraylen];
+//     int regs_len = 0;
+//     sds reg_vals[arraylen];
+//     sds reg_keys[arraylen];
+//     RedisModuleKey* rcs[arraylen];
+//     int rcs_len = 0;
+//     sds rc_vals[arraylen];
+//     sds rc_keys[arraylen];
+//     int budget_reg_key_val_strlen = 0;
+//     int budget_rc_key_val_strlen = 0;
+//     for(int i = 1; i < argc; i += 2) {
+//         sds key = RedisModule_GetSds(argv[i]);
+//         int need_add = 1;
+//         for(int j = i + 2; j < argc; j += 2) {
+//             sds other = RedisModule_GetSds(argv[j]);
+//             if(sdscmp(key, other) == 0) {
+//                 need_add = 0;
+//             }
+//         }
+//         if(need_add == 1) {
+//             #if defined(MSET_STATISTICS)    
+//                 get_modulekey_start();
+//             #endif
+//             RedisModuleKey* moduleKey =  RedisModule_OpenKey(ctx, argv[i], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+//             sds val  = RedisModule_GetSds(argv[i+1]);
+//             int type = check_type(val, moduleKey);
+//             if (type == CRDT_REGISTER_TYPE) {
+//                 reg_keys[regs_len] = key;
+//                 reg_vals[regs_len] = val;
+//                 regs[regs_len++] = moduleKey;
+//                 budget_reg_key_val_strlen += sdslen(key) + sdslen(val) + REPLICATION_MAX_VC_LEN;
+//             } else if (type == CRDT_RC_TYPE) {
+//                 rc_keys[rcs_len] = key;
+//                 rc_vals[rcs_len] = val;
+//                 rcs[rcs_len++] = moduleKey;
+//                 budget_rc_key_val_strlen += sdslen(key) + sdslen(val) + REPLICATION_MAX_VC_LEN;
+//             } else if (type == TYPE_ERR){
+//                 RedisModule_ReplyWithError(ctx,"mset value type error");
+//                 return CRDT_ERROR;
+//             }  
+//             #if defined(MSET_STATISTICS)    
+//                 get_modulekey_end();
+//             #endif
+//         }
+//     }
+//     CrdtMeta mset_meta;
+//     initIncrMeta(&mset_meta);
     
-    #if defined(MSET_STATISTICS)    
-        write_bakclog_start(); 
-    #endif
-    if(rcs_len != 0) msetGeneric(ctx, (char *)crdt_rc_mset_head, add_rc, rcs_len, rcs, rc_keys, rc_vals, &mset_meta, budget_rc_key_val_strlen);
+//     #if defined(MSET_STATISTICS)    
+//         write_bakclog_start(); 
+//     #endif
+//     if(rcs_len != 0) msetGeneric(ctx, (char *)crdt_rc_mset_head, add_rc, rcs_len, rcs, rc_keys, rc_vals, &mset_meta, budget_rc_key_val_strlen);
     
-    if(regs_len != 0) msetGeneric(ctx, (char *)crdt_mset_head,  add_reg, regs_len, regs, reg_keys, reg_vals, &mset_meta, budget_reg_key_val_strlen);
+//     if(regs_len != 0) msetGeneric(ctx, (char *)crdt_mset_head,  add_reg, regs_len, regs, reg_keys, reg_vals, &mset_meta, budget_reg_key_val_strlen);
     
     
-    #if defined(MSET_STATISTICS)    
-        write_backlog_end();
-    #endif
-    freeIncrMeta(&mset_meta);
-    return CRDT_OK;
-}
+//     #if defined(MSET_STATISTICS)    
+//         write_backlog_end();
+//     #endif
+//     freeIncrMeta(&mset_meta);
+//     return CRDT_OK;
+// }
 
 int msetnxCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(msetGenericCommand2(ctx, argv, argc, 1) == CRDT_OK) {

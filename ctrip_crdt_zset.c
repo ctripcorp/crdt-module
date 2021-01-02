@@ -353,6 +353,7 @@ error:
 }
 
 int zaddCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
+    if(argc < 4) {return RedisModule_WrongArity(ctx);}
     return zaddGenericCommand(ctx, argv, argc, ZADD_NONE);
 }
 

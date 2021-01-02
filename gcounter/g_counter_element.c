@@ -2840,7 +2840,7 @@ crdt_element create_element_from_vc_and_g_counter(VectorClock vc, int gcounter_l
     for(int i = 0, len = get_len(vc); i < len; i++) {
         clk* c = get_clock_unit_by_index(&vc, i);
         int gid = get_gid(*c);
-        int vcu = get_logic_clock(*c);
+        long long vcu = get_logic_clock(*c);
         int g_index =  find_meta_by_gid(gid, gcounter_len, metas);
         crdt_tag* tag = NULL;
         if(base_tag && base_tag->gid == gid) {

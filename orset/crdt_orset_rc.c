@@ -170,7 +170,7 @@ sds crdtRcInfo(void* value) {
     sds result = sdsnew("1) type: orset_rc\r\n");
     crdt_element el = get_element_from_rc(value);
     sds element_info = get_element_info(el);
-    result = sdscatprintf(result," %s", element_info);
+    result = sdscatprintf(result," %s\n", element_info);
     sdsfree(element_info);
     return result;
 }
@@ -549,7 +549,7 @@ sds crdtRcTombstoneInfo(void* value) {
     sds result = sdsnew("1) type: orset_rc_tombstone\r\n");
     crdt_element el = get_element_from_rc(value);
     sds element_info = get_element_info(el);
-    result = sdscatprintf(result," %s", element_info);
+    result = sdscatprintf(result," %s\n", element_info);
     sdsfree(element_info);
     return result;
 }
