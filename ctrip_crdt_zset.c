@@ -705,12 +705,12 @@ int zremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     int deleted = 0, keyremoved = 0, i;
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSS);
     if(moduleKey == NULL) {
-        return RedisModule_ReplyWithArray(ctx , 0);
+        return RedisModule_ReplyWithLongLong(ctx , 0);
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     if(current == NULL) {
         RedisModule_CloseKey(moduleKey);
-        return RedisModule_ReplyWithArray(ctx , 0);
+        return RedisModule_ReplyWithLongLong(ctx , 0);
     }
     CrdtTombstone* tombstone = getTombstone(moduleKey);
     if(tombstone != NULL && !isCrdtSSTombstone(tombstone) ) {
