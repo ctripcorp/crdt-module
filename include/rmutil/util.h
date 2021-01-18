@@ -145,5 +145,6 @@ typedef enum {
  * @return a value in the @ref RMUtil_TryGetValueStatus enum.
  */
 int RedisModule_TryGetValue(RedisModuleKey *key, const RedisModuleType *type, void **out);
+int string2ll(const char *s, size_t slen, long long *value) ;
 
 #endif

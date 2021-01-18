@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2009-2012, CTRIP CORP <RDkjdata at ctrip dot com>
+ * Copyright (c) 2009-2012, Pieter Noordhuis <pcnoordhuis at gmail dot com>
+ * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,13 +27,31 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-//
-// Created by zhuchen on 2020/9/25.
-//
 
-#ifndef CRDT_MODULE_CONSTANS_H
-#define CRDT_MODULE_CONSTANS_H
+#ifndef _ZIPLIST_H
+#define _ZIPLIST_H
 
+#define ZIPLIST_HEAD 0
+#define ZIPLIST_TAIL 1
+#include <stddef.h>
+unsigned char *ziplistNew(void);
+unsigned char *ziplistMerge(unsigned char **first, unsigned char **second);
+unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where);
+unsigned char *ziplistIndex(unsigned char *zl, int index);
+unsigned char *ziplistNext(unsigned char *zl, unsigned char *p);
+unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p);
+unsigned int ziplistGet(unsigned char *p, unsigned char **sval, unsigned int *slen, long long *lval);
+unsigned char *ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
+unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p);
+unsigned char *ziplistDeleteRange(unsigned char *zl, int index, unsigned int num);
+unsigned int ziplistCompare(unsigned char *p, unsigned char *s, unsigned int slen);
+unsigned char *ziplistFind(unsigned char *p, unsigned char *vstr, unsigned int vlen, unsigned int skip);
+unsigned int ziplistLen(unsigned char *zl);
+size_t ziplistBlobLen(unsigned char *zl);
+void ziplistRepr(unsigned char *zl);
 
+#ifdef REDIS_TEST
+int ziplistTest(int argc, char *argv[]);
+#endif
 
-#endif //CRDT_MODULE_CONSTANS_H
+#endif /* _ZIPLIST_H */

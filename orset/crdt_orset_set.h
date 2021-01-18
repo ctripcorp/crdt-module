@@ -1,41 +1,42 @@
-#ifndef XREDIS_CRDT_ORSET_SET_H
-#define XREDIS_CRDT_ORSET_SET_H
+#ifndef XREDIS_crdt_orset_set_H
+#define XREDIS_crdt_orset_set_H
 #include "../include/rmutil/sds.h"
 #include "../crdt_util.h"
 #include "../crdt_set.h"
 #include "../include/rmutil/dict.h"
 #include "../include/redismodule.h"
 #if defined(TCL_TEST)
-typedef struct CRDT_ORSET_SET {
+typedef struct crdt_orset_set {
     unsigned char  type;
     dict*   dict;
     VectorClock lastVc; //8
-} __attribute__ ((packed, aligned(1))) CRDT_ORSET_SET;
+} __attribute__ ((packed, aligned(1))) crdt_orset_set;
 
 
-typedef struct CRDT_ORSET_SETTOMBSTONE {
+typedef struct crdt_orset_set_tombstone {
     unsigned char  type;
     dict*   dict;
     VectorClock lastVc; //8
     VectorClock maxDelvectorClock;//8
-} __attribute__ ((packed, aligned(1))) CRDT_ORSET_SETTOMBSTONE;
+} __attribute__ ((packed, aligned(1))) crdt_orset_set_tombstone;
 
 
 #else 
-typedef struct CRDT_ORSET_SET {
+typedef struct crdt_orset_set {
     ULONGLONG   type:8;
     ULONGLONG   dict: 56;
     VectorClock lastVc; //8
-} __attribute__ ((packed, aligned(1))) CRDT_ORSET_SET;
+} __attribute__ ((packed, aligned(1))) crdt_orset_set;
 
 
-typedef struct CRDT_ORSET_SETTOMBSTONE {
+typedef struct crdt_orset_set_tombstone {
     ULONGLONG   type:8;
     ULONGLONG   dict: 56;
     VectorClock lastVc; //8
     VectorClock maxDelvectorClock;//8
-} __attribute__ ((packed, aligned(1))) CRDT_ORSET_SETTOMBSTONE;
+} __attribute__ ((packed, aligned(1))) crdt_orset_set_tombstone;
 #endif
+int set_gc_stats = 1;
 void *RdbLoadCrdtORSETSet(RedisModuleIO *rdb, int version, int encver);
 
 

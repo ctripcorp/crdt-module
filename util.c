@@ -326,82 +326,7 @@ int ll2string(char *dst, size_t dstlen, long long svalue) {
     return length;
 }
 
-/* Convert a string into a long long. Returns 1 if the string could be parsed
- * into a (non-overflowing) long long, 0 otherwise. The value will be set to
- * the parsed value when appropriate.
- *
- * Note that this function demands that the string strictly represents
- * a long long: no spaces or other characters before or after the string
- * representing the number are accepted, nor zeroes at the start if not
- * for the string "0" representing the zero number.
- *
- * Because of its strictness, it is safe to use this function to check if
- * you can convert a string into a long long, and obtain back the string
- * from the number without any loss in the string representation. */
-#define SDS_LLSTR_SIZE 21
-int string2ll(const char *s, size_t slen, long long *value) {
-    assert(slen <= SDS_LLSTR_SIZE);
-    const char *p = s;
-    size_t plen = 0;
-    int negative = 0;
-    unsigned long long v;
 
-    if (plen == slen)
-        return 0;
-
-    /* Special case: first and only digit is 0. */
-    if (slen == 1 && p[0] == '0') {
-        if (value != NULL) *value = 0;
-        return 1;
-    }
-
-    if (p[0] == '-') {
-        negative = 1;
-        p++; plen++;
-
-        /* Abort on only a negative sign. */
-        if (plen == slen)
-            return 0;
-    }
-
-    /* First digit should be 1-9, otherwise the string should just be 0. */
-    if (p[0] >= '1' && p[0] <= '9') {
-        v = p[0]-'0';
-        p++; plen++;
-    } else if (p[0] == '0' && slen == 1) {
-        *value = 0;
-        return 1;
-    } else {
-        return 0;
-    }
-
-    while (plen < slen && p[0] >= '0' && p[0] <= '9') {
-        if (v > (ULLONG_MAX / 10)) /* Overflow. */
-            return 0;
-        v *= 10;
-
-        if (v > (ULLONG_MAX - (p[0]-'0'))) /* Overflow. */
-            return 0;
-        v += p[0]-'0';
-
-        p++; plen++;
-    }
-
-    /* Return if not all bytes were used. */
-    if (plen < slen)
-        return 0;
-
-    if (negative) {
-        if (v > ((unsigned long long)(-(LLONG_MIN+1))+1)) /* Overflow. */
-            return 0;
-        if (value != NULL) *value = -v;
-    } else {
-        if (v > LLONG_MAX) /* Overflow. */
-            return 0;
-        if (value != NULL) *value = v;
-    }
-    return 1;
-}
 
 /* Convert a string into a long. Returns 1 if the string could be parsed into a
  * (non-overflowing) long, 0 otherwise. The value will be set to the parsed
@@ -427,7 +352,7 @@ int string2l(const char *s, size_t slen, long *lval) {
  * a double: no spaces or other characters before or after the string
  * representing the number are accepted. */
 int string2ld(const char *s, size_t slen, long double *dp) {
-    char buf[256];
+    char buf[MAX_LONG_DOUBLE_CHARS];
     long double value;
     char *eptr;
     if (slen >= sizeof(buf)) return 0;
@@ -444,6 +369,18 @@ int string2ld(const char *s, size_t slen, long double *dp) {
         return 0;
     }
     if (dp) *dp = value;
+    return 1;
+}
+
+int string2d(char* buf, size_t len, double* value) {
+    long double ld = 0;
+    int result = string2ld(buf, len, &ld);
+    if(!result) return result;
+    double d = (double)ld;
+    if(isnan(d)) {
+        return 0;
+    }
+    *value = d;
     return 1;
 }
 

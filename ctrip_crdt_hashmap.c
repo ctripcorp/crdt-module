@@ -56,7 +56,7 @@ CRDT_Hash* retrieveCrdtHash(void* t) {
         return NULL;
     }
     CRDT_Hash* result = (CRDT_Hash*)t;
-    assert(result->map != NULL);
+    crdtAssert(result->map != NULL);
     return result;
 }
 
@@ -67,7 +67,7 @@ CRDT_HashTombstone* retrieveCrdtHashTombstone(void* t) {
         return NULL;
     }
     CRDT_HashTombstone* result = (CRDT_HashTombstone*)t;
-    assert(result->map != NULL);
+    crdtAssert(result->map != NULL);
     return result;
 }
 
@@ -445,7 +445,7 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             deleted++;  
         }
     }
-    if (crdtHtNeedsResize(current->map)) dictResize(current->map);
+    
     
     if(deleted > 0) {
         changeCrdtHash(current, &hdel_meta);
@@ -456,6 +456,8 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         deleteall = CRDT_OK;
         RedisModule_DeleteKey(moduleKey);
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
+    } else {
+        if (crdtHtNeedsResize(current->map)) dictResize(current->map);
     }
 end:
     if(hdel_meta.gid != 0) {
@@ -476,6 +478,24 @@ end:
     }else{
         return CRDT_ERROR;
     }
+    
+}
+
+void tombstone_add_element(CRDT_HashTombstone* tombstone, sds field, CrdtMeta* meta) {
+    dictEntry* de = dictFind(tombstone->map, field);
+    CRDT_RegisterTombstone* d = NULL;
+    if(de) {
+        // dictDelete(tombstone->map, field);
+        d =  dictGetVal(de);     
+    } else {
+        de = dictAddRaw(tombstone->map, sdsdup(field), NULL);
+        d = createCrdtRegisterTombstone();
+    }
+    // appendCrdtMeta(meta, getMaxDelCrdtHashTombstone(tombstone));
+    int r = 0;
+    addRegisterTombstone(d, meta, &r);
+    // dictAdd(tombstone->map, sdsdup(field), d);
+    dictSetVal(tombstone->map, de, d);
     
 }
 // "CRDT.HSET", <key>, <gid>, <timestamp>, <vclockStr>,  <length> <field> <val> <field> <val> . . .);
@@ -502,15 +522,23 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             RedisModule_IncrCrdtConflict(SET_DEL_CONFLICT | MODIFYCONFLICT);
         }
         if(result > COMPARE_META_EQUAL) {
-            CRDT_RegisterTombstone* tkv = createCrdtRegisterTombstone();
-            int r = 0;
-            addRegisterTombstone(tkv, meta, &r);
-            sds field = RedisModule_GetSds(argv[6]);
-            dictAdd(tombstone->map, sdsdup(field), tkv);
-            for (int i = 8; i < argc; i+=2) {
-                sds field = RedisModule_GetSds(argv[i]);
-                dictAdd(tombstone->map, sdsdup(field), dupCrdtRegisterTombstone(tkv));
-            }
+            //to do
+            // getCRDTHash(tombstone);
+            
+            if(result > COMPARE_META_VECTORCLOCK_GT) {
+                
+                // CRDT_RegisterTombstone* tkv = createCrdtRegisterTombstone();
+                // appendCrdtMeta(meta, getMaxDelCrdtHashTombstone(tombstone));
+                // int r = 0;
+                // addRegisterTombstone(tkv, meta, &r);
+                // sds field = RedisModule_GetSds(argv[6]);
+                //dupCrdtRegisterTombstone(tkv)
+                // add_tombstone(tombstone, field, tkv);
+                for (int i = 6; i < argc; i+=2) {
+                    sds field = RedisModule_GetSds(argv[i]);
+                    tombstone_add_element(tombstone, field, meta);
+                }
+            } 
             goto end;
         }
     }
@@ -579,6 +607,70 @@ int CRDT_HGetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_CloseKey(key);
     return REDISMODULE_OK;
 }
+
+int CRDT_HDataInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 3) return RedisModule_WrongArity(ctx);
+
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
+
+    CRDT_Hash *crdtHash = NULL;
+
+    if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
+        // RedisModule_CloseKey(key);
+        // return RedisModule_ReplyWithNull(ctx);
+    } else if (RedisModule_ModuleTypeGetType(key) != CrdtHash) {
+        RedisModule_CloseKey(key);
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    } else {
+        crdtHash = RedisModule_ModuleTypeGetValue(key);
+    }
+    
+    sds fld = RedisModule_GetSds(argv[2]);
+    if(fld == NULL) {
+        RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+        return RedisModule_ReplyWithNull(ctx);
+    }
+    if(crdtHash) {
+        dictEntry* de = dictFind(crdtHash->map, fld);
+        if(de) {
+            CRDT_Register *crdtRegister = dictGetVal(de);
+            sds info = crdtRegisterInfo(crdtRegister);
+            RedisModule_ReplyWithStringBuffer(ctx, info, sdslen(info));
+            sdsfree(info);
+            goto end;
+        }
+    }
+
+    
+    
+    CRDT_HashTombstone* tom =  getTombstone(key);
+    if(!isCrdtHashTombstone(tom)) {
+        RedisModule_ReplyWithNull(ctx);
+        goto end;
+    }
+    if(tom) {
+        dictEntry* de = dictFind(tom->map, fld);
+        if(de) {
+            CRDT_RegisterTombstone *reg = dictGetVal(de);
+            sds info = crdtRegisterTombstoneInfo(reg);
+            RedisModule_ReplyWithStringBuffer(ctx, info, sdslen(info));
+            sdsfree(info);
+            goto end;
+        }
+    }
+    RedisModule_ReplyWithNull(ctx);
+    // sds value =  getCrdtRegisterLastValue(crdtRegister);
+    // RedisModule_ReplyWithArray(ctx, 4);
+    // RedisModule_ReplyWithStringBuffer(ctx, value, sdslen(value)); 
+    // RedisModule_ReplyWithLongLong(ctx, getCrdtRegisterLastGid(crdtRegister));
+    // RedisModule_ReplyWithLongLong(ctx, getCrdtRegisterLastTimestamp(crdtRegister));
+    // sds vclockSds = vectorClockToSds(getCrdtRegisterLastVc(crdtRegister));
+    // RedisModule_ReplyWithStringBuffer(ctx, vclockSds, sdslen(vclockSds));
+    // sdsfree(vclockSds);
+end:
+    RedisModule_CloseKey(key);
+    return REDISMODULE_OK;
+}
 //CRDT.DEL_HASH <key> gid timestamp <del-op-vclock> <max-deleted-vclock>
 // 0              1    2     3           4                  5
 //CRDT.DEL_HASH <key> gid timestamp <del-op-vclock> <max-vclock> <expireVc>  
@@ -641,13 +733,15 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
             hasDataTombstoneConflict = 1;
         }
         if(result > COMPARE_META_EQUAL) {
-             if(result > COMPARE_META_VECTORCLOCK_GT) {
-                CRDT_RegisterTombstone* tkv = createCrdtRegisterTombstone();
-                CrdtMeta* m = dupMeta(getCrdtRegisterTombstoneMeta(kv));
-                appendCrdtMeta(m, meta);
-                int r = 0;
-                addRegisterTombstone(tkv, m, &r);
-                dictAdd(tombstone->map, sdsdup(dictGetKey(de)), tkv);
+            if(result > COMPARE_META_VECTORCLOCK_GT) {
+                // CRDT_RegisterTombstone* tkv = createCrdtRegisterTombstone();
+                // CrdtMeta* m = dupMeta(getCrdtRegisterTombstoneMeta(kv));
+                // appendCrdtMeta(m, meta);
+                // int r = 0;
+                // addRegisterTombstone(tkv, m, &r);
+                // freeCrdtMeta(m);
+                // dictAdd(tombstone->map, sdsdup(dictGetKey(de)), tkv);
+                tombstone_add_element(tombstone, dictGetKey(de), meta);
             }
             dictDelete(current->map, dictGetKey(de));
             deleted++;
@@ -671,11 +765,11 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
         }
     }
     dictReleaseIterator(di);
-    
-    /* Always check if the dictionary needs a resize after a delete. */
-    if (crdtHtNeedsResize(current->map)) dictResize(current->map);
     if (dictSize(current->map) == 0) {
         RedisModule_DeleteKey(moduleKey);
+    } else {
+        /* Always check if the dictionary needs a resize after a delete. */
+        if (crdtHtNeedsResize(current->map)) dictResize(current->map);
     }
     RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
@@ -715,7 +809,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         if(isConflictCommon(result)) {
             RedisModule_IncrCrdtConflict(DEL_CONFLICT | MODIFYCONFLICT);
         }
-        if(result == COMPARE_META_VECTORCLOCK_GT) {
+        if(result > COMPARE_META_VECTORCLOCK_GT) {
             goto end;
         }
     }
@@ -780,13 +874,15 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     }
     changeCrdtHashTombstone(tombstone, meta);
     if(current != NULL) {
-        if(deleted > 0 && crdtHtNeedsResize(current->map)) {
-            changeCrdtHash(current, meta);
-            dictResize(current->map);
-        }
+        
         if (dictSize(current->map) == 0) {
             RedisModule_DeleteKey(moduleKey);
             keyremoved = CRDT_OK;
+        } else {
+            if(deleted > 0 && crdtHtNeedsResize(current->map)) {
+                changeCrdtHash(current, meta);
+                dictResize(current->map);
+            }
         }
     }
     
@@ -877,6 +973,61 @@ int hgetallCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return genericHgetallCommand(ctx, argv, argc, OBJ_HASH_KEY|OBJ_HASH_VALUE);
 }
 
+int hlenCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
+    if(argc != 2) return RedisModule_WrongArity(ctx);
+    CRDT_Hash *crdtHash;
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+
+    if (RedisModule_KeyType(key) == REDISMODULE_KEYTYPE_EMPTY) {
+        RedisModule_CloseKey(key);
+        return RedisModule_ReplyWithLongLong(ctx, 0);
+    } else if (RedisModule_ModuleTypeGetType(key) != CrdtHash) {
+        RedisModule_CloseKey(key);
+        return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    } else {
+        crdtHash = RedisModule_ModuleTypeGetValue(key);
+    }
+    long long length = dictSize((const dict*)crdtHash->map);
+    RedisModule_ReplyWithLongLong(ctx, length);
+    RedisModule_CloseKey(key);
+    return REDISMODULE_OK;
+}
+
+void hscanCallback(void *privdata, const dictEntry *de) {
+    void **pd = (void**) privdata;
+    list *keys = pd[0];
+    sds key = NULL, val = NULL;
+    key = sdsdup(dictGetKey(de));
+    CRDT_Register *crdtRegister = dictGetVal(de);
+    val = sdsdup(getCrdtRegisterLastValue(crdtRegister));
+    listAddNodeTail(keys, key);
+    listAddNodeTail(keys, val);
+}
+
+int hscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc < 3) return RedisModule_WrongArity(ctx);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtHash, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
+        replyEmptyScan(ctx);
+        return CRDT_ERROR;
+    }
+    CRDT_Hash* hash = getCurrentValue(moduleKey);
+    if(hash == NULL) {
+        replyEmptyScan(ctx);
+        RedisModule_CloseKey(moduleKey);
+        return REDISMODULE_OK;
+    }
+    unsigned long cursor;
+
+    if (parseScanCursorOrReply(ctx, argv[2], &cursor) == CRDT_ERROR) return 0;
+
+    scanGenericCommand(ctx, argv, argc, hash->map, 1, cursor, hscanCallback);
+
+    if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
+    return REDISMODULE_OK;
+}
 /*
  * Init Hash Module 
  */
@@ -947,6 +1098,9 @@ int initCrdtHashModule(RedisModuleCtx *ctx) {
     if (RedisModule_CreateCommand(ctx,"CRDT.HGET",
                                   CRDT_HGetCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"CRDT.hdatainfo",
+                                  CRDT_HDataInfoCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.DEL_HASH",
                                   CRDT_DelHashCommand,"write",1,1,1) == REDISMODULE_ERR)
@@ -956,6 +1110,12 @@ int initCrdtHashModule(RedisModuleCtx *ctx) {
                                   CRDT_RemHashCommand,"write",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
+    if (RedisModule_CreateCommand(ctx,"hlen",
+                                  hlenCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"hscan",
+                                  hscanCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
 /**
@@ -1125,12 +1285,20 @@ int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value) {
         tombstone = createCrdtHashTombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHashTombstone, tombstone);
     }
+    dictIterator* di = dictGetSafeIterator(tombstone->map);
+    dictEntry* de = NULL;
+    while((de = dictNext(di)) != NULL) {
+        //if counter  will update lastvc
+        // CRDT_RegisterTombstone *tom =  dictGetVal(de);
+        dictDelete(tombstone->map, dictGetKey(de));
+    }
+    dictReleaseIterator(di);
     changeCrdtHash(current, del_meta);
     int compare = 0;
     CrdtMeta* result = updateMaxDelCrdtHashTombstone(tombstone, del_meta, &compare);
     changeCrdtHashTombstone(tombstone, del_meta);
     sds vcSds = vectorClockToSds(getMetaVectorClock(result));
-        sds maxDeletedVclock = vectorClockToSds(getCrdtHashLastVc(current));
+    sds maxDeletedVclock = vectorClockToSds(getCrdtHashLastVc(current));
     RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Hash", "sllcc", keyRobj, getMetaGid(meta), getMetaTimestamp(meta), vcSds, vcSds);
     sdsfree(vcSds);
     sdsfree(maxDeletedVclock);
@@ -1216,6 +1384,7 @@ int crdtHashTombstonePurge( CrdtObject* tombstone, CrdtObject* current) {
         CrdtMeta* lastMeta = createCrdtRegisterLastMeta(crdtRegister);
         if(compareCrdtHashTombstone(crdtHashTombstone, lastMeta) > COMPARE_META_EQUAL) {
             dictDelete(crdtHash->map, field);
+            freeCrdtMeta(lastMeta);
             continue;
         }
         dictEntry *existDe = dictFind(crdtHashTombstone->map, field);
@@ -1228,9 +1397,10 @@ int crdtHashTombstonePurge( CrdtObject* tombstone, CrdtObject* current) {
             } else if(r == PURGE_TOMBSTONE) {
                 dictDelete(crdtHashTombstone->map, field);
              }
-             freeCrdtMeta(lastMeta);
+             
            
          }
+         freeCrdtMeta(lastMeta);
      }
      dictReleaseIterator(di);
 

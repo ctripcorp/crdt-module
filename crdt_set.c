@@ -3,7 +3,6 @@
 
 
 int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
-    
     if(value == NULL) {
         return CRDT_ERROR;
     }
@@ -11,23 +10,20 @@ int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
         return CRDT_ERROR;
     }
     CrdtMeta* meta = createIncrMeta();
-    CrdtMeta* del_meta = dupMeta(meta);
     CRDT_Set* current = (CRDT_Set*) value;
-    appendVCForMeta(del_meta, getCrdtSetLastVc(current));
     RedisModuleKey *moduleKey = (RedisModuleKey*) key;
     CRDT_SetTombstone* tombstone = getTombstone(moduleKey);
     if(tombstone == NULL || !isCrdtSetTombstone(tombstone)) {
         tombstone = createCrdtSetTombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
     }
-    updateCrdtSetTombstoneLastVcByMeta(tombstone, del_meta);
-    updateCrdtSetTombstoneMaxDel(tombstone, getMetaVectorClock(del_meta));
-    sds vcSds = vectorClockToSds(getMetaVectorClock(del_meta));
-    // sds maxDeleteVectorClock = vectorClockToSds(getCrdtSetLastVc(current));
-    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Set", "sllcc", keyRobj, getMetaGid(meta), getMetaTimestamp(meta), vcSds, vcSds);
+    setDel(current, tombstone, meta);
+    sds vcSds = vectorClockToSds(getMetaVectorClock(meta));
+    sds maxdelSds = vectorClockToSds(getCrdtSetTombstoneMaxDelVc(tombstone));
+    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Set", "sllcc", keyRobj, getMetaGid(meta), getMetaTimestamp(meta), vcSds, maxdelSds);
     sdsfree(vcSds);
+    sdsfree(maxdelSds);
     freeCrdtMeta(meta);
-    freeCrdtMeta(del_meta);
     return CRDT_OK;
 }
 
@@ -39,17 +35,17 @@ int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
 
 int sismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
         RedisModule_ReplyWithLongLong(ctx, 0);
         return CRDT_ERROR;
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
-    if(current == NULL) {
-        return RedisModule_ReplyWithLongLong(ctx, 0); 
-    } 
     sds field = RedisModule_GetSds(argv[2]);
     dictEntry* de = findSetDict(current, field);
+    RedisModule_CloseKey(moduleKey);
     if(de != NULL) {
         return RedisModule_ReplyWithLongLong(ctx, 1); 
     }
@@ -59,35 +55,32 @@ int sismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 int scardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
-        RedisModule_ReplyWithLongLong(ctx, 0);
-        return CRDT_ERROR;
+        if(replyed) return REDISMODULE_ERR;
+        return RedisModule_ReplyWithLongLong(ctx, 0); 
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
-    if(current == NULL) {
-        return RedisModule_ReplyWithLongLong(ctx, 0); 
-    } 
-    return RedisModule_ReplyWithLongLong(ctx, getSetDictSize(current));
+    RedisModule_CloseKey(moduleKey);
+    return RedisModule_ReplyWithLongLong(ctx, getSetSize(current));
 }
 
 
 int smembersCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
         RedisModule_ReplyWithArray(ctx, 0);
         return CRDT_ERROR;
     }
     CRDT_Set* current = getCurrentValue(moduleKey);
-    if(current == NULL) {
-        RedisModule_CloseKey(moduleKey);
-        return RedisModule_ReplyWithNull(ctx);
-    }
-    size_t length = getSetDictSize(current);
+    size_t length = getSetSize(current);
     RedisModule_ReplyWithArray(ctx, length);
     dictEntry* de = NULL;
-    dictIterator* di = getSetDictIterator(current);
+    dictIterator* di = getSetIterator(current);
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
         RedisModule_ReplyWithStringBuffer(ctx, field, sdslen(field));
@@ -97,12 +90,20 @@ int smembersCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_OK;
 }
 
+
+void sscanCallback(void *privdata, const dictEntry *de) {
+    void **pd = (void**) privdata;
+    list *keys = pd[0];
+    sds key = dictGetKey(de);
+    listAddNodeTail(keys, sdsdup(key));
+}
 int sscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_WRITE);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSet, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
-        RedisModule_ReplyWithStringBuffer(ctx, "0", 1);
-        RedisModule_ReplyWithArray(ctx, 0);
+        if(replyed) return CRDT_ERROR;
+        replyEmptyScan(ctx);
         return CRDT_ERROR;
     }
     CRDT_Set* set = getCurrentValue(moduleKey);
@@ -115,7 +116,7 @@ int sscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
     if (parseScanCursorOrReply(ctx, argv[2], &cursor) == CRDT_ERROR) return 0;
 
-    scanGenericCommand(ctx, argv, argc, getSetDict(set), CRDT_SET_TYPE, cursor);
+    scanGenericCommand(ctx, argv, argc, getSetDict(set), 0, cursor, sscanCallback);
 
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     return REDISMODULE_OK;
@@ -125,8 +126,8 @@ int sscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
  * be handled as empty sets. */
 int qsortCompareSetsByRevCardinality(const void *s1, const void *s2) {
     CRDT_Set *o1 = *(CRDT_Set**)s1, *o2 = *(CRDT_Set**)s2;
-    unsigned long first = o1 ? getSetDictSize(o1) : 0;
-    unsigned long second = o2 ? getSetDictSize(o2) : 0;
+    unsigned long first = o1 ? getSetSize(o1) : 0;
+    unsigned long second = o2 ? getSetSize(o2) : 0;
 
     if (first < second) return 1;
     if (first > second) return -1;
@@ -168,10 +169,15 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
     int diff_algo = 1;
 
     for (j = 0; j < setnum; j++) {
+        int replyed = 0;
         RedisModuleKey* moduleKey = dstkey ?
-                        getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_WRITE) :
-                        getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_READ);
+                        getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_WRITE, NULL) :
+                        getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_READ, &replyed);
         if (moduleKey == NULL) {
+            if(replyed) {
+                zfree(target_sets);
+                return CRDT_ERROR;
+            }
             target_sets[j] = NULL;
             continue;
         }
@@ -204,8 +210,8 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
         for (j = 0; j < setnum; j++) {
             if (target_sets[j] == NULL) continue;
 
-            algo_one_work += getSetDictSize(target_sets[0]);
-            algo_two_work += getSetDictSize(target_sets[j]);
+            algo_one_work += getSetSize(target_sets[0]);
+            algo_two_work += getSetSize(target_sets[j]);
         }
 
         /* Algorithm 1 has better constant times and performs less operations
@@ -233,7 +239,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
         for (j = 0; j < setnum; j++) {
             if (!target_sets[j]) continue; /* non existing keys are like empty sets */
 
-            di = getSetDictIterator(target_sets[j]);
+            di = getSetIterator(target_sets[j]);
             while((de = dictNext(di)) != NULL) {
                 ele = dictGetKey(de);
                 if (setTypeAdd(dstset,ele)) cardinality++;
@@ -249,7 +255,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
          *
          * This way we perform at max N*M operations, where N is the size of
          * the first set, and M the number of sets. */
-        di = getSetDictIterator(target_sets[0]);
+        di = getSetIterator(target_sets[0]);
         while((de = dictNext(di)) != NULL) {
             ele = dictGetKey(de);
             for (j = 1; j < setnum; j++) {
@@ -275,7 +281,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
         for (j = 0; j < setnum; j++) {
             if (!target_sets[j]) continue; /* non existing keys are like empty sets */
 
-            di = getSetDictIterator(target_sets[j]);
+            di = getSetIterator(target_sets[j]);
             while((de = dictNext(di)) != NULL) {
                 ele = dictGetKey(de);
                 if (j == 0) {
@@ -294,7 +300,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
     /* Output the content of the resulting set, if not in STORE mode */
     if (!dstkey) {
         RedisModule_ReplyWithArray(ctx, cardinality);
-        di = getSetDictIterator(dstset);
+        di = getSetIterator(dstset);
         while((de = dictNext(di)) != NULL) {
             ele = dictGetKey(de);
             RedisModule_ReplyWithStringBuffer(ctx, ele, sdslen(ele));
@@ -347,7 +353,7 @@ int sremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     initIncrMeta(&meta);
     CRDT_Set* current = getCurrentValue(moduleKey);
     if(current == NULL) {
-        return RedisModule_ReplyWithLongLong(ctx, 0);
+        goto end;
     }
     CrdtTombstone* t = getTombstone(moduleKey);
     CRDT_SetTombstone* tombstone = NULL;
@@ -362,23 +368,21 @@ int sremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     appendVCForMeta(&meta, getCrdtSetLastVc(current));
     for(int i = 2; i < argc; i += 1) {
         sds field = RedisModule_GetSds(argv[i]);
-        // dictEntry* de = findSetDict(current, field);
-        int r = removeSetDict(current, field, &meta);
-        if(r) {
-            addSetTombstoneDictValue(tombstone, field, &meta);
-            result += 1;
-        }
+        result += setRem(current, tombstone, field, &meta);
     }
-    if(getSetDictSize(current) == 0) {
+    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "srem", argv[1]);
+    if(current && getSetSize(current) == 0) {
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "del", argv[1]);
         RedisModule_DeleteKey(moduleKey);
     } else {
         updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
     }
     updateCrdtSetTombstoneLastVcByMeta(tombstone, &meta);
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "srem", argv[1]);
-    char buf[100];
+    char buf[256];
     vectorClockToString(buf, getMetaVectorClock(&meta));
     RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Srem", "sllcv", argv[1], getMetaGid(&meta),getMetaTimestamp(&meta), buf, (void *) (argv + 2), (size_t)(argc-2));
+end:
+    if(meta.gid != 0) freeIncrMeta(&meta);
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     return RedisModule_ReplyWithLongLong(ctx, result);
 }
@@ -402,11 +406,14 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (moduleKey == NULL) {
         return CRDT_ERROR;
     }
-    initIncrMeta(&meta);
+    
     CRDT_Set* current = getCurrentValue(moduleKey);
     if(current == NULL) {
-        return RedisModule_ReplyWithNull(ctx);
+        RedisModule_CloseKey(moduleKey);
+        RedisModule_ReplyWithNull(ctx);
+        return CRDT_OK;
     }
+    initIncrMeta(&meta);
     CrdtTombstone* t = getTombstone(moduleKey);
     CRDT_SetTombstone* tombstone = NULL;
     if(t != NULL && isCrdtSetTombstone(t)) {
@@ -416,7 +423,7 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         tombstone = createCrdtSetTombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
     }
-    int keylen = getSetDictSize(current);
+    int keylen = getSetSize(current);
     num = min(keylen, num);
     sds fields[num];
     appendVCForMeta(&meta, getCrdtSetLastVc(current));
@@ -424,35 +431,44 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         for(int i = 0; i < num; i += 1) {
             sds field = sdsdup(getRandomSetKey(current));
             // dictEntry* de = findSetDict(current, field);
-            removeSetDict(current, field, &meta);
-            addSetTombstoneDictValue(tombstone, field, &meta);
+            // removeSetDict(current, field, &meta);
+            // addSetTombstoneDictValue(tombstone, field, &meta);
+            setRem(current, tombstone, field, &meta);
             fields[i] = field;
         }
         updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
     } else {
-        dictIterator* di = getSetDictIterator(current);
+        dictIterator* di = getSetIterator(current);
         int i = 0;
         dictEntry* de = NULL;
         while((de = dictNext(di)) != NULL) {
             sds field = sdsdup(dictGetKey(de));
             fields[i++] = field;
-            addSetTombstoneDictValue(tombstone, field, &meta);
+            // addSetTombstoneDictValue(tombstone, field, &meta);
+            setRem(current, tombstone, field, &meta);
         }
         dictReleaseIterator(di);
         RedisModule_DeleteKey(moduleKey);
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "del", argv[1]);
     }
     updateCrdtSetTombstoneLastVcByMeta(tombstone, &meta);
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "srem", argv[1]);
-    char buf[100];
+    char buf[256];
     vectorClockToString(buf, getMetaVectorClock(&meta));
     RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Srem", "sllca", argv[1], getMetaGid(&meta),getMetaTimestamp(&meta), buf, fields, num);
-    if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-    RedisModule_ReplyWithArray(ctx, num);
-    for(int i = 0; i < num; i++) {
-        sds field = fields[i];
-        RedisModule_ReplyWithStringBuffer(ctx, field, sdslen(field));
-        sdsfree(field);
+    if(num == 1) {
+        RedisModule_ReplyWithStringBuffer(ctx, fields[0], sdslen(fields[0]));
+        sdsfree(fields[0]);
+    } else {
+        RedisModule_ReplyWithArray(ctx, num);
+        for(int i = 0; i < num; i++) {
+            sds field = fields[i];
+            RedisModule_ReplyWithStringBuffer(ctx, field, sdslen(field));
+            sdsfree(field);
+        }
     }
+    if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
+    if(meta.gid != 0) freeIncrMeta(&meta);
     return CRDT_OK;
 }
 
@@ -474,41 +490,35 @@ int saddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(t != NULL && isCrdtSetTombstone(t)) {
         tombstone = retrieveCrdtSetTombstone(t);
     }
-
     if(current == NULL) {
         current = createCrdtSet();
-        if(tombstone) {
-            updateCrdtSetLastVc(current, getCrdtSetTombstoneLastVc(tombstone));
-        }
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtSet, current);
-    } 
-    appendVCForMeta(&meta, getCrdtSetLastVc(current));
+        if(tombstone) {
+            appendVCForMeta(&meta, getCrdtSetTombstoneLastVc(tombstone));
+        }
+    } else {
+        appendVCForMeta(&meta, getCrdtSetLastVc(current));
+    }
+   
     for(int i = 2; i < argc; i += 1) {
         sds field = RedisModule_GetSds(argv[i]);
-        dictEntry* de = findSetDict(current, field);
-        if(de == NULL) {
-            addSetDict(current, field, &meta);
-            result += 1;
+        result += setAdd(current, tombstone, field, &meta);
+    }
+    if(tombstone) {
+        if(isNullSetTombstone(tombstone)) {
+            RedisModule_DeleteTombstone(moduleKey);
         } else {
-            updateSetDict(current, de, &meta);
+            setTombstoneTryResizeDict(tombstone);
         }
-        if(tombstone) {
-            removeSetTombstoneDict(tombstone, field);
-        }
+        
     }
-
-    if(tombstone && isNullVectorClock(getCrdtSetTombstoneMaxDelVc(tombstone)) && getSetTombstoneDictSize(tombstone) == 0) {
-        RedisModule_DeleteTombstone(moduleKey);
-    }
-    
     updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
-
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "sadd", argv[1]);
-    char buf[100];
+    char buf[256];
     vectorClockToString(buf, getMetaVectorClock(&meta));
     RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Sadd", "sllcv", argv[1], getMetaGid(&meta), getMetaTimestamp(&meta), buf, (void *) (argv + 2), (size_t)(argc-2));
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-
+    if(meta.gid != 0) freeIncrMeta(&meta);
     return RedisModule_ReplyWithLongLong(ctx, result);
 }
 
@@ -538,24 +548,29 @@ int crdtSaddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     CRDT_Set* current = getCurrentValue(moduleKey);
     if(current == NULL) {
         current = createCrdtSet();
+        if(tombstone) {
+            updateCrdtSetLastVc(current, getCrdtSetTombstoneLastVc(tombstone));
+        }
         RedisModule_ModuleTypeSetValue(moduleKey, CrdtSet, current);
     } 
-
     int result = 0;
     for(int i = 5; i < argc; i++) {
         sds field = RedisModule_GetSds(argv[i]);
         // dictEntry* de = findSetDict(current, field);
-        result += setTombstoneIterPurge(current, tombstone, field, &meta);
+        result += setTryAdd(current, tombstone, field, &meta);
     }
-    if(tombstone && isNullVectorClock(getCrdtSetTombstoneMaxDelVc(tombstone)) && getSetTombstoneDictSize(tombstone) == 0) {
-        RedisModule_DeleteTombstone(moduleKey);
+    if(tombstone) {
+        if(isNullSetTombstone(tombstone)) {
+            RedisModule_DeleteTombstone(moduleKey);
+        } else {
+            setTombstoneTryResizeDict(tombstone);
+        }
     }
     updateCrdtSetLastVcuByVectorClock(current, getMetaGid(&meta), getMetaVectorClock(&meta));
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
     if(result) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "sadd", argv[1]);
     }
-    
 end:
     if (meta.gid != 0) {
         RedisModule_CrdtReplicateVerbatim(getMetaGid(&meta), ctx);
@@ -592,20 +607,25 @@ int crdtSremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     CRDT_Set* current = getCurrentValue(moduleKey);
     if(tombstone == NULL) {
         tombstone = createCrdtSetTombstone();
+        if(current) {
+            updateCrdtSetTombstoneLastVc(tombstone, getCrdtSetLastVc(current));
+        }
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
     }
     int result = 0;
     for(int i = 5; i < argc; i++) {
         sds field = RedisModule_GetSds(argv[i]);
         // dictEntry* de = findSetDict(current, field);
-        result += setValueIterPurge(current, tombstone, field, &meta);
+        result += setTryRem(current, tombstone, field, &meta);
     }
-    if(current) {
-        if(getSetDictSize(current) == 0) {
+    if(current && result) {
+        if(getSetSize(current) == 0) {
             RedisModule_DeleteKey(moduleKey);
+            RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "del", argv[1]);
             current = NULL;
         } else {
             updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
+            setTryResizeDict(current);
         }
     }
     updateCrdtSetTombstoneLastVc(tombstone, getMetaVectorClock(&meta));
@@ -655,22 +675,23 @@ int crdtSismemberCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     }
     
     if(num == 0) {
-        return RedisModule_ReplyWithNull(ctx);
+        RedisModule_ReplyWithNull(ctx);
+        goto end;
     }
 
     RedisModule_ReplyWithArray(ctx, num);
     if(de != NULL) {
-        void* data = dictGetVal(de);
-        sds info = setIterInfo(data);
+        sds info = setIterInfo(de);
         RedisModule_ReplyWithStringBuffer(ctx, info, sdslen(info));
         sdsfree(info);
     }
     if(tde != NULL) {
-        void* data = dictGetVal(tde);
-        sds info = setTombstoneIterInfo(data);
+        sds info = setTombstoneIterInfo(tde);
         RedisModule_ReplyWithStringBuffer(ctx, info, sdslen(info));
         sdsfree(info);
     }
+end:
+    if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     return CRDT_OK;
 }
 
@@ -697,16 +718,26 @@ int crdtDelSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     CRDT_Set* current = getCurrentValue(moduleKey);
     if(tombstone == NULL) {
         tombstone = createCrdtSetTombstone();
+        if(current) {
+            updateCrdtSetTombstoneLastVc(tombstone, getCrdtSetLastVc(current));
+        }
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
     }
 
-    if(purgeSetDelMax(current, tombstone, &meta)) {
+    if(setTryDel(current, tombstone, &meta)) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "srem", argv[1]);
+        if(current) {
+            if(getSetSize(current) == 0) {
+                RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "del", argv[1]);
+                RedisModule_DeleteKey(moduleKey);
+                current = NULL;
+            } else {
+                updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
+                setTryResizeDict(current);
+            }
+        }
     }
     updateCrdtSetTombstoneLastVc(tombstone, getMetaVectorClock(&meta));
-    if(getSetDictSize(current) == 0) {
-        RedisModule_DeleteKey(moduleKey);
-    }
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
 
 end:
@@ -722,40 +753,7 @@ end:
     }
 }
 
-//hash common methods
-CrdtObject *crdtSetMerge(CrdtObject *currentVal, CrdtObject *value) {
-    CRDT_Set* target = retrieveCrdtSet(currentVal);
-    CRDT_Set* other = retrieveCrdtSet(value);
-    if(target == NULL && other == NULL) {
-        return NULL;
-    }
-    if (target == NULL) {
-        return (CrdtObject*)dupCrdtSet(other);
-    }
-    
-    CRDT_Set *result = dupCrdtSet(target);
-    appendSet(result, other);
-    updateCrdtSetLastVc(result, getCrdtSetLastVc(other));
-    return (CrdtObject*)result;
-}
 
-CrdtTombstone* crdtSetTombstoneMerge(CrdtTombstone* currentVal, CrdtTombstone* value) {
-    CRDT_SetTombstone* target = retrieveCrdtSetTombstone(currentVal);
-    CRDT_SetTombstone* other = retrieveCrdtSetTombstone(value);
-    if(target == NULL && other == NULL) {
-        return NULL;
-    }
-
-    if (target == NULL) {
-        return (CrdtTombstone*)dupCrdtSetTombstone(other);
-    }
-    CRDT_SetTombstone *result = dupCrdtSetTombstone(target);
-    appendSetTombstone(result, other);
-    updateCrdtSetTombstoneLastVc(result, getCrdtSetTombstoneLastVc(other));
-    updateCrdtSetTombstoneMaxDel(result, getCrdtSetTombstoneMaxDelVc(other));
-
-    return (CrdtTombstone*)result;
-}
 
 
 int initCrdtSetModule(RedisModuleCtx *ctx) {

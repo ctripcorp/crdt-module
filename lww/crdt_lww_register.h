@@ -208,9 +208,21 @@ void freeCrdtRegisterTombstone(void *obj) {
     freeCrdtLWWCrdtRegisterTombstone(obj);
 }
 
+int register_gc_stats = 1;
+int registerStartGc() {
+    register_gc_stats = 1;
+    return register_gc_stats;
+}
+int registerStopGc() {
+    register_gc_stats = 0;
+    return register_gc_stats;
+}
 
 //gc
 int crdtRegisterTombstoneGc(CrdtTombstone* target, VectorClock clock) {
+    if(!register_gc_stats) {
+        return 0;
+    }
     return crdtLWWRegisterTombstoneGc(target, clock);
 }
 

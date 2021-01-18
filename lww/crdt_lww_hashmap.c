@@ -105,7 +105,7 @@ void updateLastVCLWWHash(void* data, VectorClock vc) {
 
 void* createCrdtLWWHash() {
     CRDT_LWW_Hash *crdtHash = RedisModule_Alloc(sizeof(CRDT_LWW_Hash));
-    crdtHash->type = 0;
+    initCrdtObject((CrdtObject*)crdtHash);
     setType((CrdtObject*)crdtHash , CRDT_DATA);
     setDataType((CrdtObject*)crdtHash , CRDT_HASH_TYPE);
     dict *hash = dictCreate(&crdtHashDictType, NULL);
@@ -166,6 +166,7 @@ void* createCrdtLWWHashTombstone() {
     crdtHashTombstone->type = 0;
     crdtHashTombstone->maxDelGid = 0;
     crdtHashTombstone->maxDelTimestamp = 0;
+    initCrdtObject((CrdtObject*)crdtHashTombstone);
     setDataType((CrdtObject*)crdtHashTombstone, CRDT_HASH_TYPE);
     setType((CrdtObject*)crdtHashTombstone,  CRDT_TOMBSTONE);
     dict *hash = dictCreate(&crdtHashTombstoneDictType, NULL);
@@ -284,12 +285,25 @@ void crdtLWWHashTombstoneDigestFunc(RedisModuleDigest *md, void *value) {
     //todo: currently do nothing when digest
 }
 sds crdtHashInfo(void* data) {
-    // CRDT_LWW_Hash* hash = retrieveCrdtLWWHash(data);
+    CRDT_LWW_Hash* hash = retrieveCrdtLWWHash(data);
     sds result = sdsempty();
     sds vcStr = vectorClockToSds(getCrdtHashLastVc((CRDT_Hash*)data));
-    result = sdscatprintf(result, "type: lww_hash,  last-vc: %s",
+    result = sdscatprintf(result, "type: lww_hash,  last-vc: %s\n",
             vcStr);
     sdsfree(vcStr);
+    dictIterator* di = dictGetIterator(hash->map);
+    dictEntry* de = NULL;
+    int num = 5;
+    while((de = dictNext(di)) != NULL && num > 0) {
+        sds info = crdtRegisterInfo(dictGetVal(de));
+        result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
+        sdsfree(info);
+        num--;
+    }
+    if(num == 0 && de != NULL) {
+        result = sdscatprintf(result, "  ...\n");
+    }
+    dictReleaseIterator(di);
     return result;
 }
 sds crdtHashTombstoneInfo(void* data) {
@@ -298,16 +312,30 @@ sds crdtHashTombstoneInfo(void* data) {
     sds vcStr = vectorClockToSds(getCrdtHashTombstoneLastVc((CRDT_HashTombstone*)tombstone));
     VectorClock maxVc = getCrdtLWWHashTombstoneMaxDelVectorClock(tombstone);
     if(isNullVectorClock(maxVc)) {
-        result = sdscatprintf(result, "type: lww_hash_tombstone,  last-vc: %s",
+        result = sdscatprintf(result, "type: lww_hash_tombstone,  last-vc: %s\n",
             vcStr);
     }else{
         sds maxDelVcStr = vectorClockToSds(maxVc);
-        result = sdscatprintf(result, "type: lww_hash_tombstone,  last-vc: %s, max-del-gid: %d, max-del-time: %lld, max-del-vc: %s",
+        result = sdscatprintf(result, "type: lww_hash_tombstone,  last-vc: %s, max-del-gid: %d, max-del-time: %lld, max-del-vc: %s\n",
             vcStr, getCrdtLWWHashTombstoneMaxDelGid(tombstone), 
             getCrdtLWWHashTombstoneMaxDelTimestamp(tombstone),
             maxDelVcStr);
         sdsfree(maxDelVcStr);
     }
+    dictIterator* di = dictGetIterator(tombstone->map);
+    dictEntry* de = NULL;
+    int num = 5;
+    while((de = dictNext(di)) != NULL && num > 0) {
+        sds info = crdtRegisterTombstoneInfo(dictGetVal(de));
+        result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
+        sdsfree(info);
+        num--;
+    }
+    if(num == 0 && de != NULL) {
+        result = sdscatprintf(result, "  ...\n");
+    }
+    dictReleaseIterator(di);
+
     sdsfree(vcStr);
     return result;
 }

@@ -23,3 +23,4 @@ sds moduleString2Sds(RedisModuleString *argv) {
     const char *str = RedisModule_StringPtrLen(argv, &sdsLength);
     return sdsnewlen(str, sdsLength);
 }
+

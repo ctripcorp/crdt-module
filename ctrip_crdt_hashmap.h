@@ -55,6 +55,8 @@
 
 static RedisModuleType *CrdtHash;
 static RedisModuleType *CrdtHashTombstone;
+int hashStartGc();
+int hashStopGc();
 //common methods
 CrdtObject *crdtHashMerge(CrdtObject *currentVal, CrdtObject *value);
 int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value);
@@ -83,7 +85,6 @@ int crdtHashTombstoneGc(CrdtObject* target, VectorClock clock);
 int crdtHashTombstonePurge(CrdtObject* obj, CrdtObject* tombstone);
 sds crdtHashTombstoneInfo(void* data);
 void freeHashTombstoneFilter(CrdtObject** filters, int num);
-
 static CrdtTombstoneMethod HashTombstoneCommonMethod = {
     .merge = crdtHashTombstoneMerge,
     .filterAndSplit = crdtHashTombstoneFilter,

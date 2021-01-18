@@ -41,6 +41,7 @@
 #include "ctrip_crdt_common.h"
 #include "crdt_statistics.h"
 #include "crdt_set.h"
+#include "ctrip_crdt_zset.h"
 #include <stdlib.h>
 #include <stdio.h>
 #define CRDT_API_VERSION 1
@@ -62,16 +63,9 @@ int crdtOvcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_CrdtReplicateVerbatim(gid, ctx);
     if(gid != RedisModule_CurrentGid()) {
         VectorClock vclock = getVectorClockFromString(argv[2]);
-        long long  v = RedisModule_GetOvc(ctx);
-        VectorClock vc = LL2VC(v);
-        VectorClock newVectorClock = vectorClockMerge(vc, vclock);
-        if (!isNullVectorClock(vc)) {
-            freeVectorClock(vc);
-        }
+        RedisModule_UpdateOvc(ctx,  VC2LL(vclock));
         freeVectorClock(vclock);
-        RedisModule_SetOvc(ctx,  VC2LL(newVectorClock));
     }
-    
     return RedisModule_ReplyWithOk(ctx); 
 }
 //crdt.select <gid> <dbid>
@@ -94,7 +88,6 @@ int crdtSelectCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (RedisModule_CrdtSelectDb(ctx, gid, id) != REDISMODULE_OK) {
         RedisModule_ReplyWithError(ctx,"DB index is out of range");
         return CRDT_ERROR;
-    
     }
     return RedisModule_ReplyWithOk(ctx);
 }
@@ -156,7 +149,6 @@ VectorClock getVectorClockFromString(RedisModuleString *vectorClockStr) {
     const char *vcStr = RedisModule_StringPtrLen(vectorClockStr, &vcStrLength);
     sds vclockSds = sdsnewlen(vcStr, vcStrLength);
     VectorClock vclock = stringToVectorClock(vclockSds);
-    // VectorClock vclock = sdsToVectorClock(vclockSds);
     sdsfree(vclockSds);
     return vclock;
 }
@@ -185,6 +177,9 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key, RedisModuleKe
         case CRDT_RC_TYPE:
             saveValue(rio, getCrdtRc(), data);
             break;
+        case CRDT_ZSET_TYPE:
+            saveValue(rio, getCrdtSS(), data);
+            break;
         }   
     }
     CrdtTombstone* tombstone = RedisModule_ModuleTypeGetTombstone(moduleKey);
@@ -202,6 +197,9 @@ void RdbSaveCrdtValue(void* db, void *rio, RedisModuleString* key, RedisModuleKe
             break;
         case CRDT_RC_TYPE:
             saveValue(rio, getCrdtRcTombstone(), tombstone);
+            break;
+        case CRDT_ZSET_TYPE:
+            saveValue(rio, getCrdtSST(), tombstone);
             break;
         }
     }
@@ -226,12 +224,14 @@ int RdbLoadCrdtValue(void* db, RedisModuleString* key, void* rio, RedisModuleKey
         if(type == getCrdtRegister() || 
             type == getCrdtHash() || 
             type == getCrdtSet() ||
-            type == getCrdtRc()) {
+            type == getCrdtRc() || 
+            type == getCrdtSS()) {
             RedisModule_ModuleTypeLoadRdbAddValue(moduleKey, type, data);
         }  else if(type == getCrdtRegisterTombstone() ||
             type == getCrdtHashTombstone() ||
             type == getCrdtSetTombstone() ||
-            type == getCrdtRcTombstone()) {
+            type == getCrdtRcTombstone() ||
+            type == getCrdtSST()) {
             RedisModule_ModuleTombstoneLoadRdbAddValue(moduleKey, type, data);
         } else {
             result = C_ERR;
@@ -262,6 +262,8 @@ CrdtDataMethod* getCrdtDataMethod(CrdtObject* data) {
             return &SetDataMethod;
         case CRDT_RC_TYPE:
             return &RcDataMethod;
+        case CRDT_ZSET_TYPE:
+            return &ZSetDataMethod;
         default:
             return NULL;
     }
@@ -277,6 +279,8 @@ CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
                 return &SetCommonMethod;
             case CRDT_RC_TYPE:
                 return &RcCommonMethod;
+            case CRDT_ZSET_TYPE:
+                return &ZSetCommandMethod;
             default:
                 return NULL;
         }
@@ -295,6 +299,8 @@ CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
                 return &SetTombstoneCommonMethod;
             case CRDT_RC_TYPE:
                 return &RcTombstoneCommonMethod;
+            case CRDT_ZSET_TYPE:
+                return &ZsetTombstoneCommonMethod;
             default:
                 return NULL;
         }
@@ -339,6 +345,50 @@ int dataCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_CloseKey(moduleKey);
     return CRDT_OK;
 }
+//
+int crdtGcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if(argc < 3) {return RedisModule_WrongArity(ctx);}
+    long long ll = 0;
+    if(RedisModule_StringToLongLong(argv[2], &ll) != REDISMODULE_OK) {
+        return RedisModule_WrongArity(ctx);
+    }
+    sds module_name = RedisModule_GetSds(argv[1]);
+    int result = 0;
+    if(strcmp(module_name, "rc") == 0) {
+        if(ll) { 
+            result = rcStartGc();
+        } else {
+            result = rcStopGc();
+        }
+    } else if(strcmp(module_name, "zset") == 0) {
+        if(ll) { 
+            result = zsetStartGc();
+        } else {
+            result = zsetStopGc();
+        }
+    } else if(strcmp(module_name, "set") == 0) {
+        if(ll) { 
+            result = setStartGc();
+        } else {
+            result = setStopGc();
+        }
+    } else if(strcmp(module_name, "hash") == 0) {
+        if(ll) {
+            result = hashStartGc();
+        } else {
+            result = hashStopGc();
+        }
+    } else if(strcmp(module_name, "register") == 0) {
+        if(ll) {
+            result = registerStartGc();
+        } else {
+            result = registerStopGc();
+        }
+    }
+    return  RedisModule_ReplyWithLongLong(ctx, result);
+
+    
+}
 /* This function must be present on each Redis module. It is used in order to
  * register the commands into the Redis server. */
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -376,7 +426,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         RedisModule_Log(ctx, "warning", "counter module -- counter failed");
         return REDISMODULE_ERR;
     }
-
+    if(initCrdtSSModule(ctx) != REDISMODULE_OK) {
+        RedisModule_Log(ctx, "warning", "zset module -- zset failed");
+        return REDISMODULE_ERR;
+    }
     if (RedisModule_CreateCommand(ctx,"del",
                                   delCommand,"write",1,-1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
@@ -398,7 +451,9 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         return REDISMODULE_ERR;   
     if (RedisModule_CreateCommand(ctx, "crdt.ovc", 
                                 crdtOvcCommand, "write",  1, 2,1) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;                      
+        return REDISMODULE_ERR;  
+    if (RedisModule_CreateCommand(ctx, "crdt.debug_gc", crdtGcCommand, "readonly fast",  1, 2,1) == REDISMODULE_ERR)  
+        return REDISMODULE_ERR;               
     return REDISMODULE_OK;
 }
 
