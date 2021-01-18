@@ -429,6 +429,57 @@ void freeSetFilter(CrdtObject** filters, int num) {
     }
     RedisModule_Free(filters);
 }
+
+CrdtObject** crdtSetFilter2(CrdtObject* t, int gid, VectorClock min_vc, long long maxsize, int* num) {
+    crdt_orset_set* target = retrieve_crdt_orset_set(t);
+    CRDT_Set** result = NULL;
+    dict* map = getSetDict((CRDT_Set*)target);
+    dictIterator *di = dictGetIterator(map);
+    dictEntry *de;
+    int current_memory = 0;
+    CRDT_Set* set = NULL;
+    dict* m = NULL;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        VectorClock vc = dict_entry_get_vc(de);
+        if(!not_less_than_vc(min_vc, vc)) {
+            continue;
+        }  
+        size_t size = ((int)get_len(vc)) * sizeof(VectorClockUnit) + sdslen(dictGetKey(de));
+        if(size > maxsize) {
+            freeSetFilter((CrdtObject**)result, *num);
+            *num = -1;
+            RedisModule_Debug(logLevel, "[CRDT][FILTER] set key {%s} value too big", field);
+            return NULL;
+        }
+        if(current_memory + size > maxsize) {
+            set = NULL;
+        }
+        if(set == NULL) {
+            set = createCrdtSet();
+            m = getSetDict(set);
+            current_memory = 0;
+            m->type = &crdtSetFileterDictType;
+            (*num)++;
+            if(result) {
+                result = RedisModule_Realloc(result, sizeof(CRDT_Set*) * (*num));
+            }else {
+                result = RedisModule_Alloc(sizeof(CRDT_Set*));
+            }
+            result[(*num)-1] = set;
+        }
+        current_memory += size;
+        // dictAddVectorClock(m, field, vc);
+        dict_add_or_update_vc(m, field, vc, 0);
+        updateCrdtSetLastVc(set, vc);
+    }
+    dictReleaseIterator(di);
+    if(set != NULL) {
+        setCrdtSetLastVc(set, getCrdtSetLastVc(t));
+    }
+    return (CrdtObject**)result;
+}
+
 CrdtObject** crdtSetFilter(CrdtObject* t, int gid, long long logic_time, long long maxsize, int* num) {
     crdt_orset_set* target = retrieve_crdt_orset_set(t);
     CRDT_Set** result = NULL;
@@ -717,6 +768,73 @@ void freeSetTombstoneFilter(CrdtObject** filters, int num) {
         freeCrdtSetTombstone(filters[i]);
     }
     RedisModule_Free(filters);
+}
+
+CrdtObject** crdtSetTombstoneFilter2(CrdtTombstone* t, int gid, VectorClock min_vc, long long maxsize,int* num) {
+    crdt_orset_set_tombstone* target = retrieve_set_tombstone(t);
+    crdt_orset_set_tombstone** result = NULL;
+    dict* map = getSetTombstoneDict(target);
+    dictIterator *di = dictGetIterator(map);
+    dictEntry *de = NULL;
+    int current_memory = 0;
+    crdt_orset_set_tombstone* tom = NULL;
+    dict* m = NULL;
+
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        VectorClock vc = dict_entry_get_vc(de);
+        // if(get_vcu(vc, gid) < logic_time) {
+        //     continue;
+        // }
+        if(!not_less_than_vc(min_vc, vc)) {
+            continue;
+        }
+        size_t size = ((int)get_len(vc)) * sizeof(VectorClockUnit) + sdslen(dictGetKey(de));
+        if(size > maxsize) {
+            freeSetTombstoneFilter((CrdtObject**)result, *num);
+            *num = -1;
+            RedisModule_Debug(logLevel, "[CRDT][FILTER] set_tombstone key {%s} value too big", field);
+            return NULL;
+        }
+        if(current_memory + size > maxsize) {
+            tom = NULL;
+        }
+        if(tom == NULL) {
+            tom = (crdt_orset_set_tombstone*)(createCrdtSetTombstone());
+            m = getSetTombstoneDict(tom);
+            current_memory = 0;
+            m->type = &crdtSetFileterDictType;
+            (*num)++;
+            if(result) {
+                result = RedisModule_Realloc(result, sizeof(crdt_orset_set_tombstone*) * (*num));
+            }else {
+                result = RedisModule_Alloc(sizeof(crdt_orset_set_tombstone*));
+            }
+            result[(*num)-1] = tom;
+        }
+        current_memory += size;
+        dict_add_or_update_vc(m, field, vc, 0);
+        updateCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom, vc);
+    }
+    dictReleaseIterator(di);
+    if(tom == NULL && *num == 0) {
+        // VectorClockUnit unit = getVectorClockUnit(getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)target), gid);
+        if(!not_less_than_vc(min_vc, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)target))) {
+            return NULL;
+        }  
+        tom = (crdt_orset_set_tombstone*)(createCrdtSetTombstone());
+        m = getSetTombstoneDict(tom);
+        m->type = &crdtSetFileterDictType;
+        result = RedisModule_Alloc(sizeof(crdt_orset_set_tombstone*));
+        result[0] = tom;
+        *num = 1;
+    }
+    if(tom != NULL) {
+        updateCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom, getCrdtSetTombstoneLastVc((CRDT_SetTombstone*)target));
+        updateCrdtSetTombstoneMaxDel((CRDT_SetTombstone*)tom, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)target));
+    }
+
+    return (CrdtObject**)result;
 }
 
 CrdtObject** crdtSetTombstoneFilter(CrdtTombstone* t, int gid, long long logic_time, long long maxsize,int* num)  {

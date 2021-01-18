@@ -689,6 +689,30 @@ purgeVectorClock(VectorClock targe, VectorClock src) {
     return result;
 }
 
+long long get_vcu_from_vc(VectorClock vc, int gid, int* index) {
+    for(int i = 0, len = get_len(vc); i < len; i++) {
+        clk* c = get_clock_unit_by_index(&vc, i);
+        if(get_gid(*c) == gid) {
+            if(index != NULL) *index = i;
+            return get_logic_clock(*c);
+        }
+    }
+    if(index != NULL) *index = -1;
+    return 0;
+}
+
+int not_less_than_vc(VectorClock min_vc, VectorClock myself_vc) {
+    for(int i = 0; i < get_len(min_vc); i++) {
+        clk* c = get_clock_unit_by_index(&min_vc, i);
+        long long min_vcu = get_logic_clock(*c);
+        long long myself_vcu = get_vcu_from_vc(myself_vc, get_gid(*c), NULL);
+        if(myself_vcu > min_vcu) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 #if defined(VECTOR_CLOCK_TEST_MAIN)
 
 #include <stdlib.h>

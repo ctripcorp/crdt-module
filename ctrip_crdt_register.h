@@ -87,10 +87,13 @@ static CrdtDataMethod RcDataMethod = {
 
 CrdtObject *crdtRcMerge(CrdtObject *currentVal, CrdtObject *value);
 CrdtObject** crdtRcFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
+CrdtObject** crdtRcFilter2(CrdtObject* common, int gid, VectorClock min_vc, long long maxsize, int* length);
+
 void freeRcFilter(CrdtObject** filters, int num);
 static CrdtObjectMethod RcCommonMethod = {
     .merge = crdtRcMerge,
     .filterAndSplit = crdtRcFilter,
+    .filterAndSplit2 = crdtRcFilter2,
     .freefilter = freeRcFilter,
 };
 //========================= CRDT Tombstone functions =======================
@@ -99,6 +102,8 @@ CRDT_RCTombstone* dupCrdtRcTombstone(CRDT_RCTombstone* tombstone);
 int crdtRcTombstoneGc(CrdtTombstone* target, VectorClock clock);
 CrdtTombstone* crdtRcTombstoneMerge(CrdtTombstone* target, CrdtTombstone* src);
 CrdtTombstone** crdtRcTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) ;
+CrdtTombstone** crdtRcTombstoneFilter2(CrdtTombstone* target, int gid, VectorClock min_vc, long long maxsize,int* length) ;
+
 void freeCrdtRcTombstoneFilter(CrdtTombstone** filters, int num);
 int crdtRcTombstonePurge(CRDT_RCTombstone* tombstone, CRDT_RC* r);
 sds crdtRcTombstoneInfo(void* tombstone);
@@ -106,6 +111,7 @@ sds crdtRcTombstoneInfo(void* tombstone);
 static CrdtTombstoneMethod RcTombstoneCommonMethod = {
     .merge = crdtRcTombstoneMerge,
     .filterAndSplit =  crdtRcTombstoneFilter,
+    .filterAndSplit2 =  crdtRcTombstoneFilter2,
     .freefilter = freeCrdtRcTombstoneFilter,
     .gc = crdtRcTombstoneGc,
     .purge = crdtRcTombstonePurge,

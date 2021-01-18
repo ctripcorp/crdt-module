@@ -61,6 +61,8 @@ int hashStopGc();
 CrdtObject *crdtHashMerge(CrdtObject *currentVal, CrdtObject *value);
 int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value);
 CrdtObject** crdtHashFilter(CrdtObject* common, int gid, long long logic_time,long long maxsize,int* length);
+CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,long long maxsize,int* length);
+
 int crdtHashGc(CrdtObject* target, VectorClock clock);
 VectorClock crdtHashGetLastVC(void* data);
 void crdtHashUpdateLastVC(void* r, VectorClock vc);
@@ -68,6 +70,7 @@ void freeHashFilter(CrdtObject** filters, int num);
 static CrdtObjectMethod HashCommonMethod = {
     .merge = crdtHashMerge,
     .filterAndSplit = crdtHashFilter,
+    .filterAndSplit2 = crdtHashFilter2,
     .freefilter = freeHashFilter
 };
 sds crdtHashInfo(void* data);
@@ -81,6 +84,8 @@ static CrdtDataMethod HashDataMethod = {
 //common methods
 CrdtTombstone *crdtHashTombstoneMerge(CrdtTombstone *currentVal, CrdtTombstone *value);
 CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time,long long maxsize,int* length);
+CrdtObject** crdtHashTombstoneFilter2(CrdtTombstone* common, int gid, VectorClock min_vc,long long maxsize,int* length);
+
 int crdtHashTombstoneGc(CrdtObject* target, VectorClock clock);
 int crdtHashTombstonePurge(CrdtObject* obj, CrdtObject* tombstone);
 sds crdtHashTombstoneInfo(void* data);
@@ -88,6 +93,7 @@ void freeHashTombstoneFilter(CrdtObject** filters, int num);
 static CrdtTombstoneMethod HashTombstoneCommonMethod = {
     .merge = crdtHashTombstoneMerge,
     .filterAndSplit = crdtHashTombstoneFilter,
+    .filterAndSplit2 = crdtHashTombstoneFilter2,
     .freefilter = freeHashTombstoneFilter,
     .gc = crdtHashTombstoneGc,
     .purge = crdtHashTombstonePurge,
