@@ -70,16 +70,21 @@ static CrdtDataMethod SetDataMethod = {
 };
 CrdtObject *crdtSetMerge(CrdtObject *currentVal, CrdtObject *value);
 CrdtObject** crdtSetFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
+CrdtObject** crdtSetFilter2(CrdtObject* common, int gid, VectorClock min_vc, long long maxsize, int* length);
+
 void freeSetFilter(CrdtObject** filters, int num);
 static CrdtObjectMethod SetCommonMethod = {
     .merge = crdtSetMerge,
     .filterAndSplit = crdtSetFilter,
+    .filterAndSplit2 = crdtSetFilter2,
     .freefilter = freeSetFilter,
 };
 // int addSetTombstoneDictValue(CRDT_Set* data, sds field, CrdtMeta* meta);
 //about tombstone method
 CrdtTombstone* crdtSetTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other);
 CrdtObject** crdtSetTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) ;
+CrdtObject** crdtSetTombstoneFilter2(CrdtTombstone* target, int gid, VectorClock min_vc, long long maxsize,int* length) ;
+
 int crdtSetTombstoneGc(CrdtTombstone* target, VectorClock clock);
 sds crdtSetTombstoneInfo(void *t);
 void freeSetTombstoneFilter(CrdtObject** filters, int num);
@@ -87,6 +92,7 @@ int crdtSetTombstonePurge(CrdtTombstone* tombstone, CrdtObject* target);
 static CrdtTombstoneMethod SetTombstoneCommonMethod = {
     .merge = crdtSetTombstoneMerge,
     .filterAndSplit =  crdtSetTombstoneFilter,
+    .filterAndSplit2 =  crdtSetTombstoneFilter2,
     .freefilter = freeSetTombstoneFilter,
     .gc = crdtSetTombstoneGc,
     .purge = crdtSetTombstonePurge,

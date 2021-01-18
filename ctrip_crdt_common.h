@@ -83,6 +83,7 @@ typedef CrdtObject CrdtTombstone;
 typedef CrdtObject *(*crdtMergeFunc)(CrdtObject *curVal, CrdtObject *value);
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
 typedef CrdtObject** (*crdtFilterSplitFunc)(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
+typedef CrdtObject** (*crdtFilterSplitFunc2)(CrdtObject* obj,int gid, VectorClock min_vc, long long maxsize, int* length);
 typedef void (*crdtFreeFilterResultFunc)(CrdtObject** common, int num);
 typedef int (*crdtCleanFunc)( CrdtObject* value, CrdtTombstone* tombstone);
 typedef int (*crdtGcFunc)( CrdtTombstone* value, VectorClock clock);
@@ -103,6 +104,7 @@ long long getMetaVectorClockToLongLong(CrdtMeta* meta);
 typedef struct CrdtObjectMethod {
     crdtMergeFunc merge;
     crdtFilterSplitFunc filterAndSplit;
+    crdtFilterSplitFunc2 filterAndSplit2;
     crdtFreeFilterResultFunc freefilter;
 } CrdtObjectMethod;
 
@@ -121,6 +123,7 @@ typedef struct CrdtDataMethod {
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterSplitFunc filterAndSplit;
+    crdtFilterSplitFunc2 filterAndSplit2;
     crdtFreeFilterResultFunc freefilter;
     crdtGcFunc gc;
     crdtPurgeFunc purge;
@@ -161,7 +164,7 @@ int getCrdtRdbType(long long crdtRdbHeader);
 
 sds getMetaInfo(CrdtMeta *data);
 long long get_vcu(VectorClock vc, int gid);
-long long get_vcu_from_vc(VectorClock vc, int gid, int* index);
+
 long long get_vcu_by_meta(CrdtMeta *data);
 
 // int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);

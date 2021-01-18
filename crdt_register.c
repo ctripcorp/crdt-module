@@ -85,9 +85,13 @@ CrdtObject *crdtRegisterMerge(CrdtObject *currentVal, CrdtObject *value) {
     }
     return result;
 }
+
 CrdtObject** crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time,long long maxsize, int* length) {
     return filterRegister(common, gid, logic_time, maxsize, length);
 }
+
+
+
 int isRegister(void *data) {
     CRDT_Register* reg = (CRDT_Register*) data;
     if(reg != NULL && getDataType(reg) == CRDT_REGISTER_TYPE) {

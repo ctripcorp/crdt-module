@@ -175,6 +175,26 @@ sds crdtRcInfo(void* value) {
     return result;
 }
 
+CrdtObject** crdtRcFilter2(CrdtObject* target, int gid, VectorClock min_vc, long long maxsize, int* length) {
+    crdt_orset_rc* rc = retrieve_crdt_rc(target);
+    crdt_element el = get_element_from_rc(rc);
+    VectorClock myself_vc = element_get_vc(el);
+    if(!not_less_than_vc(min_vc, myself_vc)) {
+        freeVectorClock(myself_vc);
+        return NULL;
+    }
+    freeVectorClock(myself_vc);
+    //value + gid + time + vectorClock
+    if (get_crdt_element_memory(el) > maxsize) {
+        *length  = -1;
+        return NULL;
+    }
+    *length = 1;
+    CrdtObject** re = RedisModule_Alloc(sizeof(crdt_orset_rc*));
+    re[0] = target;
+    return re;
+}
+
 CrdtObject** crdtRcFilter(CrdtObject* target, int gid, long long logic_time, long long maxsize, int* length) {
     crdt_orset_rc* rc = retrieve_crdt_rc(target);
     crdt_element el = get_element_from_rc(rc);
@@ -469,6 +489,31 @@ size_t crdtRcTombstoneMemUsageFunc(const void *value) {
 
 void crdtRcTombstoneDigestFunc(RedisModuleDigest *md, void *value) {
 
+}
+
+CrdtTombstone** crdtRcTombstoneFilter2(CrdtTombstone* target, int gid, VectorClock min_vc, long long maxsize,int* length) {
+    crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(target);
+    crdt_element tel = get_element_from_rc_tombstone(rct);
+    // long long vcu = element_get_vcu_by_gid(tel, gid);
+    // if(vcu < logic_time) {
+    //     return NULL;
+    // }
+    VectorClock myself_vc = element_get_vc(tel);
+    if(!not_less_than_vc(min_vc, myself_vc)) {
+        freeVectorClock(myself_vc);
+        return NULL;
+    }
+    freeVectorClock(myself_vc);
+    //value + gid + time + vectorClock
+    if (get_crdt_element_memory(tel) > maxsize) {
+        *length  = -1;
+        return NULL;
+    }
+
+    *length = 1;
+    CrdtTombstone** re = RedisModule_Alloc(sizeof(crdt_rc_tombstone*));
+    re[0] = (CrdtTombstone*)rct;
+    return re;
 }
 
 CrdtTombstone** crdtRcTombstoneFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) {

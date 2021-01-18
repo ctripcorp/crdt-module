@@ -267,17 +267,7 @@ long long get_vcu(VectorClock vc, int gid) {
     return vcu;
 }
 
-long long get_vcu_from_vc(VectorClock vc, int gid, int* index) {
-    for(int i = 0, len = get_len(vc); i < len; i++) {
-        clk* c = get_clock_unit_by_index(&vc, i);
-        if(get_gid(*c) == gid) {
-            if(index != NULL) *index = i;
-            return get_logic_clock(*c);
-        }
-    }
-    if(index != NULL) *index = -1;
-    return 0;
-}
+
 
 long long get_vcu_by_meta(CrdtMeta* meta) {
     int gid = getMetaGid(meta);

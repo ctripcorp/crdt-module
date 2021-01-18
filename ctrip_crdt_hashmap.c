@@ -1318,6 +1318,58 @@ void freeHashTombstoneFilter(CrdtObject** filters, int num) {
     }
     RedisModule_Free(filters);
 }
+
+CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,long long maxsize,int* num) {
+    CRDT_Hash* crdtHash = retrieveCrdtHash(common);
+    CRDT_Hash** result = NULL;
+    dictIterator *di = dictGetSafeIterator(crdtHash->map);
+    dictEntry *de;
+    CRDT_Hash* hash = NULL;
+    int current_memory = 0;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        CRDT_Register *crdtRegister = dictGetVal(de);
+        int length = 0;
+        CRDT_Register **filted = crdtRegisterFilter2(crdtRegister, gid, min_vc, maxsize, &length);
+        if(length == -1) {
+            freeRegisterFilter(filted, length);
+            freeHashFilter((CrdtObject**)result, *num);
+            *num = -1;
+            RedisModule_Debug(logLevel, "[CRDT][FILTER] hash key {%s} value too big", field);
+            //clean all
+            return NULL;
+        }
+        if(length != 0) {
+            if(current_memory + sdslen(field) + crdtRegisterMemUsageFunc(filted[0]) > maxsize) {
+                hash = NULL;
+            }
+            
+            if(hash == NULL) {
+                hash = createCrdtHash();
+                current_memory = 0;
+                hash->map->type = &crdtHashFileterDictType;
+                (*num)++;
+                if(result) {
+                    result = RedisModule_Realloc(result, sizeof(CRDT_Hash*) * (*num));
+                }else {
+                    result = RedisModule_Alloc(sizeof(CRDT_Hash*));
+                }
+                result[(*num)-1] = hash;
+            }
+            current_memory += sdslen(field) + sdslen(getCrdtRegisterSds(filted[0]));
+            dictAdd(hash->map, field, filted[0]);
+            updateLastVCHash(hash, getCrdtRegisterLastVc(filted[0]));
+        }
+        freeRegisterFilter(filted, length);
+    }
+    dictReleaseIterator(di);
+    if(hash != NULL) {
+        setCrdtHashLastVc(hash, getCrdtHashLastVc(crdtHash));
+    }
+    return (CrdtObject**)result;
+}
+
+
 CrdtObject** crdtHashFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* num) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(common);
     CRDT_Hash** result = NULL;
@@ -1449,6 +1501,61 @@ CrdtTombstone *crdtHashTombstoneMerge(CrdtTombstone *currentVal, CrdtTombstone *
     return (CrdtTombstone*)result;
 }
 
+CrdtObject** crdtHashTombstoneFilter2(CrdtTombstone* common, int gid, VectorClock min_vc,long long maxsize,int* num) {
+    CRDT_HashTombstone* target = retrieveCrdtHashTombstone(common);
+    // VectorClockUnit unit = getVectorClockUnit(getCrdtHashTombstoneLastVc(target), gid);
+    // if(isNullVectorClockUnit(unit)) return NULL;
+    // long long vcu = get_logic_clock(unit);
+    // if(vcu < logic_time) return NULL;
+    if(!not_less_than_vc(min_vc, getCrdtHashTombstoneLastVc(target))) {
+        return NULL;
+    }
+    CRDT_HashTombstone** result = NULL;
+    dictIterator *di = dictGetSafeIterator(target->map);
+    dictEntry *de;
+    CRDT_HashTombstone* tombstone = NULL;
+    int current_memory = 0;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        CRDT_Register *crdtRegister = dictGetVal(de);
+        int length = 0;
+        CRDT_RegisterTombstone **filted = crdtRegisterTombstoneFilter2(crdtRegister, gid, min_vc, maxsize, &length);
+        if(length == -1) {
+            freeRegisterTombstoneFilter(filted, length);
+            freeHashFilter((CrdtObject**)result, *num);
+            *num = -1;
+            RedisModule_Debug(logLevel, "[CRDT][FILTER] hash tombstone key {%s} value too big", field);
+            //clean all
+            return NULL;
+        }
+        if(length != 0) {
+            if(current_memory + sdslen(field) + crdtRegisterTombstoneMemUsageFunc(filted[0]) > maxsize) {
+                tombstone = NULL;
+            }
+            if(tombstone == NULL) {
+                tombstone = createCrdtHashFilterTombstone((CRDT_HashTombstone*)target);
+                current_memory = 0;
+                tombstone->map->type = &crdtHashFileterDictType;
+                (*num)++;
+                if(result) {
+                    result = RedisModule_Realloc(result, sizeof(CRDT_HashTombstone*) * (*num));
+                }else {
+                    result = RedisModule_Alloc(sizeof(CRDT_HashTombstone*));
+                }
+                result[(*num)-1] = tombstone;
+            }
+            current_memory += sdslen(field) ;
+            dictAdd(tombstone->map, field, filted[0]);
+            mergeCrdtHashTombstoneLastVc(tombstone,  getCrdtRegisterLastVc(filted[0]));
+        }
+        freeRegisterTombstoneFilter(filted, length);
+    }
+    if(tombstone) {
+        mergeCrdtHashTombstoneLastVc(tombstone, getCrdtHashTombstoneLastVc((CRDT_HashTombstone*)target));
+    }
+    dictReleaseIterator(di);
+    return (CrdtObject**)result;
+}
 
 CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time, long long maxsize, int* num) {
     CRDT_HashTombstone* target = retrieveCrdtHashTombstone(common);
