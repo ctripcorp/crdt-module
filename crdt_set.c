@@ -785,7 +785,7 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
                                   saddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"crdt.sadd",
-                                  crdtSaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtSaddCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "sismember", sismemberCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
@@ -793,7 +793,7 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
                                 sremCommand, "write deny-oom", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;   
     if (RedisModule_CreateCommand(ctx,"crdt.srem",
-                                  crdtSremCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtSremCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR; 
     if (RedisModule_CreateCommand(ctx, "scard",
                                 scardCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR) 
@@ -812,7 +812,7 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
                                 crdtSismemberCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR) 
         return REDISMODULE_ERR;   
     if (RedisModule_CreateCommand(ctx,"crdt.del_set",
-                                  crdtDelSetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtDelSetCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;    
     if (RedisModule_CreateCommand(ctx,"spop",
                                   spopCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)

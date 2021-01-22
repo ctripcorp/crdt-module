@@ -1363,7 +1363,7 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
                                   zaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.zadd",
-                                  crdtZaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtZaddCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"ZSCORE",
                                   zscoreCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
@@ -1378,7 +1378,7 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
                                   zincrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.zincrby" ,
-                                    crdtZincrbyCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    crdtZincrbyCommand, "write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zcount",
                             zcountCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
@@ -1405,10 +1405,10 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
                                   zremCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.zrem",
-                                  crdtZremCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtZremCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.del_ss",
-                                crdtDelSSCommand  ,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                crdtDelSSCommand  ,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zremrangebyrank", 
                                   zremrangebyrankCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)

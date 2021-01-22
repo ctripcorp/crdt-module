@@ -167,7 +167,18 @@ int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register
     return compareCrdtMeta(getCrdtLWWRegisterMeta(current), getCrdtLWWRegisterTombstoneMeta(t));
 }
 int purgeLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
-    return compareTombstoneAndRegister(tombstone, target) > COMPARE_META_EQUAL ? PURGE_VAL: PURGE_TOMBSTONE;
+    CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
+    if(compareTombstoneAndRegister(tombstone, target) > COMPARE_META_EQUAL ) {
+        VectorClock old = t->vectorClock;
+        t->vectorClock = vectorClockMerge(old, getCrdtRegisterLastVc(target));
+        if(!isNullVectorClock(old)) {
+            freeVectorClock(old);
+        }
+        return PURGE_VAL;
+    } else {
+        updateLastVCLWWRegister(target, t->vectorClock);
+        return PURGE_TOMBSTONE;
+    }
 }
 int compareCrdtLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
@@ -286,22 +297,15 @@ CRDT_LWW_Register** filterLWWRegister(CRDT_LWW_Register* target, int gid, long l
 CrdtObject** crdtRegisterFilter2(CrdtObject* target, int gid, VectorClock min_vc, long long maxsize, int* length) {
     CRDT_LWW_Register* reg = retrieveCrdtLWWRegister(target);
     VectorClock myself_vc = getCrdtLWWRegisterVectorClock(reg);
-    {
-        sds min_str = vectorClockToSds(min_vc);
-        sds myself_str = vectorClockToSds(myself_vc);
-        RedisModule_Debug(logLevel, "min_vc: %s, myself_vc: %s, %d", min_str, myself_str, not_less_than_vc(min_vc, myself_vc) );
-        sdsfree(min_str);
-        sdsfree(myself_str);
-    }
     if(!not_less_than_vc(min_vc, myself_vc)) {
         return NULL;
     }
     *length = 1;
     CRDT_LWW_Register** re = RedisModule_Alloc(sizeof(CRDT_LWW_Register*));
     re[0] = reg;
-    return re;
-
+    return (CrdtObject** )re;
 }
+
 sds crdtLWWRegisterInfo(CRDT_LWW_Register *crdtRegister) {
     sds result = sdsempty();
     sds vcStr = vectorClockToSds(getCrdtLWWRegisterVectorClock(crdtRegister));
@@ -370,7 +374,7 @@ CRDT_LWW_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_LWW_RegisterTombstone
 CrdtObject** crdtRegisterTombstoneFilter2(CrdtTombstone* target, int gid, VectorClock min_vc, long long maxsize,int* length) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
     size_t memory_size = crdtLWWRegisterTombstoneMemUsageFunc(t);
-    VectorClock vc = getCrdtRegisterTombstoneLastVc(t);
+    VectorClock vc = getCrdtRegisterTombstoneLastVc((CRDT_RegisterTombstone*)t);
     if(!not_less_than_vc(min_vc, vc)) {
         return NULL;
     }
