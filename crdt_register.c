@@ -165,16 +165,16 @@ int initRegisterModule(RedisModuleCtx *ctx) {
     if (CrdtRegisterTombstone == NULL) return REDISMODULE_ERR;
     
     if (RedisModule_CreateCommand(ctx,"CRDT.SET",
-                                  CRDT_SetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  CRDT_SetCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.DEL_REG",
-                                  CRDT_DelRegCommand,"write",1,1,1) == REDISMODULE_ERR)
+                                  CRDT_DelRegCommand,"write allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     
     if (RedisModule_CreateCommand(ctx, "CRDT.MSET",
-                                    CRDT_MSETCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    CRDT_MSETCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 

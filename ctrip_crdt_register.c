@@ -1385,7 +1385,7 @@ int initRcModule(RedisModuleCtx *ctx) {
                                   setCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.RC",
-                                  crdtRcCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtRcCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"GET",
                                   getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
@@ -1395,7 +1395,7 @@ int initRcModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.del_rc",
-                                  crdtDelRcCommand,"write",1,1,1) == REDISMODULE_ERR)
+                                  crdtDelRcCommand,"write allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "SETEX", 
                                     setexCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
@@ -1422,7 +1422,7 @@ int initRcModule(RedisModuleCtx *ctx) {
                                     decrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.counter",
-                                    crdtCounterCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    crdtCounterCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "MSET", 
                                     msetCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
@@ -1434,7 +1434,7 @@ int initRcModule(RedisModuleCtx *ctx) {
                                     mgetCommand, "readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.mset_rc", 
-                                    crdtMsetRcCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    crdtMsetRcCommand, "write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
