@@ -179,9 +179,6 @@ int replicationFeedCrdtZremCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta*
     return cmdlen;
 }
 int replicationCrdtZremCommand(RedisModuleCtx* ctx, sds key, CrdtMeta* meta ,sds* callback, int callback_len,int callback_byte_size) {
-    // sds vcSds = vectorClockToSds(getMetaVectorClock(meta));
-    // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.zrem", "sllca", key,  getMetaGid(set_meta), getMetaTimestamp(set_meta), vcSds, callback, callback_len);
-    // sdsfree(vcSds);
     size_t alllen = 20 
     + sdslen(key)
     + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN
@@ -247,10 +244,8 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
         return RedisModule_ReplyWithError(ctx,
             "ERR INCR option supports a single increment-element pair");
     }
-    // scores = RedisModule_Alloc(sizeof(double)*elements);
     double scores[elements];
     sds keys[elements];
-    // double scores[elements];
     for(int i = 0; i < elements; i+=1) {
         if(RedisModule_StringToDouble(argv[i * 2 + scoreidx], &scores[i]) != REDISMODULE_OK) {
             RedisModule_ReplyWithError(ctx, "ERR value is not a valid float");
@@ -346,7 +341,6 @@ cleanup:
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_ZSET, incr? "zincr":"zadd", argv[1]);
     }
 error:
-    // if(scores != NULL) RedisModule_Free(scores);
     if(zadd_meta.gid != 0) freeIncrMeta(&zadd_meta);
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     return result;
@@ -396,7 +390,6 @@ int crdtZaddCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     for(int i = 5; i < argc; i += 2) {
         sds field = RedisModule_GetSds(argv[i]);
         sds info = RedisModule_GetSds(argv[i+1]);
-        // dictEntry* de = findSetDict(current, field);
         result += zsetTryAdd(current, tombstone, field, &meta, info);
     }
     if(result == 0 ) {
@@ -428,7 +421,6 @@ end:
         freeVectorClock(meta.vectorClock);
     }
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-    // sds cmdname = RedisModule_GetSds(argv[0]);
     if(status == CRDT_OK) {
         return RedisModule_ReplyWithOk(ctx); 
     }else{
@@ -468,7 +460,6 @@ int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     for(int i = 5; i < argc; i += 2) {
         sds field = RedisModule_GetSds(argv[i]);
         sds score = RedisModule_GetSds(argv[i+1]);
-        // dictEntry* de = findSetDict(current, field);
         result += zsetTryIncrby(current, tombstone, field, &meta, score);
     }
     if(result == 0) {
@@ -500,7 +491,6 @@ end:
         freeVectorClock(meta.vectorClock);
     }
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-    // sds cmdname = RedisModule_GetSds(argv[0]);
     if(status == CRDT_OK) {
         return RedisModule_ReplyWithOk(ctx); 
     }else{
@@ -512,11 +502,13 @@ end:
 */
 int zscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
-    double result = 0;
-    if(moduleKey == NULL) {
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
         goto error;
     }
+    double result = 0;
     CRDT_SS* current = getCurrentValue(moduleKey);
     if(current) {
         if (getScore(current, RedisModule_GetSds(argv[2]), &result)) {
@@ -534,9 +526,11 @@ error:
  */ 
 int zcardCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 2) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
+    int replyed = 0;
     long long result = 0;
-    if(moduleKey == NULL) {
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
         goto end;
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
@@ -567,7 +561,6 @@ int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
     crdtAssert(dlen <= len);
     sds vcSds = vectorClockToSds(getMetaVectorClock(&del_meta));
     RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_SS", "sllca", keyRobj, getMetaGid(&del_meta), getMetaTimestamp(&del_meta), vcSds, del_counters, (size_t)dlen);
-    // replicationCrdtDelSSCommand(dbId, &del_meta, RedisModule_GetSds(keyRobj), del_counters, dlen);
     sdsfree(vcSds);
     for(int i = 0; i < dlen; i++) {
         sdsfree(del_counters[i]);
@@ -604,7 +597,6 @@ int crdtDelSSCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     for(int i = 5; i < argc; i += 1) {
         sds field_and_del_counter_info = RedisModule_GetSds(argv[i]);
-        // dictEntry* de = findSetDict(current, field);
         zsetTryRem(tombstone, current, field_and_del_counter_info, &meta);
     }
     zsetTryDel(current, tombstone, &meta);
@@ -626,7 +618,6 @@ end:
         freeVectorClock(meta.vectorClock);
     }
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-    // sds cmdname = RedisModule_GetSds(argv[0]);
     if(status == CRDT_OK) {
         return RedisModule_ReplyWithOk(ctx); 
     }else{
@@ -636,6 +627,7 @@ end:
 
 //zrange key start end 
 int zrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int reverse) {
+    if(argc < 4) { return RedisModule_WrongArity(ctx); }
     long long start;
     long long end;
     int withscores = 0;
@@ -650,9 +642,11 @@ int zrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     if(argc == 5 && !strcasecmp(RedisModule_GetSds(argv[4]), "withscores")) {
         withscores = 1;
     }
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
-    if(moduleKey == NULL) {
-        return RedisModule_ReplyWithArray(ctx , 0);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
+        return RedisModule_ReplyWithArray(ctx , 0);;
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     size_t llen = crdtZsetLength(current);
@@ -668,17 +662,7 @@ int zrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     RedisModule_ReplyWithArray(ctx, withscores ? (rangelen*2) : rangelen);
     zskiplistNode *ln = zset_get_zsl_element_by_rank(current, reverse, start);
 
-    // if (reverse) {
-    //     ln = zsl->tail;
-    //     if (start > 0)
-    //         ln = zslGetElementByRank(zsl,llen-start);
-    // } else {
-    //     ln = zsl->header->level[0].forward;
-    //     if (start > 0)
-    //         ln = zslGetElementByRank(zsl,start+1);
-    // }
     while(rangelen--) {
-        // serverAssertWithInfo(c,zobj,ln != NULL);
         sds ele = ln->ele;
         RedisModule_ReplyWithStringBuffer(ctx,ele,sdslen(ele));
         if (withscores)
@@ -705,7 +689,7 @@ int zremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     int deleted = 0, keyremoved = 0, i;
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSS);
     if(moduleKey == NULL) {
-        return RedisModule_ReplyWithLongLong(ctx , 0);
+        return REDISMODULE_ERR;
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     if(current == NULL) {
@@ -783,7 +767,6 @@ int crdtZremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     int result = 0;
     for(int i = 5; i < argc; i += 1) {
         sds field_and_del_counter_info = RedisModule_GetSds(argv[i]);
-        // dictEntry* de = findSetDict(current, field);
         result += zsetTryRem(tombstone, current, field_and_del_counter_info, &meta);
     }
    
@@ -814,7 +797,6 @@ end:
         freeVectorClock(meta.vectorClock);
     }
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-    // sds cmdname = RedisModule_GetSds(argv[0]);
     if(status == CRDT_OK) {
         return RedisModule_ReplyWithOk(ctx); 
     }else{
@@ -823,11 +805,12 @@ end:
 }
 
 int zrankGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int reverse) {
-    if(argc != 3) { return RedisModule_WrongArity(ctx);}
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
-    if(moduleKey == NULL) {
-        RedisModule_ReplyWithNull(ctx);
-        goto end;
+    if(argc != 3) { return RedisModule_WrongArity(ctx); }
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
+        return RedisModule_ReplyWithNull(ctx);
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     long rank = zsetRank(current, RedisModule_GetSds(argv[2]),reverse);
@@ -836,7 +819,6 @@ int zrankGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
     } else {
         RedisModule_ReplyWithNull(ctx);
     }
-end:
     RedisModule_CloseKey(moduleKey);
     return 1;
 }
@@ -850,6 +832,7 @@ int zrevrankCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 
 int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int reverse) {
+    if(argc < 4) { return RedisModule_WrongArity(ctx); }
     zrangespec range;
     long long offset = 0, limit = -1;
     int withscores = 0;
@@ -888,8 +871,10 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
         }
     }
 
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
-    if(moduleKey == NULL) {
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
         return RedisModule_ReplyWithNull(ctx);
     }
     CRDT_SS* current = RedisModule_ModuleTypeGetValue(moduleKey);
@@ -898,7 +883,6 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
         if(moduleKey) RedisModule_CloseKey(moduleKey);
         return RedisModule_ReplyWithNull(ctx);
     }
-    // replylen = addDeferredMultiBulkLength(ctx);
     while (ln && offset--) {
         if (reverse) {
             ln = ln->backward;
@@ -919,10 +903,7 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
 
         
         fields[rangelen] = ln->ele;
-        // RedisModule_ReplyWithStringBuffer(ctx,ln->ele,sdslen(ln->ele));
-
         if (withscores) {
-            // RedisModule_ReplyWithDouble(ctx,ln->score);
             scores[rangelen] = ln->score;
         }
         rangelen++;
@@ -944,7 +925,6 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
             RedisModule_ReplyWithDouble(ctx,scores[i]);
         }
     }
-    // setDeferredMultiBulkLength(ctx, replylen, rangelen);
     if(moduleKey) RedisModule_CloseKey(moduleKey);
     return 1;
 }
@@ -967,10 +947,11 @@ int zcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         return RedisModule_ReplyWithError(ctx, "min or max is not a float");
     }
 
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
-    if(moduleKey == NULL) {
-        RedisModule_ReplyWithNull(ctx);
-        goto end;
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
+        return RedisModule_ReplyWithNull(ctx);
     }
     CRDT_SS* current = RedisModule_ModuleTypeGetValue(moduleKey);
     zskiplistNode *zn = zslInRange(current, &range, 0);
@@ -986,7 +967,6 @@ int zcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         }
     }
     RedisModule_ReplyWithLongLong(ctx, count);
-end: 
     if(moduleKey) RedisModule_CloseKey(moduleKey);
     return 1;
 }
@@ -996,8 +976,8 @@ end:
 
 /* This command implements ZRANGEBYLEX, ZREVRANGEBYLEX. */
 int genericZrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int reverse) {
+    if(argc < 4) { return RedisModule_WrongArity(ctx); }
     zlexrangespec range;
-    RedisModuleString* key = argv[1];
     long offset = 0, limit = -1;
     unsigned long rangelen = 0;
     int minidx, maxidx;
@@ -1032,11 +1012,12 @@ int genericZrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
             }
         }
     }
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, key, REDISMODULE_READ);
-    if(moduleKey == NULL) {
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
         zslFreeLexRange(&range);
-        RedisModule_CloseKey(moduleKey);
-        return 1;
+        if(replyed) return CRDT_ERROR;
+        return RedisModule_ReplyWithNull(ctx);
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     if (current == NULL) {
@@ -1079,8 +1060,7 @@ int genericZrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
         }
         fields[rangelen] = ln->ele;
         rangelen++;
-        // addReplyBulkCBuffer(c,ln->ele,sdslen(ln->ele));
-        
+
         /* Move to next node */
         if (reverse) {
             ln = ln->backward;
@@ -1107,16 +1087,19 @@ int zrevrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 }
 
 int zlexcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if(argc < 4) { return RedisModule_WrongArity(ctx); }
     zlexrangespec range;
     int count = 0;
     /* Parse the range arguments */
     if (!zslParseLexRange(RedisModule_GetSds(argv[2]),RedisModule_GetSds(argv[3]),&range)) {
         return RedisModule_ReplyWithError(ctx,"min or max not valid string range item");
     }
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ);
-    if(moduleKey == NULL) {
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
         zslFreeLexRange(&range);
-        return 1;
+        if(replyed) return CRDT_ERROR;
+        return RedisModule_ReplyWithLongLong(ctx, 0);
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
 
@@ -1193,19 +1176,15 @@ int zscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 #define ZRANGE_SCORE 1
 #define ZRANGE_LEX 2
 int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int rangetype) {
-    
 
     int keyremoved = 0;
     unsigned long deleted = 0;
     zrangespec range;
     zlexrangespec lexrange;
     long long start, end, llen;
-
+    CrdtMeta meta = {.gid = 0};
     /* Step 1: Parse the range. */
     if (rangetype == ZRANGE_RANK) {
-        // if ((getLongFromObjectOrReply(c,c->argv[2],&start,NULL) != C_OK) ||
-        //     (getLongFromObjectOrReply(c,c->argv[3],&end,NULL) != C_OK))
-        //     return;
         if(RedisModule_StringToLongLong(argv[2], &start) != REDISMODULE_OK ||
             RedisModule_StringToLongLong(argv[3], &end) != REDISMODULE_OK) {
                 return RedisModule_ReplyWithError(ctx,"start or end is not a long long");
@@ -1219,19 +1198,20 @@ int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
             return RedisModule_ReplyWithError(ctx,"min or max not valid string range item");
         }
     }
-
     /* Step 2: Lookup & range sanity checks if needed. */
-    // if ((zobj = lookupKeyWriteOrReply(c,key,shared.czero)) == NULL ||
-    //     checkType(c,zobj,OBJ_ZSET)) goto cleanup;
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSS);
     if(moduleKey == NULL) {
-        return RedisModule_ReplyWithLongLong(ctx , 0);
+        if (rangetype == ZRANGE_LEX) zslFreeLexRange(&lexrange);
+        return REDISMODULE_ERR;
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     if(!current) {
+        RedisModule_CloseKey(moduleKey);
+        if (rangetype == ZRANGE_LEX) zslFreeLexRange(&lexrange);
         return RedisModule_ReplyWithLongLong(ctx , 0);
     }
     sds callback_items[crdtZsetLength(current)];
+    
     if (rangetype == ZRANGE_RANK) {
         /* Sanitize indexes. */
         llen = crdtZsetLength(current);
@@ -1247,14 +1227,8 @@ int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
         }
         if (end >= llen) end = llen-1;
     }
-
     /* Step 3: Perform the range deletion operation. */
-    CrdtMeta meta = {.gid = 0};
     
-    if(current == NULL) {
-        RedisModule_CloseKey(moduleKey);
-        return RedisModule_ReplyWithLongLong(ctx , 0);
-    }
     CrdtTombstone* tombstone = getTombstone(moduleKey);
     if(tombstone != NULL && !isCrdtSSTombstone(tombstone) ) {
         tombstone = NULL;
@@ -1278,25 +1252,19 @@ int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
         deleted = zslDeleteRangeByLex(current, tombstone, &meta, &lexrange, callback_items, &callback_byte_size);
         break;
     }
-    // if (htNeedsResize(zs->dict)) dictResize(zs->dict);
     if (current && crdtZsetLength(current) == 0) {
         RedisModule_DeleteKey(moduleKey);
         keyremoved = 1;
     }
     updateCrdtSSTLastVc(tombstone, getMetaVectorClock(&meta));
     replicationCrdtZremCommand(ctx, RedisModule_GetSds(argv[1]), &meta ,callback_items, deleted, callback_byte_size);
-
-   
-
     /* Step 4: Notifications and reply. */
     if (deleted) {
         char *event[3] = {"zremrangebyrank","zremrangebyscore","zremrangebylex"};
-        // signalModifiedKey(c->db,key);
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_ZSET, event[rangetype], argv[1]);
         if (keyremoved)
             RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_ZSET, "del", argv[1]);
     }
-    // server.dirty += deleted;
     RedisModule_ReplyWithLongLong(ctx,deleted);
 
 cleanup:
@@ -1307,17 +1275,26 @@ cleanup:
 }
 
 int zremrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if(argc != 4) { return RedisModule_WrongArity(ctx); }
     return zremrangeGenericCommand(ctx, argv, argc, ZRANGE_SCORE);
 }
 
 int zremrangebyrankCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if(argc != 4) { return RedisModule_WrongArity(ctx); }
     return zremrangeGenericCommand(ctx, argv, argc, ZRANGE_RANK);
+}
+
+int zremrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if(argc != 4) { return RedisModule_WrongArity(ctx); }
+    return zremrangeGenericCommand(ctx, argv, argc, ZRANGE_LEX);
 }
 
 int crdtZscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc != 3) return RedisModule_WrongArity(ctx);
-    RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
-    if(moduleKey == NULL) {
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
+        if(replyed) return CRDT_ERROR;
         goto error;
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
@@ -1382,10 +1359,13 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zcount",
                             zcountCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
-    return REDISMODULE_ERR;
-    if (RedisModule_CreateCommand(ctx,"ZRANGE",
-                                  zrangeCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"ZRANGE",
+                                zrangeCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+        return  REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "zremrangebylex",
+                                zremrangebylexCommand, "readonly deny-oom",1,1,1) == REDISMODULE_ERR)         
+        return  REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zrevrange",
                                   zrevrangeCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;

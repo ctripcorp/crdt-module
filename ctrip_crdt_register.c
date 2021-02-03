@@ -602,17 +602,12 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
     initIncrMeta(&set_meta);
     long long expire_time = -2;
     if(type == CRDT_RC_TYPE) {
-        // callback_item = add_rc(moduleKey, &set_meta, RedisModule_GetSds(val));
-        sds valstr = RedisModule_GetSds(val);
-        char valbuf[(21 +17 +4)*16 + sdslen(valstr)];
-        int vallen = add_rc2(ctx, getCurrentValue(moduleKey), getTombstone(moduleKey), &set_meta, key, valstr , valbuf);
+        callback_item = add_rc(moduleKey, &set_meta, RedisModule_GetSds(val));
         expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
-        replicationCrdtRcCommand2(ctx, RedisModule_GetSds(key), &set_meta, valbuf, vallen, expire_time);
-        // replicationCrdtRcCommand(ctx, RedisModule_GetSds(key), &set_meta, callback_item, expire_time);
-        // sdsfree(callback_item);
+        replicationCrdtRcCommand(ctx, RedisModule_GetSds(key), &set_meta, callback_item, expire_time);
+        sdsfree(callback_item);
     } else if(type == CRDT_REGISTER_TYPE) {
         callback_item = add_reg(moduleKey, &set_meta, RedisModule_GetSds(val));
-        // callback_item = add_reg2(ctx, getCurrentValue(moduleKey), getTombstone(moduleKey), &set_meta, key, RedisModule_GetSds(val));
         sdsfree(callback_item);
         expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
         replicationCrdtSetCommand(ctx, RedisModule_GetSds(key), RedisModule_GetSds(val), &set_meta,  expire_time);
@@ -659,8 +654,6 @@ int psetexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
  *   crdt.set when value is string and tombstone is null   
  *   crdt.rc  when value is int or float
  */
-
-
 
 int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);

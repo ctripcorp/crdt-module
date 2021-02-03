@@ -360,6 +360,8 @@ sdsToVectorClockUnit(sds vcUnitStr) {
     long long ll_gid, ll_time;
     string2ll(vcUnits[0], sdslen(vcUnits[0]), &ll_gid);
     string2ll(vcUnits[1], sdslen(vcUnits[1]), &ll_time);
+    assert(ll_gid > 0);
+    assert(ll_time >= 0);
     sdsfreesplitres(vcUnits, numElements);
     return init_clock((char)ll_gid, ll_time);
 }
@@ -431,6 +433,8 @@ stringToVectorClockUnit(char* vcUnitStr) {
     long long ll_gid, ll_time;
     string2ll(vcUnits[0], strlen(vcUnits[0]), &ll_gid);
     string2ll(vcUnits[1], strlen(vcUnits[1]), &ll_time);
+    assert(ll_gid > 0);
+    assert(ll_time >= 0);
     return init_clock((char)ll_gid, ll_time);
 }
 
