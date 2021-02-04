@@ -181,6 +181,14 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
             target_sets[j] = NULL;
             continue;
         }
+        if (RedisModule_ModuleTypeGetType(moduleKey) != CrdtSet) {
+            if(replyed) {
+                zfree(target_sets);
+                return CRDT_ERROR;
+            }
+            target_sets[j] = NULL;
+            continue;
+        }
         CRDT_Set *setobj = getCurrentValue(moduleKey);
         if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
 
