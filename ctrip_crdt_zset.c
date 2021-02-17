@@ -646,7 +646,7 @@ int zrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
         if(replyed) return CRDT_ERROR;
-        return RedisModule_ReplyWithArray(ctx , 0);;
+        return RedisModule_ReplyWithArray(ctx , 0);
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     size_t llen = crdtZsetLength(current);
@@ -870,7 +870,6 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
             }
         }
     }
-
     int replyed = 0;
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
@@ -946,7 +945,6 @@ int zcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (!zslParseRange(RedisModule_GetSds(argv[2]), RedisModule_GetSds(argv[3]), &range)) {
         return RedisModule_ReplyWithError(ctx, "min or max is not a float");
     }
-
     int replyed = 0;
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
