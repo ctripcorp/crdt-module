@@ -183,7 +183,7 @@ getVectorClockUnit(VectorClock vc, int gid) {
     return *result;
 }
 
-void incrLogicClock(VectorClock *vc, int gid, int delta) {
+void incrLogicClock(VectorClock *vc, int gid, long long delta) {
     clk *clock = get_clock_unit(vc, gid);
     if(clock == NULL) {
         return;

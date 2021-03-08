@@ -247,7 +247,7 @@ clk
 getVectorClockUnit(VectorClock vc, int gid);
 
 void
-incrLogicClock(VectorClock *vc, int gid, int delta);
+incrLogicClock(VectorClock *vc, int gid, long long delta);
 
 void
 sortVectorClock(VectorClock vc);
