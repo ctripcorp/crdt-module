@@ -224,13 +224,35 @@ size_t replicationFeedCrdtHsetCommand(RedisModuleCtx *ctx,char* cmdbuf,const cha
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
-//hset key f1 v2 f2 v2 ..
+
+#define HSET_NO_FLAGS 0
+#define HSET_NX (1<<0)     /* Set if key not exists. */
+int hsetnxCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    if (argc != 4) return RedisModule_WrongArity(ctx);
+    int result = hsetGenericCommand(ctx, argv, argc, HSET_NX);
+    if(result < 0) { return result; }
+    return RedisModule_ReplyWithLongLong(ctx, result);
+}
 int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    // RedisModule_AutoMemory(ctx);
     if (argc < 4) return RedisModule_WrongArity(ctx);
     if ((argc % 2) == 1) {
         return RedisModule_WrongArity(ctx);
     }
+    int result = hsetGenericCommand(ctx, argv, argc, HSET_NO_FLAGS);
+    if(result < 0) { return result; }
+    sds cmdname = RedisModule_GetSds(argv[0]);
+    if (cmdname[1] == 's' || cmdname[1] == 'S') {
+        /* HSET */
+        return RedisModule_ReplyWithLongLong(ctx, result);
+    } else {
+        /* HMSET */
+        return RedisModule_ReplyWithOk(ctx);
+    } 
+}
+//hset key f1 v2 f2 v2 ..
+int hsetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, int flags) {
+    // RedisModule_AutoMemory(ctx);
+    
     int result = 0;
     CrdtMeta meta = {.gid=0};
     #if defined(HSET_STATISTICS) 
@@ -238,17 +260,25 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     #endif
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
     if (moduleKey == NULL) {
-        return CRDT_ERROR;
+        return -1;
     }
     
-    initIncrMeta(&meta);
     CRDT_Hash* current = getCurrentValue(moduleKey);
     #if defined(HSET_STATISTICS) 
         get_modulekey_end();
     #endif
+    if(flags & HSET_NX && current != NULL) {
+        for(int i = 2; i < argc; i++) {
+            sds field  = RedisModule_GetSds(argv[i]);
+            dictEntry* de = dictFind(current->map, field);
+            if(de != NULL) {
+                RedisModule_CloseKey(moduleKey);
+                return 0;
+            }
+        }
+    }
     
-    
-
+    initIncrMeta(&meta);
     size_t keylen = 0;
     const char* keystr = RedisModule_StringPtrLen(argv[1], &keylen);
     const char* fieldAndValStr[argc-2];
@@ -337,14 +367,8 @@ int hsetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         // freeIncrMeta(&meta);
     
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
-    sds cmdname = RedisModule_GetSds(argv[0]);
-    if (cmdname[1] == 's' || cmdname[1] == 'S') {
-        /* HSET */
-        return RedisModule_ReplyWithLongLong(ctx, result);
-    } else {
-        /* HMSET */
-        return RedisModule_ReplyWithOk(ctx);
-    } 
+    return result;
+    
 }
 
 int hgetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -1024,6 +1048,26 @@ int hscanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     return REDISMODULE_OK;
 }
+
+int hexistsCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+     if (argc != 3) return RedisModule_WrongArity(ctx);
+    int replyed = 0;
+    RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtHash, REDISMODULE_READ, &replyed);
+    if (moduleKey == NULL) {
+        return CRDT_ERROR;
+    }
+    CRDT_Hash* hash = getCurrentValue(moduleKey);
+    int result = 0;
+    if(hash != NULL) {
+        sds field = RedisModule_GetSds(argv[2]);
+        dictEntry* entry = dictFind(hash->map, field);
+        if(entry != NULL) {
+            result = 1;
+        } 
+    }
+    RedisModule_CloseKey(moduleKey);
+    return RedisModule_ReplyWithLongLong(ctx, result);
+}
 /*
  * Init Hash Module 
  */
@@ -1065,6 +1109,9 @@ int initCrdtHashModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"HMSET",
                                   hsetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx,"HSETNX",
+                                  hsetnxCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"HGET",
                                   hgetCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
@@ -1111,6 +1158,9 @@ int initCrdtHashModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"hscan",
                                   hscanCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+        return REDISMODULE_ERR;
+    if (RedisModule_CreateCommand(ctx, "hexists", 
+                                    hexistsCommand, "readonly deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
