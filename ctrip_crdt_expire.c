@@ -270,10 +270,10 @@ int initCrdtExpireModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx, "CRDT.EXPIRE", 
-        crdtExpireCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR)
+        crdtExpireCommand, "write deny-oom allow-loading", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "CRDT.PERSIST", 
-        crdtPersistCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
+        crdtPersistCommand, "write deny-oom allow-loading", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }

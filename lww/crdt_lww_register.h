@@ -82,6 +82,8 @@ CRDT_LWW_Register** filterLWWRegister(CRDT_LWW_Register* target, int gid, long l
 CRDT_Register** filterRegister(CRDT_Register* target, int gid, long long logic_time, long long maxsize, int* length) {
     return (CRDT_Register**)filterLWWRegister((CRDT_LWW_Register*)target, gid, logic_time, maxsize, length);
 }
+
+
 int delLWWCrdtRegister(CRDT_Register* current, CrdtMeta* meta);
 int compareLWWCrdtRegisterAndDelMeta(CRDT_Register* current, CrdtMeta* meta);
 int compareCrdtRegisterAndDelMeta(CRDT_Register* current, CrdtMeta* meta) {

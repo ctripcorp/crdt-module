@@ -386,6 +386,57 @@ void *RdbLoadCrdtSS(RedisModuleIO *rdb, int encver) {
     return NULL;
 }
 
+CrdtObject** crdtSSFilter2(CrdtObject* data, int gid, VectorClock min_vc, long long maxsize, int* num) {
+    crdt_zset* zset = retrieve_crdt_zset(data);
+    dictIterator *di = dictGetSafeIterator(zset->dict);
+    dictEntry *de;
+    crdt_zset** result = NULL;
+    crdt_zset* current = NULL;
+    int current_memory = 0;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        crdt_element el = dict_get_element(de);
+        VectorClock vc = element_get_vc(el);
+        if(!not_less_than_vc(min_vc, vc)) {
+            freeVectorClock(vc);
+            continue;
+        }
+        freeVectorClock(vc);
+        // if(element_get_vcu_by_gid(el, gid) < logic_time) {
+        //     continue;
+        // }
+        int memory = get_crdt_element_memory(el);
+        if(memory + sdslen(field) > maxsize) {
+            freeSSFilter((CrdtObject**)result, *num);
+            printf("[filter crdt_zset] memory error: key-%s \n", field);
+            *num = -1;
+            return NULL;
+        }
+        if(current_memory + sdslen(field) + memory > maxsize) {
+            current = NULL;
+        }
+        if(current == NULL) {
+            current = (crdt_zset*)createCrdtZset();
+            current_memory = 0;
+            (*num)++;
+            if(result) {
+                result = RedisModule_Realloc(result, sizeof(crdt_zset*) * (*num));
+            }else {
+                result = RedisModule_Alloc(sizeof(crdt_zset*));
+            }
+            result[(*num)-1] = current;
+        }
+        current_memory += sdslen(field) + memory;
+        dictEntry* de = dictAddOrFind(current->dict, sdsdup(field));
+        dict_set_element(current->dict, de, el);
+    }
+    dictReleaseIterator(di);
+    if(current != NULL) {
+        current->lastvc = dupVectorClock(zset->lastvc);
+    }
+    return (CrdtObject**)result;
+}
+
 CrdtObject** crdtSSFilter(CrdtObject* data, int gid, long long logic_time, long long maxsize, int* num) {
     crdt_zset* zset = retrieve_crdt_zset(data);
     dictIterator *di = dictGetSafeIterator(zset->dict);
@@ -483,6 +534,72 @@ void *RdbLoadCrdtSST(RedisModuleIO *rdb, int encver) {
         return load_zset_tombstone_by_rdb(rdb, version, encver);
     }
     return NULL;
+}
+
+CrdtTombstone** crdtSSTFilter2(CrdtTombstone* target, int gid, VectorClock min_vc, long long maxsize,int* num) {
+    crdt_zset_tombstone* zset_tombstone = retrieve_crdt_zset_tombstone(target);
+    dictIterator *di = dictGetSafeIterator(zset_tombstone->dict);
+    dictEntry *de;
+    crdt_zset_tombstone** result = NULL;
+    crdt_zset_tombstone* current = NULL;
+    int current_memory = 0;
+    while((de = dictNext(di)) != NULL) {
+        sds field = dictGetKey(de);
+        crdt_element el = dict_get_element(de);
+        VectorClock vc = element_get_vc(el);
+        if(!not_less_than_vc(min_vc, vc)) {
+            freeVectorClock(vc);
+            continue;
+        }
+        freeVectorClock(vc);
+        // if(element_get_vcu_by_gid(el, gid) < logic_time) {
+        //     continue;
+        // }
+        int memory = get_crdt_element_memory(el);
+        if(memory + sdslen(field) > maxsize) {
+            freeSSTFilter((CrdtObject**)result, *num);       
+            printf("[filter crdt_zset] memory error: key-%s \n", field);
+            *num = -1;
+            return NULL;
+        }
+        if(current_memory + sdslen(field) + memory > maxsize) {
+            current = NULL;
+        }
+        if(current == NULL) {
+            current = (crdt_zset_tombstone*)createCrdtZsetTombstone();
+            current_memory = 0;
+            (*num)++;
+            if(result) {
+                result = RedisModule_Realloc(result, sizeof(crdt_zset*) * (*num));
+            }else {
+                result = RedisModule_Alloc(sizeof(crdt_zset*));
+            }
+            result[(*num)-1] = current;
+        }
+        current_memory += sdslen(field) + memory;
+        dictEntry* de = dictAddOrFind(current->dict, sdsdup(field));
+        // dict_set_element(de, el);
+        dict_set_element(current->dict, de, el);
+    }
+    dictReleaseIterator(di);
+    if(current == NULL && *num == 0) {
+        // long long vcu = get_vcu(zset_tombstone->maxdelvc, gid);
+        // if(vcu < logic_time) {
+        //     return NULL;
+        // } 
+        if(!not_less_than_vc(min_vc, zset_tombstone->maxdelvc)) {
+            return NULL;
+        }
+        current = (crdt_zset_tombstone*)createCrdtZsetTombstone();
+        result = RedisModule_Alloc(sizeof(crdt_zset*));
+        result[0] = current;
+        *num = 1;
+    }
+    if(current != NULL) {
+        current->lastvc = dupVectorClock(zset_tombstone->lastvc);
+        current->maxdelvc = dupVectorClock(zset_tombstone->maxdelvc);
+    }
+    return (CrdtObject**)result;
 }
 
 CrdtTombstone** crdtSSTFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* num) {

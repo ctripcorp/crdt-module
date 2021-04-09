@@ -832,7 +832,6 @@ crdt_tag* merge_add_tag(crdt_tag* target, crdt_tag_add_counter* other) {
             crdt_tag_base_and_add_del_counter* rbad = (crdt_tag_base_and_add_del_counter*)target;
             if(rbad->counter_type != VALUE_TYPE_LONGDOUBLE ) {
                 tag_set_add(rbad, other);
-                printf("bad + a\n");
                 return (crdt_tag*)rbad;
             } 
             crdt_tag_base_and_ld_add_del_counter* rldbad = BAD2LDBAD(rbad);
@@ -1242,11 +1241,17 @@ callback_base_add_del:
     if(bad->counter_type != VALUE_TYPE_LONGDOUBLE) {
         bad->del_counter = bad->add_counter;
         bad->del_vcu = bad->add_vcu;
+        if(bad->base_vcu < bad->add_vcu) {
+            bad->base_vcu = bad->add_vcu;
+        }
         return (crdt_tag*)bad;
     } else {
         crdt_tag_base_and_ld_add_del_counter* ldbad = (crdt_tag_base_and_ld_add_del_counter*)bad;
         ldbad->del_counter = ldbad->add_counter;
         ldbad->del_vcu = ldbad->add_vcu;
+        if(ldbad->base_vcu < ldbad->add_vcu) {
+            ldbad->base_vcu = ldbad->add_vcu;
+        }
         return (crdt_tag*)ldbad;
     }
 }

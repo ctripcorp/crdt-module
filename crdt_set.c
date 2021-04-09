@@ -1,6 +1,6 @@
 #include "crdt_set.h"
 #include "include/rmutil/zmalloc.h"
-
+#include <string.h>
 
 int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
     if(value == NULL) {
@@ -480,6 +480,53 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return CRDT_OK;
 }
 
+//crdt.sadd key gid timespace vc field....
+const char* crdt_sadd_head = "$9\r\nCRDT.SADD\r\n";
+size_t crdt_sadd_head_len = 0;
+int replicationFeedCrdtSaddCommand(RedisModuleCtx* ctx, char* cmdbuf, sds key, CrdtMeta* meta, sds* fields, size_t* field_lens, int fields_len) {
+    size_t cmdlen = 0;
+    if(crdt_sadd_head_len == 0) crdt_sadd_head_len = strlen(crdt_sadd_head);
+    cmdlen += feedArgc(cmdbuf, fields_len + 5);// 5 = crdt.sadd(1) + key(1) + gid(1) + timespace(1) + vc(1)
+    cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_sadd_head, crdt_sadd_head_len); //crdt.sadd
+    cmdlen +=  feedStr2Buf(cmdbuf + cmdlen, key, sdslen(key)); //key
+    cmdlen +=  feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(meta), getMetaTimestamp(meta), getMetaVectorClock(meta));
+    for (int i = 0; i < fields_len; i++) {
+        cmdlen +=  feedStr2Buf(cmdbuf + cmdlen, fields[i], field_lens[i]);
+    }
+    RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
+    return cmdlen;
+}
+
+int sendCrdtSaddCommand(struct RedisModuleCtx* ctx, CrdtMeta* meta, RedisModuleString* module_key, RedisModuleString** module_fields, int fields_len ) {
+    //char buf[256];
+    //vectorClockToString(buf, getMetaVectorClock(&meta));
+    //RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Sadd", "sllcv", argv[1], getMetaGid(&meta), getMetaTimestamp(&meta), buf, (void *) (argv + 2), (size_t)(argc-2));
+    sds key = RedisModule_GetSds(module_key);
+    if(crdt_sadd_head_len == 0) crdt_sadd_head_len = strlen(crdt_sadd_head);
+    //strlen(crdt_sadd_head) = 15 beca
+    size_t bytes_len =  REPLICATION_MAX_LONGLONG_LEN + //args   *<n>\r\n  1 + 21 + 2
+                    crdt_sadd_head_len + REPLICATION_MAX_STR_LEN + //head
+                    sdslen(key) + REPLICATION_MAX_STR_LEN +  //key
+                    REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN; //meta
+    sds fields[fields_len];
+    size_t field_lens[fields_len];
+    for(int i = 0; i < fields_len; i++) {
+        fields[i] = RedisModule_GetSds(module_fields[i]);
+        field_lens[i] = sdslen(fields[i]);
+        bytes_len += field_lens[i] + REPLICATION_MAX_STR_LEN;
+    }
+    if(bytes_len > MAXSTACKSIZE) {
+        char* cmdbuf = RedisModule_Alloc(bytes_len);
+        int size =replicationFeedCrdtSaddCommand(ctx, cmdbuf, key, meta, fields, field_lens, fields_len);
+        assert(size < bytes_len);
+        RedisModule_Free(cmdbuf);
+    } else {
+        char cmdbuf[bytes_len];
+        int size = replicationFeedCrdtSaddCommand(ctx, cmdbuf, key, meta, fields, field_lens, fields_len);
+        assert(size < bytes_len);
+    }
+    return 1;
+}
 
 //sadd key <field> <field1> ...
 //crdt.sadd <key> gid vc <field1> <field1>
@@ -522,9 +569,7 @@ int saddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "sadd", argv[1]);
-    char buf[256];
-    vectorClockToString(buf, getMetaVectorClock(&meta));
-    RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Sadd", "sllcv", argv[1], getMetaGid(&meta), getMetaTimestamp(&meta), buf, (void *) (argv + 2), (size_t)(argc-2));
+    sendCrdtSaddCommand(ctx, &meta, argv[1], argv + 2, argc - 2);
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     if(meta.gid != 0) freeIncrMeta(&meta);
     return RedisModule_ReplyWithLongLong(ctx, result);
@@ -761,9 +806,6 @@ end:
     }
 }
 
-
-
-
 int initCrdtSetModule(RedisModuleCtx *ctx) {
     //hash object type
     RedisModuleTypeMethods valueTypeMethods = {
@@ -793,7 +835,7 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
                                   saddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"crdt.sadd",
-                                  crdtSaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtSaddCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "sismember", sismemberCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
@@ -801,7 +843,7 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
                                 sremCommand, "write deny-oom", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;   
     if (RedisModule_CreateCommand(ctx,"crdt.srem",
-                                  crdtSremCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtSremCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR; 
     if (RedisModule_CreateCommand(ctx, "scard",
                                 scardCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR) 
@@ -820,16 +862,18 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
                                 crdtSismemberCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR) 
         return REDISMODULE_ERR;   
     if (RedisModule_CreateCommand(ctx,"crdt.del_set",
-                                  crdtDelSetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtDelSetCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;    
     if (RedisModule_CreateCommand(ctx,"spop",
                                   spopCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
+
 RedisModuleType* getCrdtSet() {
     return CrdtSet;
 }
+
 RedisModuleType* getCrdtSetTombstone() {
     return CrdtSetTombstone;
 }

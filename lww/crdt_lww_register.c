@@ -167,7 +167,18 @@ int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register
     return compareCrdtMeta(getCrdtLWWRegisterMeta(current), getCrdtLWWRegisterTombstoneMeta(t));
 }
 int purgeLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* target) {
-    return compareTombstoneAndRegister(tombstone, target) > COMPARE_META_EQUAL ? PURGE_VAL: PURGE_TOMBSTONE;
+    CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
+    if(compareTombstoneAndRegister(tombstone, target) > COMPARE_META_EQUAL ) {
+        VectorClock old = t->vectorClock;
+        t->vectorClock = vectorClockMerge(old, getCrdtRegisterLastVc(target));
+        if(!isNullVectorClock(old)) {
+            freeVectorClock(old);
+        }
+        return PURGE_VAL;
+    } else {
+        updateLastVCLWWRegister(target, t->vectorClock);
+        return PURGE_TOMBSTONE;
+    }
 }
 int compareCrdtLWWRegisterTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(tombstone);
@@ -282,6 +293,23 @@ CRDT_LWW_Register** filterLWWRegister(CRDT_LWW_Register* target, int gid, long l
     }  
     return NULL;
 }
+
+CrdtObject** crdtRegisterFilter2(CrdtObject* target, int gid, VectorClock min_vc, long long maxsize, int* length) {
+    CRDT_LWW_Register* reg = retrieveCrdtLWWRegister(target);
+    VectorClock myself_vc = getCrdtLWWRegisterVectorClock(reg);
+    if(!not_less_than_vc(min_vc, myself_vc)) {
+        return NULL;
+    }
+    if (crdtLWWRegisterMemUsageFunc(reg) > maxsize) {
+        *length  = -1;
+        return NULL;
+    }
+    *length = 1;
+    CRDT_LWW_Register** re = RedisModule_Alloc(sizeof(CRDT_LWW_Register*));
+    re[0] = reg;
+    return (CrdtObject** )re;
+}
+
 sds crdtLWWRegisterInfo(CRDT_LWW_Register *crdtRegister) {
     sds result = sdsempty();
     sds vcStr = vectorClockToSds(getCrdtLWWRegisterVectorClock(crdtRegister));
@@ -347,6 +375,23 @@ CRDT_LWW_RegisterTombstone* mergeLWWRegisterTombstone(CRDT_LWW_RegisterTombstone
     addCrdtLWWRegisterTombstone(result, getCrdtLWWRegisterTombstoneMeta(o), comapre);
     return result;
 }
+CrdtObject** crdtRegisterTombstoneFilter2(CrdtTombstone* target, int gid, VectorClock min_vc, long long maxsize,int* length) {
+    CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
+    size_t memory_size = crdtLWWRegisterTombstoneMemUsageFunc(t);
+    VectorClock vc = getCrdtRegisterTombstoneLastVc((CRDT_RegisterTombstone*)t);
+    if(!not_less_than_vc(min_vc, vc)) {
+        return NULL;
+    }
+    if (memory_size > maxsize) {
+        RedisModule_Debug(logLevel, "[CRDT][REGISTER] tombstone filter value too big, %d > %d", memory_size, maxsize);
+        *length  = -1;
+        return NULL;
+    }
+    *length = 1;
+    CRDT_LWW_RegisterTombstone** r = RedisModule_Alloc(sizeof(CRDT_LWW_RegisterTombstone*));
+    r[0] = t;
+    return (CRDT_RegisterTombstone**)r;
+}
 CRDT_RegisterTombstone** filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time, long long maxsize , int* length) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
 
@@ -365,6 +410,7 @@ CRDT_RegisterTombstone** filterLWWRegisterTombstone(CRDT_RegisterTombstone* targ
     r[0] = t;
     return (CRDT_RegisterTombstone**)r;
 }
+
 CRDT_LWW_RegisterTombstone* dupLWWCrdtRegisterTombstone(CRDT_LWW_RegisterTombstone* target) {
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone(target);
     CRDT_LWW_RegisterTombstone* result = createCrdtLWWRegisterTombstone();

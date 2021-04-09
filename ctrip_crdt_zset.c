@@ -646,7 +646,7 @@ int zrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
         if(replyed) return CRDT_ERROR;
-        return RedisModule_ReplyWithArray(ctx , 0);;
+        return RedisModule_ReplyWithArray(ctx , 0);
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     size_t llen = crdtZsetLength(current);
@@ -870,7 +870,6 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
             }
         }
     }
-
     int replyed = 0;
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
@@ -946,7 +945,6 @@ int zcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (!zslParseRange(RedisModule_GetSds(argv[2]), RedisModule_GetSds(argv[3]), &range)) {
         return RedisModule_ReplyWithError(ctx, "min or max is not a float");
     }
-
     int replyed = 0;
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
@@ -1340,7 +1338,7 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
                                   zaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.zadd",
-                                  crdtZaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtZaddCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"ZSCORE",
                                   zscoreCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
@@ -1355,7 +1353,7 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
                                   zincrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.zincrby" ,
-                                    crdtZincrbyCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    crdtZincrbyCommand, "write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zcount",
                             zcountCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
@@ -1385,10 +1383,10 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
                                   zremCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.zrem",
-                                  crdtZremCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtZremCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.del_ss",
-                                crdtDelSSCommand  ,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                crdtDelSSCommand  ,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zremrangebyrank", 
                                   zremrangebyrankCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)

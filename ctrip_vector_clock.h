@@ -247,7 +247,7 @@ clk
 getVectorClockUnit(VectorClock vc, int gid);
 
 void
-incrLogicClock(VectorClock *vc, int gid, int delta);
+incrLogicClock(VectorClock *vc, int gid, long long delta);
 
 void
 sortVectorClock(VectorClock vc);
@@ -272,5 +272,6 @@ vectorClockMerge(VectorClock vclock1, VectorClock vclock2);
 /**------------------------Replication Usage--------------------------------------*/
 void
 updateProcessVectorClock(VectorClock *dst, VectorClock *src, int gid, int currentGid);
-
+long long get_vcu_from_vc(VectorClock vc, int gid, int* index);
+int not_less_than_vc(VectorClock min_vc, VectorClock myself_vc);
 #endif //REDIS_VECTOR_CLOCK_H

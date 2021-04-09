@@ -43,6 +43,8 @@ struct crdt_sorted_set {
 
 CrdtTombstone* crdtSSTMerge(CrdtTombstone* target, CrdtTombstone* src);
 CrdtTombstone** crdtSSTFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* length) ;
+CrdtTombstone** crdtSSTFilter2(CrdtTombstone* target, int gid, VectorClock min_vc, long long maxsize,int* length) ;
+
 void freeSSTFilter(CrdtTombstone** filters, int num);
 int crdtZsetTombstonePurge(CrdtTombstone* tombstone, CrdtData* r);
 sds crdtZsetTombstoneInfo(void* tombstone);
@@ -50,6 +52,7 @@ int crdtZsetTombstoneGc(CrdtTombstone* target, VectorClock clock);
 static CrdtTombstoneMethod ZsetTombstoneCommonMethod = {
     .merge = crdtSSTMerge,
     .filterAndSplit =  crdtSSTFilter,
+    .filterAndSplit2 =  crdtSSTFilter2,
     .freefilter = freeSSTFilter,
     .gc = crdtZsetTombstoneGc,
     .purge = crdtZsetTombstonePurge,
@@ -66,10 +69,12 @@ static CrdtDataMethod ZSetDataMethod = {
 
 CrdtObject *crdtSSMerge(CrdtObject *currentVal, CrdtObject *value);
 CrdtObject** crdtSSFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
+CrdtObject** crdtSSFilter2(CrdtObject* common, int gid, VectorClock min_vc, long long maxsize, int* length);
 void freeSSFilter(CrdtObject** filters, int num);    
 static CrdtObjectMethod ZSetCommandMethod = {
     .merge = crdtSSMerge,
     .filterAndSplit = crdtSSFilter,
+    .filterAndSplit2 = crdtSSFilter2,
     .freefilter = freeSSFilter,
 };
 // moduleType

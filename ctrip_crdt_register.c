@@ -44,30 +44,6 @@ int isCrdtRcTombstone(CrdtTombstone* tom) {
     }
     return CRDT_NO;
 }
-// <<<<<<< HEAD
-// //====================== send command to slaves ==================
-// const char* crdt_set_head = "*7\r\n$8\r\nCRDT.SET\r\n";
-// const char* crdt_set_no_expire_head = "*6\r\n$8\r\nCRDT.SET\r\n";
-// //CRDT.SET key value gid time vc expire
-// const size_t crdt_set_basic_str_len = 18 + 2 *REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + REPLICATION_MAX_LONGLONG_LEN;
-// size_t replicationFeedCrdtSetCommand(RedisModuleCtx *ctx,char* cmdbuf, const char* keystr, size_t keylen,const char* valstr, size_t vallen, CrdtMeta* meta, VectorClock vc, long long expire_time) {
-//     size_t cmdlen = 0;
-//     static size_t crdt_set_head_str_len = 0;
-//     static size_t crdt_set_no_expire_head_str_len = 0;
-//     if(crdt_set_head_str_len == 0) {
-//         crdt_set_head_str_len = strlen(crdt_set_head);
-//         crdt_set_no_expire_head_str_len = strlen(crdt_set_no_expire_head);
-//     }
-//     if(expire_time > -2) {
-//         cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_set_head, crdt_set_head_str_len);
-//     }else{
-//         cmdlen += feedBuf(cmdbuf + cmdlen, crdt_set_no_expire_head, crdt_set_no_expire_head_str_len);
-//     }
-//     cmdlen += feedKV2Buf(cmdbuf + cmdlen, keystr, keylen, valstr, vallen);
-//     cmdlen += feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(meta), getMetaTimestamp(meta), vc);
-//     if(expire_time > -2) {
-//         cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, expire_time);
-// =======
 
 int isCrdtRc(CrdtObject* data) {
     if(data != NULL && getType(data) == CRDT_DATA && (getDataType(data) ==  CRDT_RC_TYPE)) {
@@ -93,6 +69,7 @@ int replicationFeedCrdtCounterCommand(RedisModuleCtx* ctx, char* cmdbuf, sds key
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
+
 //CRDT.COUNTER key gid time vc type value
 int replicationCrdtCounterCommand(RedisModuleCtx *ctx, sds key,CrdtMeta* meta, int type, sds data) {
     // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.COUNTER", "sllcllll", argv[1], getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vc_info, g->start_clock, g->end_clock, (size_t)g->type, g->conv.i);
@@ -111,22 +88,6 @@ int replicationCrdtCounterCommand(RedisModuleCtx *ctx, sds key,CrdtMeta* meta, i
 //CRDT.Rc  gid time vc expire  key value
 const char* crdt_rc_head = "$7\r\nCRDT.rc\r\n";
 const size_t crdt_rc_basic_str_len = 18 + 2 *REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + REPLICATION_MAX_LONGLONG_LEN;
-// <<<<<<< HEAD
-// size_t replicationFeedCrdtRCCommand(RedisModuleCtx *ctx,char* cmdbuf, const char* keystr, size_t keylen,const char* valstr, size_t vallen, CrdtMeta* meta, VectorClock vc, long long expire_time, int eslen, sds* del_strs) {
-//     size_t cmdlen = 0;
-//     static size_t crdt_rc_head_str_len = 0;
-//     if (crdt_rc_head_str_len == 0) {
-//         crdt_rc_head_str_len = strlen(crdt_rc_head);
-//     }
-//     cmdlen += feedArgc(cmdbuf + cmdlen, eslen + 7);
-//     cmdlen += feedBuf(cmdbuf + cmdlen, crdt_rc_head, crdt_rc_head_str_len);
-//     cmdlen += feedKV2Buf(cmdbuf + cmdlen, keystr, keylen, valstr, vallen);
-//     cmdlen += feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(meta), getMetaTimestamp(meta), vc);
-//     cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, expire_time);
-//     for(int i = 0; i < eslen; i++) {
-//         cmdlen += feedStr2Buf(cmdbuf + cmdlen, del_strs[i], sdslen(del_strs[i]));
-//     }
-// =======
 int replicationFeedCrdtRCCommand(RedisModuleCtx* ctx, char* cmdbuf,sds key,CrdtMeta* meta, sds value,long long expire) {
     int cmdlen = 0;
 
@@ -460,7 +421,7 @@ int check_type(sds val, RedisModuleKey* moduleKey) {
     return CRDT_REGISTER_TYPE;
 }
 
-sds add_rc(RedisModuleKey* moduleKey, CrdtMeta* meta, sds value) {
+sds add_rc_by_modulekey(RedisModuleKey* moduleKey, CrdtMeta* meta, sds value) {
     CRDT_RC* rc = getCurrentValue(moduleKey);
     if(rc == NULL) {
         rc = createCrdtRc();
@@ -474,7 +435,7 @@ sds add_rc(RedisModuleKey* moduleKey, CrdtMeta* meta, sds value) {
     return rcAdd(rc, meta, value);
 }
 
-sds add_reg(RedisModuleKey* moduleKey, CrdtMeta* meta, sds val) {
+sds add_reg_by_modulekey(RedisModuleKey* moduleKey, CrdtMeta* meta, sds val) {
     CRDT_Register* reg = getCurrentValue(moduleKey);
     if(reg == NULL) {
         reg = createCrdtRegister();
@@ -487,6 +448,7 @@ sds add_reg(RedisModuleKey* moduleKey, CrdtMeta* meta, sds val) {
         }
         crdtRegisterSetValue(reg, meta, val);
         RedisModule_ModuleTypeSetValue(moduleKey, getCrdtRegister(), reg);
+        RedisModule_DeleteTombstone(moduleKey);
     } else {
         crdtRegisterTryUpdate(reg, meta, val, COMPARE_META_VECTORCLOCK_GT);
         appendVCForMeta(meta, getCrdtRegisterLastVc(reg));
@@ -548,8 +510,10 @@ int replicationCrdtSetCommand(RedisModuleCtx* ctx, sds key, sds val, CrdtMeta* s
     }
     return 1;
 }
-
-int add_rc2(RedisModuleCtx* ctx, void* val, void* tom, CrdtMeta* meta, RedisModuleString* key, sds value, char* buf) {
+/**
+ *  only use mset
+ */
+int add_rc_by_key(RedisModuleCtx* ctx, void* val, void* tom, CrdtMeta* meta, RedisModuleString* key, sds value, char* buf) {
     CRDT_RC* rc = val;
     if(rc == NULL) {
         rc = createCrdtRc();
@@ -602,12 +566,12 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
     initIncrMeta(&set_meta);
     long long expire_time = -2;
     if(type == CRDT_RC_TYPE) {
-        callback_item = add_rc(moduleKey, &set_meta, RedisModule_GetSds(val));
+        callback_item = add_rc_by_modulekey(moduleKey, &set_meta, RedisModule_GetSds(val));
         expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
         replicationCrdtRcCommand(ctx, RedisModule_GetSds(key), &set_meta, callback_item, expire_time);
         sdsfree(callback_item);
     } else if(type == CRDT_REGISTER_TYPE) {
-        callback_item = add_reg(moduleKey, &set_meta, RedisModule_GetSds(val));
+        callback_item = add_reg_by_modulekey(moduleKey, &set_meta, RedisModule_GetSds(val));
         sdsfree(callback_item);
         expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
         replicationCrdtSetCommand(ctx, RedisModule_GetSds(key), RedisModule_GetSds(val), &set_meta,  expire_time);
@@ -1018,7 +982,7 @@ int replicationFeedCrdtMsetCommandByRc(RedisModuleCtx* ctx, char* cmdbuf, int le
         // CrdtMeta* m = dupMeta(mset_meta);
         CrdtMeta m = {.gid = getMetaGid(mset_meta), .timestamp = getMetaTimestamp(mset_meta),.vectorClock = dupVectorClock(getMetaVectorClock(mset_meta))};
         char value_buf[sdslen(values[i]) + max_del_counter_size];
-        int value_len = add_rc2(ctx, crdt_vals[i], crdt_toms[i], &m, keys[i], values[i], value_buf);
+        int value_len = add_rc_by_key(ctx, crdt_vals[i], crdt_toms[i], &m, keys[i], values[i], value_buf);
         sds key = RedisModule_GetSds(keys[i]);
         cmdlen += feedStr2Buf(cmdbuf + cmdlen , key, sdslen(key));
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, value_buf, value_len);
@@ -1044,8 +1008,10 @@ int msetGenericByRc(RedisModuleCtx* ctx, int len, RedisModuleString** keys, void
     }
     return 1;
 }
-
-CRDT_Register* add_reg2(RedisModuleCtx* ctx, void* val, void* tom, CrdtMeta* meta, RedisModuleString* key, sds value) {
+/**
+ *  only use  mset
+ */ 
+CRDT_Register* add_reg_by_key(RedisModuleCtx* ctx, void* val, void* tom, CrdtMeta* meta, RedisModuleString* key, sds value) {
     CRDT_Register* reg = val;
     if(reg == NULL) {
         reg = createCrdtRegister();
@@ -1074,7 +1040,7 @@ int replicationFeedCrdtMsetCommandByReg(RedisModuleCtx* ctx, char* cmdbuf, int l
     cmdlen += feedGid2Buf(cmdbuf + cmdlen, getMetaGid(mset_meta));
     cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, getMetaTimestamp(mset_meta));
     for(int i = 0; i < len; i++) {
-        CRDT_Register* reg = add_reg2(ctx, crdt_vals[i], crdt_toms[i], mset_meta, keys[i], values[i]);
+        CRDT_Register* reg = add_reg_by_key(ctx, crdt_vals[i], crdt_toms[i], mset_meta, keys[i], values[i]);
         sds key = RedisModule_GetSds(keys[i]);
         cmdlen += feedStr2Buf(cmdbuf + cmdlen , key, sdslen(key));
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, values[i], sdslen(values[i]));
@@ -1385,7 +1351,7 @@ int initRcModule(RedisModuleCtx *ctx) {
                                   setCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.RC",
-                                  crdtRcCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtRcCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"GET",
                                   getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
@@ -1395,7 +1361,7 @@ int initRcModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.del_rc",
-                                  crdtDelRcCommand,"write",1,1,1) == REDISMODULE_ERR)
+                                  crdtDelRcCommand,"write allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "SETEX", 
                                     setexCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
@@ -1422,7 +1388,7 @@ int initRcModule(RedisModuleCtx *ctx) {
                                     decrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.counter",
-                                    crdtCounterCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    crdtCounterCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "MSET", 
                                     msetCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
@@ -1434,7 +1400,7 @@ int initRcModule(RedisModuleCtx *ctx) {
                                     mgetCommand, "readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.mset_rc", 
-                                    crdtMsetRcCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    crdtMsetRcCommand, "write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
