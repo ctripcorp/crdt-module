@@ -49,6 +49,8 @@ void freeSSTFilter(CrdtTombstone** filters, int num);
 int crdtZsetTombstonePurge(CrdtTombstone* tombstone, CrdtData* r);
 sds crdtZsetTombstoneInfo(void* tombstone);
 int crdtZsetTombstoneGc(CrdtTombstone* target, VectorClock clock);
+VectorClock getCrdtSSTLastVc(CRDT_SSTombstone* data);
+VectorClock clone_sst_vc(CRDT_SSTombstone* data);
 static CrdtTombstoneMethod ZsetTombstoneCommonMethod = {
     .merge = crdtSSTMerge,
     .filterAndSplit =  crdtSSTFilter,
@@ -57,6 +59,7 @@ static CrdtTombstoneMethod ZsetTombstoneCommonMethod = {
     .gc = crdtZsetTombstoneGc,
     .purge = crdtZsetTombstonePurge,
     .info = crdtZsetTombstoneInfo,
+    .getVc = clone_sst_vc,
 };
 //about data method
 int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value);
@@ -141,3 +144,4 @@ int isNullZsetTombstone(CRDT_SSTombstone* tombstone);
 double getZScoreByDictEntry(dictEntry* de);
 void zsetTombstoneTryResizeDict(CRDT_SSTombstone* tombstone);
 void zsetTryResizeDict(CRDT_SS* current);
+

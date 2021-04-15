@@ -585,7 +585,7 @@ int crdtRcTombstoneGc(CrdtTombstone* target, VectorClock clock) {
         sds info = crdtRcTombstoneInfo(target);
         long long current_vc = RedisModule_CurrentVectorClock();
         sds process_vc_str = vectorClockToSds(LL2VC(current_vc));
-        RedisModule_Debug("notice", "[try gc] process vc %s, vc %s, rc_tombstone:%s", process_vc_str, vc_str, info);
+        // RedisModule_Debug("notice", "[try gc] process vc %s, vc %s, rc_tombstone:%s", process_vc_str, vc_str, info);
         sdsfree(process_vc_str);
         sdsfree(info);
         sdsfree(vc_str);
@@ -608,6 +608,7 @@ sds crdtRcTombstoneInfo(void* value) {
     sdsfree(element_info);
     return result;
 }
+
 VectorClock getCrdtRcTombstoneLastVc(CrdtTombstone* tombstone) {
     if(tombstone == NULL) return newVectorClock(0);
     crdt_element el = get_element_from_rc_tombstone((crdt_rc_tombstone*)tombstone);

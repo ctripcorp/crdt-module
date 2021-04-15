@@ -1688,6 +1688,10 @@ CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long l
     return (CrdtObject**)result;
 }
 
+VectorClock clone_ht_vc(void* ht) {
+    return dupVectorClock(getCrdtHashTombstoneLastVc(ht));
+}
+
 int crdtHashTombstoneGc(CrdtObject* common, VectorClock clock) {
     CRDT_HashTombstone* target = retrieveCrdtHashTombstone(common);
     return gcCrdtHashTombstone(target, clock);
@@ -1697,6 +1701,7 @@ VectorClock crdtHashGetLastVC(void* data) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(data);
     return getCrdtHashLastVc(crdtHash);
 }
+
 void crdtHashUpdateLastVC(void* data, VectorClock vc) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(data);
     updateLastVCHash(crdtHash, vc);

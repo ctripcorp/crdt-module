@@ -89,6 +89,7 @@ int crdtSetTombstoneGc(CrdtTombstone* target, VectorClock clock);
 sds crdtSetTombstoneInfo(void *t);
 void freeSetTombstoneFilter(CrdtObject** filters, int num);
 int crdtSetTombstonePurge(CrdtTombstone* tombstone, CrdtObject* target);
+VectorClock clone_st_vc(void* st);
 static CrdtTombstoneMethod SetTombstoneCommonMethod = {
     .merge = crdtSetTombstoneMerge,
     .filterAndSplit =  crdtSetTombstoneFilter,
@@ -97,6 +98,7 @@ static CrdtTombstoneMethod SetTombstoneCommonMethod = {
     .gc = crdtSetTombstoneGc,
     .purge = crdtSetTombstonePurge,
     .info = crdtSetTombstoneInfo,
+    .getVc = clone_st_vc,
 };
 int setTryAdd(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta);
 int setAdd(CRDT_Set* current, CRDT_SetTombstone* tombstone, sds field, CrdtMeta* meta);

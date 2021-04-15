@@ -54,6 +54,7 @@ int replicationFeedCrdtZaddCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta*
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
+
 int replicationCrdtZaddCommand(RedisModuleCtx* ctx, CrdtMeta* meta, sds key, sds* callback, int callback_len, int callback_byte_size) {
     size_t alllen = 16  
     + sdslen(key)
@@ -1347,7 +1348,7 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
                                   crdtZscoreCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"ZCARD",
-                                  zcardCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  zcardCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zincrby",
                                   zincrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
@@ -1356,28 +1357,28 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
                                     crdtZincrbyCommand, "write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zcount",
-                            zcountCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+                            zcountCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"ZRANGE",
-                                zrangeCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                zrangeCommand,"readonly",1,1,1) == REDISMODULE_ERR)
         return  REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zremrangebylex",
-                                zremrangebylexCommand, "readonly deny-oom",1,1,1) == REDISMODULE_ERR)         
+                                zremrangebylexCommand, "write",1,1,1) == REDISMODULE_ERR)         
         return  REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zrevrange",
-                                  zrevrangeCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  zrevrangeCommand,"readonly",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zrangebyscore", 
-                                zrangebyscoreCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+                                zrangebyscoreCommand, "readonly", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zrevrangebyscore", 
-                                zrevrangebyscoreCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+                                zrevrangebyscoreCommand, "readonly", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zrank",
-                                  zrankCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  zrankCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zrevrank",
-                                  zrevrankCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  zrevrankCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zrem", 
                                   zremCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
@@ -1397,18 +1398,22 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
     
     
     if (RedisModule_CreateCommand(ctx, "zrangebylex",
-                                zrangebylexCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+                                zrangebylexCommand, "readonly", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zlexcount",
-                                zlexcountCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+                                zlexcountCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zrevrangebylex",
-                                zrevrangebylexCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+                                zrevrangebylexCommand, "readonly", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zscan",
-                                zscanCommand, "readonly deny-oom", 1,1,1) == REDISMODULE_ERR)
+                                zscanCommand, "readonly random", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
+}
+
+VectorClock clone_sst_vc(CRDT_SSTombstone* data) {
+    return dupVectorClock(getCrdtSSTLastVc(data));
 }
 
 RedisModuleType* getCrdtSS() {

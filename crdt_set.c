@@ -849,10 +849,10 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
                                 scardCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR) 
         return REDISMODULE_ERR;   
     if (RedisModule_CreateCommand(ctx, "smembers",
-                                smembersCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR)
+                                smembersCommand, "readonly", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"sunion",
-                                  sunionCommand,"readonly random",1,1,1) == REDISMODULE_ERR)
+                                  sunionCommand,"readonly",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"sscan",
                                   sscanCommand,"readonly random",1,1,1) == REDISMODULE_ERR)
@@ -865,7 +865,7 @@ int initCrdtSetModule(RedisModuleCtx *ctx) {
                                   crdtDelSetCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;    
     if (RedisModule_CreateCommand(ctx,"spop",
-                                  spopCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  spopCommand,"write deny-oom random fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
@@ -876,4 +876,8 @@ RedisModuleType* getCrdtSet() {
 
 RedisModuleType* getCrdtSetTombstone() {
     return CrdtSetTombstone;
+}
+
+VectorClock clone_st_vc(void* st) {
+    return dupVectorClock(getCrdtSetTombstoneLastVc(st));
 }
