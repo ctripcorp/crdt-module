@@ -168,7 +168,7 @@ void mergeCrdtHashTombstoneLastVc(CRDT_HashTombstone* t, VectorClock vc) {
 }
 CrdtMeta* getCrdtLWWHashTombstoneMaxDelMeta(CRDT_LWW_HashTombstone* data);
 CrdtMeta* getMaxDelCrdtHashTombstone(void* data) {
-    return getCrdtLWWHashTombstoneMaxDelMeta(data);
+    return getCrdtLWWHashTombstoneMaxDelMeta((CRDT_LWW_HashTombstone*)data);
 }
 int changeCrdtLWWHashTombstone(void* data, CrdtMeta* meta);
 int changeCrdtHashTombstone(void* data, CrdtMeta* meta) {

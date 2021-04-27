@@ -1357,7 +1357,7 @@ int initRcModule(RedisModuleCtx *ctx) {
                                   getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.GET",
-                                  crdtGetCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  crdtGetCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.del_rc",

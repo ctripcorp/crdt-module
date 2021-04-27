@@ -700,6 +700,7 @@ int zsetStartGc() {
     zset_gc_stats = 1;
     return zset_gc_stats;
 }
+
 int crdtZsetTombstoneGc(CrdtTombstone* target, VectorClock clock) {
     if(!zset_gc_stats) {
         return 0;

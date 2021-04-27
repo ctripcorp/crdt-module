@@ -927,8 +927,6 @@ sds crdtSetTombstoneInfo(void *data) {
     return result;
 }
 
-
-
 // abdout tombstone and set purge
 int crdtSetTombstonePurge(CrdtTombstone* tombstone, CrdtData* data) {
     if(!isCrdtSetTombstone(tombstone) || !isCrdtSet(data)) {

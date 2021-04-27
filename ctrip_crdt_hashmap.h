@@ -81,24 +81,7 @@ static CrdtDataMethod HashDataMethod = {
     .info = crdtHashInfo,
 };
 
-//common methods
-CrdtTombstone *crdtHashTombstoneMerge(CrdtTombstone *currentVal, CrdtTombstone *value);
-CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time,long long maxsize,int* length);
-CrdtObject** crdtHashTombstoneFilter2(CrdtTombstone* common, int gid, VectorClock min_vc,long long maxsize,int* length);
 
-int crdtHashTombstoneGc(CrdtObject* target, VectorClock clock);
-int crdtHashTombstonePurge(CrdtObject* obj, CrdtObject* tombstone);
-sds crdtHashTombstoneInfo(void* data);
-void freeHashTombstoneFilter(CrdtObject** filters, int num);
-static CrdtTombstoneMethod HashTombstoneCommonMethod = {
-    .merge = crdtHashTombstoneMerge,
-    .filterAndSplit = crdtHashTombstoneFilter,
-    .filterAndSplit2 = crdtHashTombstoneFilter2,
-    .freefilter = freeHashTombstoneFilter,
-    .gc = crdtHashTombstoneGc,
-    .purge = crdtHashTombstonePurge,
-    .info = crdtHashTombstoneInfo,
-};
 typedef struct CRDT_Hash {
     unsigned char type;
     dict *map;
@@ -153,6 +136,27 @@ VectorClock getCrdtHashTombstoneLastVc(CRDT_HashTombstone* t);
 void mergeCrdtHashTombstoneLastVc(CRDT_HashTombstone* t, VectorClock vc);
 void *createCrdtHash(void);
 void *createCrdtHashTombstone(void);
+
+//common methods
+CrdtTombstone *crdtHashTombstoneMerge(CrdtTombstone *currentVal, CrdtTombstone *value);
+CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long logic_time,long long maxsize,int* length);
+CrdtObject** crdtHashTombstoneFilter2(CrdtTombstone* common, int gid, VectorClock min_vc,long long maxsize,int* length);
+
+int crdtHashTombstoneGc(CrdtObject* target, VectorClock clock);
+int crdtHashTombstonePurge(CrdtObject* obj, CrdtObject* tombstone);
+sds crdtHashTombstoneInfo(void* data);
+void freeHashTombstoneFilter(CrdtObject** filters, int num);
+VectorClock clone_ht_vc(void* ht);
+static CrdtTombstoneMethod HashTombstoneCommonMethod = {
+    .merge = crdtHashTombstoneMerge,
+    .filterAndSplit = crdtHashTombstoneFilter,
+    .filterAndSplit2 = crdtHashTombstoneFilter2,
+    .freefilter = freeHashTombstoneFilter,
+    .gc = crdtHashTombstoneGc,
+    .purge = crdtHashTombstonePurge,
+    .info = crdtHashTombstoneInfo,
+    .getVc = clone_ht_vc,
+};
 
 
 

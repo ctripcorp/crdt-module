@@ -327,11 +327,14 @@ sds crdtRegisterTombstoneInfo(void *t) {
     sdsfree(vcStr);
     return result;
 } 
+
+
 size_t crdtLWWRegisterTombstoneMemUsageFunc(const void *value) {
     //gid + time + vc
     CRDT_LWW_RegisterTombstone* t = retrieveCrdtLWWRegisterTombstone((void*)value);
     return sizeof(int) + sizeof(long long) + (int)get_len(getCrdtLWWRegisterTombstoneVectorClock(t)) * sizeof(VectorClockUnit);
 }
+
 void crdtLWWRegisterDigestFunc(RedisModuleDigest *md, void *value) {
     CRDT_LWW_Register *crdtRegister = retrieveCrdtLWWRegister(value);
     RedisModule_DigestAddLongLong(md, getCrdtLWWRegisterGid(crdtRegister));
@@ -342,6 +345,7 @@ void crdtLWWRegisterDigestFunc(RedisModuleDigest *md, void *value) {
     RedisModule_DigestAddStringBuffer(md, (unsigned char *) (getCrdtLWWRegisterValue(crdtRegister)), sdslen(getCrdtLWWRegisterValue(crdtRegister)));
     RedisModule_DigestEndSequence(md);
 }
+
 size_t crdtLWWRegisterMemUsageFunc(const void *value) {
     //to do
     CRDT_LWW_Register *r = retrieveCrdtLWWRegister((void*)value);

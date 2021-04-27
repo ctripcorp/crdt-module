@@ -119,7 +119,7 @@ typedef struct CrdtDataMethod {
     crdtPropagateDelFunc propagateDel;
     crdtInfoFunc info;
 } CrdtDataMethod;
-
+typedef VectorClock (*crdtGetVcFunc)(void* value);
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterSplitFunc filterAndSplit;
@@ -128,6 +128,7 @@ typedef struct CrdtTombstoneMethod {
     crdtGcFunc gc;
     crdtPurgeFunc purge;
     crdtInfoFunc info;
+    crdtGetVcFunc getVc;
 } CrdtTombstoneMethod;
 #define PURGE_VAL 1
 #define PURGE_TOMBSTONE -1

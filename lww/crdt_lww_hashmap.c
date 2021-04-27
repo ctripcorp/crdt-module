@@ -15,6 +15,7 @@ void setCrdtHashLastVc(CRDT_Hash* hash, VectorClock vc) {
     } 
     r->lastVc = vc;
 }
+
 void mergeCrdtHashLastVc(CRDT_Hash* hash, VectorClock vc) {
     VectorClock old = getCrdtHashLastVc(hash);
     VectorClock now = vectorClockMerge(old, vc);
@@ -306,6 +307,7 @@ sds crdtHashInfo(void* data) {
     dictReleaseIterator(di);
     return result;
 }
+
 sds crdtHashTombstoneInfo(void* data) {
     CRDT_LWW_HashTombstone* tombstone = retrieveCrdtLWWHashTombstone(data);
     sds result = sdsempty();

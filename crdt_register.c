@@ -321,10 +321,10 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
             sds income = crdtRegisterInfoFromMetaAndValue(meta, value);
             sds future = crdtRegisterInfo(current);
             if(result > COMPARE_META_EQUAL) {
-                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][replace] key:{%s} prev: {%s}, income: {%s}, future: {%s}",
+                RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-Register][replace] key:{%s} prev: {%s}, income: {%s}, future: {%s}",
                             RedisModule_GetSds(key), prev, income, future);
             }else{
-                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][drop] key:{%s} prev: {%s}, income: {%s}, future: {%s}",
+                RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-Register][drop] key:{%s} prev: {%s}, income: {%s}, future: {%s}",
                             RedisModule_GetSds(key), prev, income, future);
             }
             RedisModule_IncrCrdtConflict(MODIFYCONFLICT | SET_CONFLICT);
@@ -434,7 +434,7 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         meta.vectorClock = vclock;
         if(current) {
             if(!isRegister(current)) {
-                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
+                RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
                                 RedisModule_GetSds(argv[i]),getDataType(current));
                 RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);
                 continue;
@@ -538,7 +538,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(current) {
         if(current) {
             if(!isRegister(current)) {
-                RedisModule_Log(ctx, logLevel, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
+                RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
                                 RedisModule_GetSds(argv[1]),getDataType(current));
                 RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
                 RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);
@@ -578,6 +578,10 @@ CRDT_Register* addRegister(void *data, CrdtMeta* meta, sds value) {
     CRDT_Register* r = createCrdtRegister();
     crdtRegisterSetValue(r, meta, value);
     return r;
+}
+
+VectorClock clone_rt_vc(void* rt) {
+    return dupVectorClock(getCrdtRegisterTombstoneLastVc(rt));
 }
 
 void freeRegisterFilter(CrdtObject** filters, int num) {

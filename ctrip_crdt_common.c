@@ -275,6 +275,7 @@ long long get_vcu_by_meta(CrdtMeta* meta) {
     return vcu;
 }
 
+
 #if defined(CRDT_COMMON_TEST_MAIN)
 #include <stdio.h>
 #include "testhelp.h"
