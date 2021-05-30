@@ -84,11 +84,27 @@ int compareCrdtMeta(CrdtMeta* old_common, CrdtMeta* new_common) {
     if(new_common == NULL || isNullVectorClock(getMetaVectorClock(new_common))) {
         return COMPARE_META_VECTORCLOCK_LT;
     }
-    if (isVectorClockMonoIncr(getMetaVectorClock(old_common), getMetaVectorClock(new_common)) == CRDT_OK) {
+    // if (isVectorClockMonoIncr(getMetaVectorClock(old_common), getMetaVectorClock(new_common)) == CRDT_OK) {
+    //     return COMPARE_META_VECTORCLOCK_GT;
+    // } else if (isVectorClockMonoIncr(getMetaVectorClock(new_common), getMetaVectorClock(old_common)) == CRDT_OK) {
+    //     return COMPARE_META_VECTORCLOCK_LT;
+    // } 
+    VectorClock old_vc = getMetaVectorClock(old_common);
+    VectorClock new_vc = getMetaVectorClock(new_common);
+    int old_gid = getMetaGid(old_common);
+    int new_gid = getMetaGid(new_common);
+
+    long long oo = get_vcu(old_vc, old_gid);
+    long long no = get_vcu(new_vc, old_gid);
+    long long nn = get_vcu(new_vc, new_gid);
+    long long on = get_vcu(old_vc, new_gid);
+    if( (oo <= no
+        && on < nn )  || (oo < no && on <= nn) ) {
         return COMPARE_META_VECTORCLOCK_GT;
-    } else if (isVectorClockMonoIncr(getMetaVectorClock(new_common), getMetaVectorClock(old_common)) == CRDT_OK) {
-        return COMPARE_META_VECTORCLOCK_LT;
     } 
+    if((no <= oo && nn < on) || (no < oo && nn <= on)) {
+        return COMPARE_META_VECTORCLOCK_LT;
+    }
     long long old_time = getMetaTimestamp(old_common);
     long long new_time = getMetaTimestamp(new_common);
     if(old_time < new_time) {
@@ -96,8 +112,7 @@ int compareCrdtMeta(CrdtMeta* old_common, CrdtMeta* new_common) {
     }else if (old_time > new_time) {
         return COMPARE_META_TIMESTAMPE_LT;
     }
-    int old_gid = getMetaGid(old_common);
-    int new_gid = getMetaGid(new_common);
+    
     if(old_gid > new_gid) {
         return COMPARE_META_GID_GT;
     }else if(old_gid < new_gid) {

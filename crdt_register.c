@@ -115,7 +115,8 @@ int crdtRegisterTombstonePurge(CrdtTombstone* tombstone, CrdtObject* current) {
     }
     CRDT_Register* reg = (CRDT_Register*) current;
     CRDT_RegisterTombstone* t = (CRDT_RegisterTombstone*)tombstone;
-    return purgeRegisterTombstone(t, reg);
+    int result =  purgeRegisterTombstone(t, reg);
+    return result;
 }
 
 CrdtTombstone* crdtRegisterTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other) {
@@ -536,16 +537,14 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     CRDT_Register* current = getCurrentValue(moduleKey);
     if(current) {
-        if(current) {
-            if(!isRegister(current)) {
-                RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
-                                RedisModule_GetSds(argv[1]),getDataType(current));
-                RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
-                RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);
-                status = CRDT_ERROR;
-                goto end; 
-            }
-        }
+        if(!isRegister(current)) {
+            RedisModule_Log(ctx, CRDT_DEBUG_LOG_LEVEL, "[CONFLICT][CRDT-Register][type conflict] {key: %s} prev: {%d}",
+                            RedisModule_GetSds(argv[1]),getDataType(current));
+            RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+            RedisModule_IncrCrdtConflict(MODIFYCONFLICT | TYPECONFLICT);
+            status = CRDT_ERROR;
+            goto end; 
+        } 
     }
     current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, &meta, argv[1], RedisModule_GetSds(argv[2]));
     if(expire_time != -2) {
