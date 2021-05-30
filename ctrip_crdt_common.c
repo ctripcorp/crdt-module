@@ -98,7 +98,6 @@ int compareCrdtMeta(CrdtMeta* old_common, CrdtMeta* new_common) {
     long long no = get_vcu(new_vc, old_gid);
     long long nn = get_vcu(new_vc, new_gid);
     long long on = get_vcu(old_vc, new_gid);
-    RedisModule_Debug(logLevel, "%lld < %lld , %lld < %lld", oo, no, nn, on);
     if( (oo <= no
         && on < nn )  || (oo < no && on <= nn) ) {
         return COMPARE_META_VECTORCLOCK_GT;
