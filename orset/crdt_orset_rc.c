@@ -609,7 +609,7 @@ sds crdtRcTombstoneInfo(void* value) {
     return result;
 }
 
-VectorClock getCrdtRcTombstoneLastVc(CrdtTombstone* tombstone) {
+VectorClock getCrdtRcTombstoneLastVc(void* tombstone) {
     if(tombstone == NULL) return newVectorClock(0);
     crdt_element el = get_element_from_rc_tombstone((crdt_rc_tombstone*)tombstone);
     return element_get_vc(el);

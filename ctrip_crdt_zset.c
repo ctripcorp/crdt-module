@@ -1412,8 +1412,8 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
     return REDISMODULE_OK;
 }
 
-VectorClock clone_sst_vc(CRDT_SSTombstone* data) {
-    return dupVectorClock(getCrdtSSTLastVc(data));
+VectorClock clone_sst_vc(void* data) {
+    return dupVectorClock(getCrdtSSTLastVc((CRDT_SSTombstone*)data));
 }
 
 RedisModuleType* getCrdtSS() {
