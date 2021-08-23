@@ -108,7 +108,7 @@ void freeCrdtRcTombstoneFilter(CrdtTombstone** filters, int num);
 int crdtRcTombstonePurge(CRDT_RCTombstone* tombstone, CRDT_RC* r);
 sds crdtRcTombstoneInfo(void* tombstone);
 // int mergeRcTombstone(CRDT_RCTombstone* tombstone, CrdtMeta* meta, int del_len, gcounter_meta** del_counter);
-VectorClock getCrdtRcTombstoneLastVc(CRDT_RCTombstone* rt);
+VectorClock getCrdtRcTombstoneLastVc(void* rt);
 static CrdtTombstoneMethod RcTombstoneCommonMethod = {
     .merge = crdtRcTombstoneMerge,
     .filterAndSplit =  crdtRcTombstoneFilter,
