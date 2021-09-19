@@ -12,7 +12,8 @@ ALLMODULES=tests.register_test.CrdtRegisterTest tests.crdt_test.CrdtTest
 
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
-COMPILER := $(shell gcc 2>&1 | head -1 | awk -F ":" '{print $1}')
+COMPILER := $(shell gcc 2>&1 | head -1 | awk -F ":" '{print $$1}')
+$(info USING $(COMPILER))
 
 ifeq ($(COMPILER),clang)
     LIBC ?= 
@@ -38,6 +39,7 @@ ifeq ($(uname_S),Darwin)
 endif
 
 all: rmutil crdt.so
+	@echo "BUILD SUCCESS VIA $(COMPILER)"
 
 rmutil:
 	$(MAKE) -C $(RMUTIL_LIBDIR)
