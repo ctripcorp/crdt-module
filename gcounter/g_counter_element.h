@@ -243,8 +243,8 @@ long long element_get_vcu_by_gid(crdt_element el, int gid);
 crdt_element move_crdt_element(crdt_element* rc, crdt_element el);
 int reset_crdt_element(crdt_element* rc);
 #ifndef COUNTER_BENCHMARK_MAIN
-crdt_element load_crdt_element_from_rdb(RedisModuleIO *rdb);
-void save_crdt_element_to_rdb(RedisModuleIO *rdb, crdt_element el);
+crdt_element load_crdt_element_from_rdb(sio *io);
+void save_crdt_element_to_rdb(sio *io, crdt_element el);
 #endif
 /**********************  abdou  element -***********************/
 

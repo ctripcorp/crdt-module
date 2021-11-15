@@ -37,6 +37,7 @@
 
 #include "ctrip_crdt_expire.h"
 #include "gcounter/g_counter_element.h"
+#include "ctrip_stream_io.h"
 #define CRDT_RC_DATATYPE_NAME "crdt_rc_v"
 #define CRDT_RC_TOMBSTONE_DATATYPE_NAME "crdt_rc_t"
 
@@ -64,6 +65,7 @@ typedef CrdtTombstone CRDT_RCTombstone;
 //========================= Register moduleType functions =======================
 void *RdbLoadCrdtRc(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtRc(RedisModuleIO *rdb, void *value);
+void sioSaveCrdtRc(sio *io, void *value);
 void AofRewriteCrdtRc(RedisModuleIO *aof, RedisModuleString *key, void *value);
 size_t crdtRcMemUsageFunc(const void *value);
 void freeCrdtRc(void *crdtRegister);

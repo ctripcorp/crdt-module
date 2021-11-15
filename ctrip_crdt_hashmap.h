@@ -47,7 +47,7 @@
 #define CRDT_HASH_TOMBSOTNE_DATATYPE_NAME "crdt_htom"
 #define HASHTABLE_MIN_FILL        10
 
-#define UINT64_MAX        18446744073709551615ULL
+//#define UINT64_MAX        18446744073709551615ULL
 #define RDB_LENERR UINT64_MAX
 
 #define OBJ_HASH_KEY 1
@@ -180,10 +180,10 @@ size_t crdtHashTombstoneMemUsageFunc(const void *value);
 void crdtHashTombstoneDigestFunc(RedisModuleDigest *md, void *value);
 
 //other utils
-int RdbLoadCrdtBasicHash(RedisModuleIO *rdb, int encver, void *data);
-void RdbSaveCrdtBasicHash(RedisModuleIO *rdb, void *value);
-int RdbLoadCrdtBasicHashTombstone(RedisModuleIO *rdb, int encver, void *data);
-void RdbSaveCrdtBasicHashTombstone(RedisModuleIO *rdb, void *value);
+int sioLoadCrdtBasicHash(sio *io, int encver, void *data);
+void sioSaveCrdtBasicHash(sio *io, void *value);
+int sioLoadCrdtBasicHashTombstone(sio *io, int encver, void *data);
+void sioSaveCrdtBasicHashTombstone(sio *io, void *value);
 size_t crdtBasicHashMemUsageFunc(void* data);
 size_t crdtBasicHashTombstoneMemUsageFunc(void* data);
 /**

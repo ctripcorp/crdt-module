@@ -32,15 +32,15 @@ CRDT_LWW_HashTombstone* retrieveCrdtLWWHashTombstone(void* data);
 CrdtObject* crdtLWWHashFilter(CrdtObject* common, int gid, long long logic_time);
 int crdtLWWHashClean(CrdtObject* current, CrdtTombstone* tombstone);
 //private hash module functions 
-void *RdbLoadCrdtLWWHash(RedisModuleIO *rdb, int version, int encver);
-void RdbSaveCrdtLWWHash(RedisModuleIO *rdb, void *value);
+void *sioLoadCrdtLWWHash(sio *io, int version, int encver);
+void sioSaveCrdtLWWHash(sio *io, void *value);
 void AofRewriteCrdtLWWHash(RedisModuleIO *aof, RedisModuleString *key, void *value);
 void freeCrdtLWWHash(void *crdtHash);
 size_t crdtLWWHashMemUsageFunc(const void *value);
 void crdtLWWHashDigestFunc(RedisModuleDigest *md, void *value);
 //private hash tombstone functions
-void *RdbLoadCrdtLWWHashTombstone(RedisModuleIO *rdb, int version, int encver);
-void RdbSaveCrdtLWWHashTombstone(RedisModuleIO *rdb, void *value);
+void *sioLoadCrdtLWWHashTombstone(sio *io, int version, int encver);
+void sioSaveCrdtLWWHashTombstone(sio *io, void *value);
 void AofRewriteCrdtLWWHashTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
 void freeCrdtLWWHashTombstone(void *crdtHash);
 size_t crdtLWWHashTombstoneMemUsageFunc(const void *value);
@@ -61,17 +61,26 @@ void freeCrdtHashTombstone(void *data) {
     freeCrdtLWWHashTombstone(data);
 }
 //basic hash module functions
-void *RdbLoadCrdtHash(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
+static void *sioLoadCrdtHash(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);
     if( type == LWW_TYPE) {
-        return RdbLoadCrdtLWWHash(rdb, version, encver);
+        return sioLoadCrdtLWWHash(io, version, encver);
     }
     return NULL;
 }
+void *RdbLoadCrdtHash(RedisModuleIO *rdb, int encver) {
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtHash(io, encver);
+    rdbStreamRelease(io);
+    return res;
+}
+
 void RdbSaveCrdtHash(RedisModuleIO *rdb, void *value) {
-    RdbSaveCrdtLWWHash(rdb, value);
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveCrdtLWWHash(io, value);
+    rdbStreamRelease(io);
 }
 void AofRewriteCrdtHash(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     AofRewriteCrdtLWWHash(aof, key, value);
@@ -83,18 +92,26 @@ size_t crdtHashMemUsageFunc(const void *value) {
 void crdtHashDigestFunc(RedisModuleDigest *md, void *value) {
     crdtLWWHashDigestFunc(md, value);
 }
-//basic hash tombstone module functions
-void *RdbLoadCrdtHashTombstone(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
+void *sioLoadCrdtHashTombstone(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);
     if( type == LWW_TYPE) {
-        return RdbLoadCrdtLWWHashTombstone(rdb, version, encver);
+        return sioLoadCrdtLWWHashTombstone(io, version, encver);
     }
     return NULL;
 }
+//basic hash tombstone module functions
+void *RdbLoadCrdtHashTombstone(RedisModuleIO *rdb, int encver) {
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtHashTombstone(io, encver);
+    rdbStreamRelease(io);
+    return res;
+}
 void RdbSaveCrdtHashTombstone(RedisModuleIO *rdb, void *value) {
-    RdbSaveCrdtLWWHashTombstone(rdb, value);
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveCrdtLWWHashTombstone(io, value);
+    rdbStreamRelease(io);
 }
 void AofRewriteCrdtHashTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     AofRewriteCrdtLWWHashTombstone(aof, key, value);

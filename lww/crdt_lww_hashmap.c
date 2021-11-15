@@ -191,20 +191,20 @@ CRDT_LWW_HashTombstone* retrieveCrdtLWWHashTombstone(void* data) {
 /**
  * Hash Module API
  */
-void *RdbLoadCrdtLWWHash(RedisModuleIO *rdb, int version, int encver) {
+void *sioLoadCrdtLWWHash(sio *io, int version, int encver) {
     if (encver != 0) {
         return NULL;
     }
     CRDT_LWW_Hash *crdtHash = createCrdtLWWHash();
-    setCrdtHashLastVc((CRDT_Hash*)crdtHash, rdbLoadVectorClock(rdb, version));
-    if(RdbLoadCrdtBasicHash(rdb, encver, crdtHash) == CRDT_NO) return NULL;
+    setCrdtHashLastVc((CRDT_Hash*)crdtHash, rdbLoadVectorClock(io, version));
+    if(sioLoadCrdtBasicHash(io, encver, crdtHash) == CRDT_NO) return NULL;
     return crdtHash;
 }
-void RdbSaveCrdtLWWHash(RedisModuleIO *rdb, void *value) {
-    saveCrdtRdbHeader(rdb, LWW_TYPE);
+void sioSaveCrdtLWWHash(sio *io, void *value) {
+    saveCrdtRdbHeader(io, LWW_TYPE);
     CRDT_LWW_Hash *crdtHash = retrieveCrdtLWWHash(value);
-    rdbSaveVectorClock(rdb, getCrdtHashLastVc((CRDT_Hash*)crdtHash), CRDT_RDB_VERSION);
-    RdbSaveCrdtBasicHash(rdb, crdtHash);
+    rdbSaveVectorClock(io, getCrdtHashLastVc((CRDT_Hash*)crdtHash), CRDT_RDB_VERSION);
+    sioSaveCrdtBasicHash(io, crdtHash);
 }
 void AofRewriteCrdtLWWHash(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     //todo: currently do nothing when aof
@@ -230,38 +230,38 @@ void crdtLWWHashDigestFunc(RedisModuleDigest *md, void *value) {
  */
 #define HASH_MAXDEL 1
 #define NO_HASH_MAXDEL 0
-void *RdbLoadCrdtLWWHashTombstone(RedisModuleIO *rdb, int version, int encver) {
+void *sioLoadCrdtLWWHashTombstone(sio *io, int version, int encver) {
     if (encver != 0) {
         return NULL;
     }
     CRDT_LWW_HashTombstone *crdtHashTombstone = createCrdtLWWHashTombstone();
-    if(RedisModule_LoadSigned(rdb) == HASH_MAXDEL) {
-        int gid = RedisModule_LoadSigned(rdb);
+    if(sioLoadSigned(io) == HASH_MAXDEL) {
+        int gid = sioLoadSigned(io);
         if(RedisModule_CheckGid(gid) == REDISMODULE_ERR) {
             return NULL;
         }
         setCrdtLWWHashTombstoneMaxDelGid(crdtHashTombstone, gid);
-        setCrdtLWWHashTombstoneMaxDelTimestamp(crdtHashTombstone, RedisModule_LoadSigned(rdb));
-        setCrdtLWWHashTombstoneMaxDelVectorClock(crdtHashTombstone, rdbLoadVectorClock(rdb, version));
+        setCrdtLWWHashTombstoneMaxDelTimestamp(crdtHashTombstone, sioLoadSigned(io));
+        setCrdtLWWHashTombstoneMaxDelVectorClock(crdtHashTombstone, rdbLoadVectorClock(io, version));
     }
-    setCrdtLWWHashTombstoneLastVc(crdtHashTombstone, rdbLoadVectorClock(rdb, version));
-    if(RdbLoadCrdtBasicHashTombstone(rdb, encver, crdtHashTombstone) == CRDT_NO) return NULL;
+    setCrdtLWWHashTombstoneLastVc(crdtHashTombstone, rdbLoadVectorClock(io, version));
+    if(sioLoadCrdtBasicHashTombstone(io, encver, crdtHashTombstone) == CRDT_NO) return NULL;
     return crdtHashTombstone;
 }
-void RdbSaveCrdtLWWHashTombstone(RedisModuleIO *rdb, void *value) {
-    saveCrdtRdbHeader(rdb, LWW_TYPE);
+void sioSaveCrdtLWWHashTombstone(sio *io, void *value) {
+    saveCrdtRdbHeader(io, LWW_TYPE);
     CRDT_LWW_HashTombstone *crdtHashTombstone = retrieveCrdtLWWHashTombstone(value);
     if(isNullVectorClock(getCrdtLWWHashTombstoneMaxDelVectorClock(crdtHashTombstone))) {
-        RedisModule_SaveSigned(rdb, NO_HASH_MAXDEL);
+        sioSaveSigned(io, NO_HASH_MAXDEL);
     }else{
-        RedisModule_SaveSigned(rdb, HASH_MAXDEL);
-        RedisModule_SaveSigned(rdb, getCrdtLWWHashTombstoneMaxDelGid(crdtHashTombstone));
-        RedisModule_SaveSigned(rdb, getCrdtLWWHashTombstoneMaxDelTimestamp(crdtHashTombstone));
-        rdbSaveVectorClock(rdb, getCrdtLWWHashTombstoneMaxDelVectorClock(crdtHashTombstone), CRDT_RDB_VERSION);
+        sioSaveSigned(io, HASH_MAXDEL);
+        sioSaveSigned(io, getCrdtLWWHashTombstoneMaxDelGid(crdtHashTombstone));
+        sioSaveSigned(io, getCrdtLWWHashTombstoneMaxDelTimestamp(crdtHashTombstone));
+        rdbSaveVectorClock(io, getCrdtLWWHashTombstoneMaxDelVectorClock(crdtHashTombstone), CRDT_RDB_VERSION);
     }
-    rdbSaveVectorClock(rdb, getCrdtLWWHashTombstoneLastVc(crdtHashTombstone), CRDT_RDB_VERSION);
+    rdbSaveVectorClock(io, getCrdtLWWHashTombstoneLastVc(crdtHashTombstone), CRDT_RDB_VERSION);
     
-    RdbSaveCrdtBasicHashTombstone(rdb, crdtHashTombstone);
+    sioSaveCrdtBasicHashTombstone(io, crdtHashTombstone);
 }
 void AofRewriteCrdtLWWHashTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     //todo: currently do nothing when aof
@@ -297,7 +297,7 @@ sds crdtHashInfo(void* data) {
     int num = 5;
     while((de = dictNext(di)) != NULL && num > 0) {
         sds info = crdtRegisterInfo(dictGetVal(de));
-        result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
+        result = sdscatprintf(result, "  key: %s, %s\n", (sds)dictGetKey(de), info);
         sdsfree(info);
         num--;
     }
@@ -329,7 +329,7 @@ sds crdtHashTombstoneInfo(void* data) {
     int num = 5;
     while((de = dictNext(di)) != NULL && num > 0) {
         sds info = crdtRegisterTombstoneInfo(dictGetVal(de));
-        result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
+        result = sdscatprintf(result, "  key: %s, %s\n", (sds)dictGetKey(de), info);
         sdsfree(info);
         num--;
     }

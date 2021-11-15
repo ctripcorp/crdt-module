@@ -20,10 +20,10 @@ int crdtPublishCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
 }
 int initPubsubModule(RedisModuleCtx* ctx) {
     if (RedisModule_CreateCommand(ctx, "CRDTPUBLISH", 
-        publishCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
+        publishCommand, NULL, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "CRDT.PUBLISH", 
-        crdtPublishCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
+        crdtPublishCommand, NULL, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }

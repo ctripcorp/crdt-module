@@ -126,6 +126,8 @@ static CrdtDataMethod RegisterDataMethod = {
 
 void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
+void *sioLoadCrdtRegister(sio *io, int encver);
+void sioSaveCrdtRegister(sio *io, void *value);
 
 
 sds crdtRegisterInfoFromMetaAndValue(CrdtMeta* meta, sds value);

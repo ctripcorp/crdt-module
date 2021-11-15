@@ -1336,78 +1336,78 @@ int initCrdtSSModule(RedisModuleCtx *ctx) {
     if (CrdtSST == NULL) return REDISMODULE_ERR;
     // write readonly admin deny-oom deny-script allow-loading pubsub random allow-stale no-monitor fast getkeys-api no-cluster
     if (RedisModule_CreateCommand(ctx,"zadd",
-                                  zaddCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  zaddCommand, NULL,"write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.zadd",
-                                  crdtZaddCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
+                                  crdtZaddCommand, NULL,"write deny-oom allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"ZSCORE",
-                                  zscoreCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  zscoreCommand, NULL,"readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.ZSCORE",
-                                  crdtZscoreCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  crdtZscoreCommand, NULL,"readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"ZCARD",
-                                  zcardCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  zcardCommand, NULL,"readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zincrby",
-                                  zincrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  zincrbyCommand, NULL,"write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.zincrby" ,
-                                    crdtZincrbyCommand, "write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
+                                    crdtZincrbyCommand, NULL, "write deny-oom allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zcount",
-                            zcountCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR)
+                            zcountCommand, NULL, "readonly fast swap-get", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"ZRANGE",
-                                zrangeCommand,"readonly",1,1,1) == REDISMODULE_ERR)
+                                zrangeCommand, NULL,"readonly swap-get",1,1,1) == REDISMODULE_ERR)
         return  REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zremrangebylex",
-                                zremrangebylexCommand, "write",1,1,1) == REDISMODULE_ERR)         
+                                zremrangebylexCommand, NULL, "write swap-get",1,1,1) == REDISMODULE_ERR)         
         return  REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zrevrange",
-                                  zrevrangeCommand,"readonly",1,1,1) == REDISMODULE_ERR)
+                                  zrevrangeCommand, NULL,"readonly swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zrangebyscore", 
-                                zrangebyscoreCommand, "readonly", 1,1,1) == REDISMODULE_ERR)
+                                zrangebyscoreCommand, NULL, "readonly swap-get", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zrevrangebyscore", 
-                                zrevrangebyscoreCommand, "readonly", 1,1,1) == REDISMODULE_ERR)
+                                zrevrangebyscoreCommand, NULL, "readonly swap-get", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zrank",
-                                  zrankCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  zrankCommand, NULL,"readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"zrevrank",
-                                  zrevrankCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  zrevrankCommand, NULL,"readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zrem", 
-                                  zremCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
+                                  zremCommand, NULL, "write deny-oom swap-get", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.zrem",
-                                  crdtZremCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
+                                  crdtZremCommand, NULL,"write deny-oom allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.del_ss",
-                                crdtDelSSCommand  ,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
+                                crdtDelSSCommand, NULL, "write deny-oom allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zremrangebyrank", 
-                                  zremrangebyrankCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
+                                  zremrangebyrankCommand, NULL, "write deny-oom swap-get", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zremrangebyscore", 
-                                  zremrangebyscoreCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
+                                  zremrangebyscoreCommand, NULL, "write deny-oom swap-get", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     
     
     if (RedisModule_CreateCommand(ctx, "zrangebylex",
-                                zrangebylexCommand, "readonly", 1,1,1) == REDISMODULE_ERR)
+                                zrangebylexCommand, NULL, "readonly swap-get", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zlexcount",
-                                zlexcountCommand, "readonly fast", 1,1,1) == REDISMODULE_ERR)
+                                zlexcountCommand, NULL, "readonly fast swap-get", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zrevrangebylex",
-                                zrevrangebylexCommand, "readonly", 1,1,1) == REDISMODULE_ERR)
+                                zrevrangebylexCommand, NULL, "readonly swap-get", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "zscan",
-                                zscanCommand, "readonly random", 1,1,1) == REDISMODULE_ERR)
+                                zscanCommand, NULL, "readonly random swap-get", 1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }

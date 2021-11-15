@@ -250,30 +250,30 @@ end:
 int initCrdtExpireModule(RedisModuleCtx *ctx) {
     
     if (RedisModule_CreateCommand(ctx, "EXPIRE", 
-        expireCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
+        expireCommand, NULL, "write deny-oom swap-get", 1, 1, 1) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx, "PEXPIRE", 
-        pexpireCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
+        pexpireCommand, NULL, "write deny-oom swap-get", 1, 1, 1) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx, "EXPIREAT", 
-        expireAtCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
+        expireAtCommand, NULL, "write deny-oom swap-get", 1, 1, 1) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx, "PEXPIREAT", 
-        pexpireAtCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
+        pexpireAtCommand, NULL, "write deny-oom swap-get", 1, 1, 1) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx, "PERSIST", 
-        persistCommand, "write deny-oom", 1, 1, 1) == REDISMODULE_ERR) {
+        persistCommand, NULL, "write deny-oom swap-get", 1, 1, 1) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx, "CRDT.EXPIRE", 
-        crdtExpireCommand, "write deny-oom allow-loading", 1, 1, 1) == REDISMODULE_ERR)
+        crdtExpireCommand, NULL, "write deny-oom allow-loading swap-get", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "CRDT.PERSIST", 
-        crdtPersistCommand, "write deny-oom allow-loading", 1, 1, 1) == REDISMODULE_ERR)
+        crdtPersistCommand, NULL, "write deny-oom allow-loading swap-get", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }

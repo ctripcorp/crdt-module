@@ -37,6 +37,7 @@
 #include "include/rmutil/dict.h"
 #include "ctrip_vector_clock.h"
 #include "redismodule.h"
+#include "ctrip_stream_io.h"
 
 #define CRDT_MODULE_OBJECT_PREFIX "crdt"
 
@@ -158,8 +159,8 @@ int isConflictCommon(int result);
 void initIncrMeta(CrdtMeta* meta);
 void freeIncrMeta(CrdtMeta* meta);
 
-void saveCrdtRdbHeader(RedisModuleIO *rdb, int type);
-long long loadCrdtRdbHeader(RedisModuleIO *rdb);
+void saveCrdtRdbHeader(sio *io, int type);
+long long loadCrdtRdbHeader(sio *io);
 int getCrdtRdbVersion(long long crdtRdbHeader);
 int getCrdtRdbType(long long crdtRdbHeader);
 

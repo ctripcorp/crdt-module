@@ -23,15 +23,15 @@ static dictType crdtZSetDictType = {
 };
 
 
-void save_zset_dict_to_rdb(RedisModuleIO *rdb, dict* d) {
-    RedisModule_SaveUnsigned(rdb, dictSize(d));
+void save_zset_dict_to_rdb(sio *io, dict* d) {
+    sioSaveUnsigned(io, dictSize(d));
     dictIterator *di = dictGetIterator(d);
     dictEntry *de;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
         crdt_element el = dict_get_element(de);
-        RedisModule_SaveStringBuffer(rdb, field, sdslen(field));
-        save_crdt_element_to_rdb(rdb, el);
+        sioSaveStringBuffer(io, field, sdslen(field));
+        save_crdt_element_to_rdb(io, el);
     }
     dictReleaseIterator(di);
 }
@@ -63,16 +63,16 @@ void free_crdt_zset(crdt_zset* zset) {
     RedisModule_Free(zset);
 }
 
-void *load_zset_by_rdb(RedisModuleIO *rdb, int version, int encver) {
+void *load_zset_by_rdb(sio *io, int version, int encver) {
     crdt_zset* set = (crdt_zset*)createCrdtZset();
-    VectorClock lastvc = rdbLoadVectorClock(rdb, version);
+    VectorClock lastvc = rdbLoadVectorClock(io, version);
     set->lastvc = lastvc;
-    uint64_t len = RedisModule_LoadUnsigned(rdb);
+    uint64_t len = sioLoadUnsigned(io);
     for(int i = 0; i < len; i++) {
         // char* str = RedisModule_LoadStringBuffer(rdb, &strLength);
         // sds field = sdsnewlen(str, strLength);
-        sds field = RedisModule_LoadSds(rdb);
-        crdt_element el = load_crdt_element_from_rdb(rdb);
+        sds field = sioLoadSds(io);
+        crdt_element el = load_crdt_element_from_rdb(io);
         dictEntry* entry = dictAddRaw(set->dict, field, NULL);
         dict_set_element(set->dict, entry, el);
         double score = 0;
@@ -195,7 +195,7 @@ sds crdtZSetInfo(void *data) {
     while((de = dictNext(it)) != NULL && num > 0) {
         crdt_element element = dict_get_element(de);
         sds element_info = get_element_info(element);
-        result = sdscatprintf(result, "\n1)  key: %s ", dictGetKey(de));
+        result = sdscatprintf(result, "\n1)  key: %s ", (sds)dictGetKey(de));
         result = sdscatprintf(result, "\n%s", element_info);
         sdsfree(element_info);
         num--;
@@ -261,17 +261,17 @@ void free_crdt_zset_tombstone(crdt_zset_tombstone* tombstone) {
     RedisModule_Free(tombstone);
 }
 
-void * load_zset_tombstone_by_rdb(RedisModuleIO *rdb, int version, int encver) {
+void * load_zset_tombstone_by_rdb(sio *io, int version, int encver) {
     crdt_zset_tombstone* zset_tombstone = (crdt_zset_tombstone*)createCrdtZsetTombstone();
-    VectorClock lastvc = rdbLoadVectorClock(rdb, version);
+    VectorClock lastvc = rdbLoadVectorClock(io, version);
     zset_tombstone->lastvc = lastvc;
-    zset_tombstone->maxdelvc = rdbLoadVectorClock(rdb, version);
-    uint64_t len = RedisModule_LoadUnsigned(rdb);
+    zset_tombstone->maxdelvc = rdbLoadVectorClock(io, version);
+    uint64_t len = sioLoadUnsigned(io);
     size_t strLength;
     for(int i = 0; i < len; i++) {
-        char* str = RedisModule_LoadStringBuffer(rdb, &strLength);
+        char* str = sioLoadStringBuffer(io, &strLength);
         sds field = sdsnewlen(str, strLength);
-        crdt_element el = load_crdt_element_from_rdb(rdb);
+        crdt_element el = load_crdt_element_from_rdb(io);
         dictEntry* entry = dictAddOrFind(zset_tombstone->dict, field);
         // dict_set_element(entry, el);
         dict_set_element(zset_tombstone->dict, entry, el);
@@ -369,21 +369,33 @@ void freeSSTFilter(CrdtObject** filters, int num) {
 
 //public 
 //about sorted set module type
-void RdbSaveCrdtSS(RedisModuleIO *rdb, void *value) {
-    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+static void sioSaveCrdtSS(sio *io, void *value) {
+    saveCrdtRdbHeader(io, ORSET_TYPE);
     crdt_zset* zset = retrieve_crdt_zset(value);
-    rdbSaveVectorClock(rdb, getCrdtSSLastVc((CRDT_SS*)zset), CRDT_RDB_VERSION);
-    save_zset_dict_to_rdb(rdb, zset->dict);
+    rdbSaveVectorClock(io, getCrdtSSLastVc((CRDT_SS*)zset), CRDT_RDB_VERSION);
+    save_zset_dict_to_rdb(io, zset->dict);
+} 
+void RdbSaveCrdtSS(RedisModuleIO *rdb, void *value) {
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveCrdtSS(io, value);
+    rdbStreamRelease(io);
 } 
 
-void *RdbLoadCrdtSS(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
+static void *sioLoadCrdtSS(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);
     if ( type == ORSET_TYPE ) {
-        return load_zset_by_rdb(rdb, version, encver);
+        return load_zset_by_rdb(io, version, encver);
     }
     return NULL;
+}
+
+void *RdbLoadCrdtSS(RedisModuleIO *rdb, int encver) {
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtSS(io, encver);
+    rdbStreamRelease(io);
+    return res;
 }
 
 CrdtObject** crdtSSFilter2(CrdtObject* data, int gid, VectorClock min_vc, long long maxsize, int* num) {
@@ -518,22 +530,33 @@ size_t crdtZsetLength(CRDT_SS* ss) {
 
 
 //about sorted set tombstone module type
-void RdbSaveCrdtSST(RedisModuleIO *rdb, void *value) {
-    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+static void sioSaveCrdtSST(sio *io, void *value) {
+    saveCrdtRdbHeader(io, ORSET_TYPE);
     crdt_zset_tombstone* zset_tombstone = retrieve_crdt_zset_tombstone(value);
-    rdbSaveVectorClock(rdb, getCrdtSSTLastVc((CRDT_SSTombstone*)zset_tombstone), CRDT_RDB_VERSION);
-    rdbSaveVectorClock(rdb, zset_tombstone->maxdelvc, CRDT_RDB_VERSION);
-    save_zset_dict_to_rdb(rdb, zset_tombstone->dict);
+    rdbSaveVectorClock(io, getCrdtSSTLastVc((CRDT_SSTombstone*)zset_tombstone), CRDT_RDB_VERSION);
+    rdbSaveVectorClock(io, zset_tombstone->maxdelvc, CRDT_RDB_VERSION);
+    save_zset_dict_to_rdb(io, zset_tombstone->dict);
+} 
+void RdbSaveCrdtSST(RedisModuleIO *rdb, void *value) {
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveCrdtSST(io, value);
+    rdbStreamRelease(io);
 } 
 
-void *RdbLoadCrdtSST(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
+static void *sioLoadCrdtSST(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);
     if ( type == ORSET_TYPE ) {
-        return load_zset_tombstone_by_rdb(rdb, version, encver);
+        return load_zset_tombstone_by_rdb(io, version, encver);
     }
     return NULL;
+}
+void *RdbLoadCrdtSST(RedisModuleIO *rdb, int encver) {
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtSST(io, encver);
+    rdbStreamRelease(io);
+    return res;
 }
 
 CrdtTombstone** crdtSSTFilter2(CrdtTombstone* target, int gid, VectorClock min_vc, long long maxsize,int* num) {
@@ -680,7 +703,7 @@ sds crdtZsetTombstoneInfo(void* tombstone) {
     while((de = dictNext(it)) != NULL) {
         crdt_element element = dict_get_element(de);
         sds element_info = get_element_info(element);
-        result = sdscatprintf(result, "\n1) tombstone key: %s ", dictGetKey(de));
+        result = sdscatprintf(result, "\n1) tombstone key: %s ", (sds)dictGetKey(de));
         result = sdscatprintf(result, "\n%s", element_info);
         sdsfree(element_info);
         num--;
@@ -1596,7 +1619,7 @@ sds getZsetElementInfo(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field)
             if(result == NULL) result = sdsempty();
             crdt_element element = dict_get_element(de);
             sds element_info = get_element_info(element);
-            result = sdscatprintf(result, "value)  key: %s \n", dictGetKey(de));
+            result = sdscatprintf(result, "value)  key: %s \n", (sds)dictGetKey(de));
             result = sdscatprintf(result, "%s", element_info);
             sdsfree(element_info);
         }
@@ -1609,7 +1632,7 @@ sds getZsetElementInfo(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field)
             if(result == NULL) result = sdsempty();
             crdt_element element = dict_get_element(de);
             sds element_info = get_element_info(element);
-            result = sdscatprintf(result, "tombstone)  key: %s \n", dictGetKey(de));
+            result = sdscatprintf(result, "tombstone)  key: %s \n", (sds)dictGetKey(de));
             result = sdscatprintf(result, "%s", element_info);
             sdsfree(element_info);
         }

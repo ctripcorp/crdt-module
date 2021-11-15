@@ -32,6 +32,7 @@
 
 #include "ctrip_crdt_common.h"
 #include "crdt.h"
+#include "ctrip_stream_io.h"
 
 #include <stdlib.h>
 
@@ -257,12 +258,13 @@ CrdtMeta* addOrCreateMeta(CrdtMeta* target, CrdtMeta* other) {
  * |  version  |   opt    |  crdt type |
  * |--16 bits--|  40 bits |  8 bits    |
  */
-void saveCrdtRdbHeader(RedisModuleIO *rdb, int type) {
+void saveCrdtRdbHeader(sio *io, int type) {
     long long header = CRDT_RDB_VERSION << 48 | type;
-    RedisModule_SaveSigned(rdb, header);
+    sioSaveUnsigned(io, header);
 }
-long long loadCrdtRdbHeader(RedisModuleIO *rdb) {
-    return RedisModule_LoadSigned(rdb);
+
+long long loadCrdtRdbHeader(sio *io) {
+    return sioLoadSigned(io);
 }
 
 int getCrdtRdbVersion(long long crdtRdbHeader) {

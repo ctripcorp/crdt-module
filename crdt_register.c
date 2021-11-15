@@ -41,6 +41,7 @@
 #include "include/rmutil/dict.h"
 #include "crdt_statistics.h"
 #include "ctrip_crdt_expire.h"
+#include "ctrip_swap.h"
 #include <string.h>
 /**
  * ==============================================Pre-defined functions=========================================================*/
@@ -148,7 +149,12 @@ int initRegisterModule(RedisModuleCtx *ctx) {
             .aof_rewrite = AofRewriteCrdtRegister,
             .mem_usage = crdtRegisterMemUsageFunc,
             .free = freeCrdtRegister,
-            .digest = crdtRegisterDigestFunc
+            .digest = crdtRegisterDigestFunc,
+            .lookup_swapping_clients = lookupSwappingClientsString,
+            .setup_swapping_clients = setupSwappingClientsString,
+            .get_data_swaps = getDataSwapsString,
+            .get_complement_swaps = getComplementSwapsString,
+            .swap_ana = swapAnaString,
     };
 
     CrdtRegister = RedisModule_CreateDataType(ctx, CRDT_REGISTER_DATATYPE_NAME, 0, &tm);
@@ -166,16 +172,16 @@ int initRegisterModule(RedisModuleCtx *ctx) {
     if (CrdtRegisterTombstone == NULL) return REDISMODULE_ERR;
     
     if (RedisModule_CreateCommand(ctx,"CRDT.SET",
-                                  CRDT_SetCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
+                                  CRDT_SetCommand, NULL, "write deny-oom allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.DEL_REG",
-                                  CRDT_DelRegCommand,"write allow-loading",1,1,1) == REDISMODULE_ERR)
+                                  CRDT_DelRegCommand, NULL, "write allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     
     if (RedisModule_CreateCommand(ctx, "CRDT.MSET",
-                                    CRDT_MSETCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
+                                    CRDT_MSETCommand, NULL, "write deny-oom allow-loading swap-get",3,-1,3) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 
@@ -404,6 +410,8 @@ CRDT_Register* addOrUpdateRegister(RedisModuleCtx *ctx, RedisModuleKey* moduleKe
 // }
 
 
+//CRDT.MSET <gid> <timestamp> <key1> <val1> <vc1> <key2> <val2> <vc2> ...
+//      0     1        2        3      4      5     6      7      8 ...
 int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 6) return RedisModule_WrongArity(ctx);
     if (argc % 3 != 0) return RedisModule_WrongArity(ctx);

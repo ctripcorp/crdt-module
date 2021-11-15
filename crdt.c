@@ -42,6 +42,7 @@
 #include "crdt_statistics.h"
 #include "crdt_set.h"
 #include "ctrip_crdt_zset.h"
+#include "ctrip_swap.h"
 #include <stdlib.h>
 #include <stdio.h>
 #define CRDT_API_VERSION 1
@@ -120,6 +121,7 @@ int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         }
         dirty = numl - tmp;
         if (dirty > 0) {
+            RedisModule_RocksDelete(ctx,argv[i]);
             RedisModule_DeleteKey(moduleKey);
         }
         RedisModule_CloseKey(moduleKey);
@@ -431,28 +433,28 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         return REDISMODULE_ERR;
     }
     if (RedisModule_CreateCommand(ctx,"del",
-                                  delCommand,"write",1,-1,1) == REDISMODULE_ERR)
+                                  delCommand, NULL, "write swap-get",1,-1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"crdt.debug",
-                                  crdtDebugCommand,"write",1,-1,1) == REDISMODULE_ERR)
+                                  crdtDebugCommand, NULL, "write",1,-1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"crdt.statistics",
-                                  statisticsCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  statisticsCommand, NULL, "write deny-oom",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.memory", 
-                                    memoryCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR)
+                                    memoryCommand, NULL, "readonly fast", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.dataInfo", 
-                                dataCommand, "readonly fast", 1, 1, 1) == REDISMODULE_ERR)
+                                dataCommand, NULL, "readonly fast swap-get", 1, 1, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR; 
     if (RedisModule_CreateCommand(ctx, "crdt.select", 
-                                crdtSelectCommand, "write",  1, 2,1) == REDISMODULE_ERR)
+                                crdtSelectCommand, NULL, "write",  1, 2, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;   
     if (RedisModule_CreateCommand(ctx, "crdt.ovc", 
-                                crdtOvcCommand, "write",  1, 2,1) == REDISMODULE_ERR)
+                                crdtOvcCommand, NULL, "write",  1, 2, 1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;  
-    if (RedisModule_CreateCommand(ctx, "crdt.debug_gc", crdtGcCommand, "allow-loading write",  1, 2,1) == REDISMODULE_ERR)  
+    if (RedisModule_CreateCommand(ctx, "crdt.debug_gc", crdtGcCommand, NULL, "allow-loading write", 1, 2, 1) == REDISMODULE_ERR)  
         return REDISMODULE_ERR;               
     return REDISMODULE_OK;
 }

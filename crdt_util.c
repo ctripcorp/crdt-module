@@ -238,14 +238,14 @@ void* getTombstone(RedisModuleKey *moduleKey) {
 
 //update in rdb version 1: optimize rdb save/load vector clock by saving/load it as long long
 // insteadof a string 09/03/2020
-VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version) {
+VectorClock rdbLoadVectorClock(sio *io, int version) {
     if(version == 0) {
-        sds vcStr = RedisModule_LoadSds(rdb);
+        sds vcStr = sioLoadSds(io);
         VectorClock result = stringToVectorClock(vcStr);
         sdsfree(vcStr);
         return result;
     } else if(version == 1) {
-        int length = RedisModule_LoadSigned(rdb);
+        int length = sioLoadSigned(io);
         if (length == 1) {
 #if defined(TCL_TEST)
             VectorClock result = newVectorClock(length);
@@ -254,13 +254,13 @@ VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version) {
             set_clock_unit_by_index(&result, (char) 0, clock_unit);
             return result;
 #else
-            uint64_t vclock = RedisModule_LoadUnsigned(rdb);
+            uint64_t vclock = sioLoadUnsigned(io);
             return LL2VC(vclock);
 #endif
         } else {
             VectorClock result = newVectorClock(length);
             for (int i = 0; i < length; i++) {
-                uint64_t clock = RedisModule_LoadUnsigned(rdb);
+                uint64_t clock = sioLoadUnsigned(io);
                 clk clock_unit = VCU(clock);
                 set_clock_unit_by_index(&result, (char) i, clock_unit);
             }
@@ -273,25 +273,25 @@ VectorClock rdbLoadVectorClock(RedisModuleIO *rdb, int version) {
 
 //update in rdb version 1: optimize rdb save/load vector clock by saving/load it as long long
 // insteadof a string. but saving is not need for compatibility 09/03/2020
-int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock vectorClock, int version) {
+int rdbSaveVectorClock(sio *io, VectorClock vectorClock, int version) {
     if(version < 1) {
         RedisModule_Debug(CRDT_DEFAULT_LOG_LEVEL, "[rdbSaveVectorClock]end early");
         return CRDT_OK;
     }
     int length = (int) get_len(vectorClock);
-    RedisModule_SaveSigned(rdb, length);
+    sioSaveSigned(io, length);
     if(length == 1) {
 #if defined(TCL_TEST)
         clk *vc_unit = get_clock_unit_by_index(&vectorClock, 0);
-        RedisModule_SaveUnsigned(rdb, VC2LL((*vc_unit)));
+        sioSaveUnsigned(io, VC2LL((*vc_unit)));
 #else
         uint64_t vclock = VC2LL(vectorClock);
-        RedisModule_SaveUnsigned(rdb, vclock);
+        sioSaveUnsigned(io, vclock);
 #endif
     } else {
         for (int i = 0; i < length; i++) {
             clk *vc_unit = get_clock_unit_by_index(&vectorClock, (char)i);
-            RedisModule_SaveUnsigned(rdb, VC2LL((*vc_unit)));
+            sioSaveUnsigned(io, VC2LL((*vc_unit)));
         }
     }
     return CRDT_OK;
@@ -318,20 +318,20 @@ int rdbSaveVectorClock(RedisModuleIO *rdb, VectorClock vectorClock, int version)
 //     sdsfree(s);
 //     return 1;
 // }
-long double rdbLoadLongDouble(RedisModuleIO *rdb, int version) {
-    sds ldstr = RedisModule_LoadSds(rdb);
+long double rdbLoadLongDouble(sio *io, int version) {
+    sds ldstr = sioLoadSds(io);
     // assert(string2ld(ldstr, sdslen(ldstr), &ld) == 1);
     long double ld = *(long double*)(ldstr);
     sdsfree(ldstr);
     return ld;
 }
 
-int rdbSaveLongDouble(RedisModuleIO *rdb, long double ld) {
+int rdbSaveLongDouble(sio *io, long double ld) {
     //  char buf[MAX_LONG_DOUBLE_CHARS];
     // int len = ld2string(buf,sizeof(buf),ld,1);
     sds s = sdsnewlen((char*)&ld, sizeof(long double));
     // RedisModule_Debug(logLevel, "save long double %.33Lf %s", ld, s);
-    RedisModule_SaveStringBuffer(rdb, s, sdslen(s));
+    sioSaveStringBuffer(io, s, sdslen(s));
     sdsfree(s);
     return 1;
 }

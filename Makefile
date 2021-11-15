@@ -32,7 +32,7 @@ else
 	SHOBJ_CFLAGS ?= -dynamic -fno-common -g -ggdb
 	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup
 endif
-CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -O0 -g -fPIC -std=gnu99  -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API $(REDIS_CFLAGS)
+CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -Wno-psabi -Wno-address-of-packed-member -Wno-int-to-pointer-cast -Wno-int-conversion -Wno-unused-variable -O0 -g -fPIC -std=gnu99  -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API $(REDIS_CFLAGS)
 ifeq ($(uname_S),Darwin)
 	CFLAGS+= -DTCL_TEST -DDEBUG
 	# CFLAGS+= -DDEBUG
@@ -77,9 +77,13 @@ crdt_orset_zset.o: orset/crdt_orset_zset.c   ctrip_crdt_zset.o crdt_util.o crdt_
 	$(CC) $(CFLAGS) -c -o $@ orset/crdt_orset_zset.c
 ctrip_rdt_expire.o:  ctrip_crdt_expire.c 
 	$(CC) $(CFLAGS) -c -o $@ ctrip_crdt_expire.c
+ctrip_stream_io.o: ctrip_stream_io.c ctrip_stream_io.h
+	$(CC) $(CFLAGS) -c -o $@ ctrip_stream_io.c
+ctirp_swap_string.o: ctrip_swap_string.c ctrip_swap.h
+	$(CC) $(CFLAGS) -c -o $@ ctrip_swap_string.c
 
-crdt.so: rmutil  g_counter_element.o g_counter.o  ctrip_orset_rc.o ctrip_crdt_register.o ctrip_crdt_zset.o crdt_orset_zset.o crdt_set.o crdt_orset_set.o crdt_statistics.o ctrip_rdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o 
-	$(LD) -o $@  g_counter_element.o g_counter.o  ctrip_orset_rc.o  ctrip_crdt_register.o ctrip_crdt_zset.o crdt_orset_zset.o crdt_set.o crdt_orset_set.o  crdt_statistics.o ctrip_rdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil $(LIBC)
+crdt.so: rmutil  g_counter_element.o g_counter.o  ctrip_orset_rc.o ctrip_crdt_register.o ctrip_crdt_zset.o crdt_orset_zset.o crdt_set.o crdt_orset_set.o crdt_statistics.o ctrip_rdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_stream_io.o ctrip_swap_string.o
+	$(LD) -o $@  g_counter_element.o g_counter.o  ctrip_orset_rc.o  ctrip_crdt_register.o ctrip_crdt_zset.o crdt_orset_zset.o crdt_set.o crdt_orset_set.o  crdt_statistics.o ctrip_rdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_stream_io.o ctrip_swap_string.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil $(LIBC)
 
 clean:
 	rm -rf *.xo crdt.so *.o *.pyc *.so *.gcno *.gcda

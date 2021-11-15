@@ -434,7 +434,6 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(argc < 3) return RedisModule_WrongArity(ctx);
     int status = CRDT_OK;
     int deleted = 0;
-    int deleteall = CRDT_NO;
     CrdtMeta hdel_meta = {.gid=0};
     
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
@@ -478,7 +477,6 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH,"hdel", argv[1]);
     }    
     if (dictSize(current->map) == 0) {
-        deleteall = CRDT_OK;
         RedisModule_DeleteKey(moduleKey);
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
     } else {
@@ -1108,112 +1106,112 @@ int initCrdtHashModule(RedisModuleCtx *ctx) {
 
     // write readonly admin deny-oom deny-script allow-loading pubsub random allow-stale no-monitor fast getkeys-api no-cluster
     if (RedisModule_CreateCommand(ctx,"HSET",
-                                  hsetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  hsetCommand, NULL,"write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"HMSET",
-                                  hsetCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  hsetCommand, NULL,"write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"HSETNX",
-                                  hsetnxCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  hsetnxCommand, NULL, "write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"HGET",
-                                  hgetCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  hgetCommand, NULL,"readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"HMGET",
-                                  hmgetCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  hmgetCommand, NULL,"readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"HGETALL",
-                                  hgetallCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  hgetallCommand, NULL,"readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"HKEYS",
-                                  hkeysCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  hkeysCommand, NULL,"readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"HVALS",
-                                  hvalsCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  hvalsCommand, NULL,"readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"HDEL",
-                                  hdelCommand,"write fast",1,1,1) == REDISMODULE_ERR)
+                                  hdelCommand, NULL,"write fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.HSET",
-                                  CRDT_HSetCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
+                                  CRDT_HSetCommand, NULL,"write deny-oom allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.HGET",
-                                  CRDT_HGetCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  CRDT_HGetCommand, NULL,"readonly deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.hdatainfo",
-                                  CRDT_HDataInfoCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  CRDT_HDataInfoCommand, NULL,"readonly deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.DEL_HASH",
-                                  CRDT_DelHashCommand,"write allow-loading",1,1,1) == REDISMODULE_ERR)
+                                  CRDT_DelHashCommand, NULL,"write allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.REM_HASH",
-                                  CRDT_RemHashCommand,"write allow-loading",1,1,1) == REDISMODULE_ERR)
+                                  CRDT_RemHashCommand, NULL,"write allow-loading",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"hlen",
-                                  hlenCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  hlenCommand, NULL,"readonly deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"hscan",
-                                  hscanCommand,"readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  hscanCommand, NULL,"readonly deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "hexists", 
-                                    hexistsCommand, "readonly deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    hexistsCommand, NULL, "readonly deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }
 /**
  *  Basic utils
 */
-int RdbLoadDict(RedisModuleIO *rdb, int encver, dict *map, RedisModuleTypeLoadFunc func) {
+int sioLoadDict(sio *io, int encver, dict *map, RedisModuleTypeLoadFunc func) {
     uint64_t len;
     sds field;
     CRDT_Register *value;
     size_t strLength;
-    len = RedisModule_LoadUnsigned(rdb);
+    len = sioLoadUnsigned(io);
     if (len == RDB_LENERR) return CRDT_NO;
     while (len > 0) {
         len--;
         /* Load encoded strings */
-        char* str = RedisModule_LoadStringBuffer(rdb, &strLength);
+        char* str = sioLoadStringBuffer(io, &strLength);
         field = sdsnewlen(str, strLength);
-        value = func(rdb, encver);
+        value = func(rdbStreamGetRdb(io), encver);
         /* Add pair to hash table */
         dictAdd(map, field, value);
         RedisModule_ZFree(str);
     }
     return CRDT_OK;
 }
-int RdbLoadCrdtBasicHash(RedisModuleIO *rdb, int encver, void *data) {
+int sioLoadCrdtBasicHash(sio *io, int encver, void *data) {
     CRDT_Hash* hash = data;
-    return RdbLoadDict(rdb, encver, hash->map, RdbLoadCrdtRegister);
+    return sioLoadDict(io, encver, hash->map, RdbLoadCrdtRegister);
 }
-void RdbSaveDict(RedisModuleIO *rdb, dict* map, RedisModuleTypeSaveFunc func) {
+void sioSaveDict(sio *io, dict* map, RedisModuleTypeSaveFunc func) {
     
     dictIterator *di = dictGetSafeIterator(map);
     dictEntry *de;
-    RedisModule_SaveUnsigned(rdb, dictSize(map));
+    sioSaveUnsigned(io, dictSize(map));
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
         void *crdtRegister = dictGetVal(de);
 
-        RedisModule_SaveStringBuffer(rdb, field, sdslen(field));
-        func(rdb, crdtRegister);
+        sioSaveStringBuffer(io, field, sdslen(field));
+        func(rdbStreamGetRdb(io), crdtRegister);
     }
     dictReleaseIterator(di);
 }
-void RdbSaveCrdtBasicHash(RedisModuleIO *rdb, void *value) {
+void sioSaveCrdtBasicHash(sio *io, void *value) {
     CRDT_Hash* crdtHash = value;
-    RdbSaveDict(rdb, crdtHash->map, RdbSaveCrdtRegister);
+    sioSaveDict(io, crdtHash->map, RdbSaveCrdtRegister);
 }
-void RdbSaveCrdtBasicHashTombstone(RedisModuleIO *rdb, void *value) {
+void sioSaveCrdtBasicHashTombstone(sio *io, void *value) {
     CRDT_HashTombstone* crdtHashTombstone = retrieveCrdtHashTombstone(value);
-     RdbSaveDict(rdb, crdtHashTombstone->map, RdbSaveCrdtRegisterTombstone);
+     sioSaveDict(io, crdtHashTombstone->map, RdbSaveCrdtRegisterTombstone);
 }
 CrdtMeta* appendBasicHash(CRDT_Hash* target, CRDT_Hash* other) {
     CrdtMeta* result = NULL;
@@ -1252,9 +1250,9 @@ CrdtMeta* appendBasicHash(CRDT_Hash* target, CRDT_Hash* other) {
     return result;
 }
 
-int RdbLoadCrdtBasicHashTombstone(RedisModuleIO *rdb, int encver, void *data) {
+int sioLoadCrdtBasicHashTombstone(sio *io, int encver, void *data) {
     CRDT_HashTombstone* tombstone = data;
-    return RdbLoadDict(rdb, encver, tombstone->map, RdbLoadCrdtRegisterTombstone);
+    return sioLoadDict(io, encver, tombstone->map, RdbLoadCrdtRegisterTombstone);
 }
 size_t crdtBasicHashMemUsageFunc(void* data) {
     CRDT_Hash* result = retrieveCrdtHash(data);

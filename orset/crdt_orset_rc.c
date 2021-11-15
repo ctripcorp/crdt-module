@@ -60,6 +60,7 @@ void reset_rc_type(CRDT_RC* rc) {
 #endif
 
 void freeCrdtRc(void* r) {
+    if (r == NULL) return;
     crdt_element el = get_element_from_rc(r);
     free_internal_crdt_element(el);
     RedisModule_Free(r);
@@ -79,10 +80,10 @@ crdt_orset_rc* dup_crdt_rc(crdt_orset_rc* other) {
 // }
 
 //crdt_rc
-crdt_orset_rc* load_rc_by_rdb(RedisModuleIO *rdb) {
+crdt_orset_rc* load_rc_by_rdb(sio *io) {
     // crdt_element* rc = (crdt_element*)retrieve_crdt_rc(createCrdtRc());
     crdt_orset_rc* rc = (crdt_orset_rc*)createCrdtRc();
-    crdt_element el = load_crdt_element_from_rdb(rdb);
+    crdt_element el = load_crdt_element_from_rdb(io);
     set_rc_from_element(rc, el);
     reset_rc_type((CRDT_RC*)rc);
     free_external_crdt_element(el);
@@ -130,10 +131,10 @@ crdt_rc_tombstone* dup_crdt_rc_tombstone(crdt_rc_tombstone* other) {
     return dup;
 }
 
-crdt_rc_tombstone* load_rc_tombstone_by_rdb(RedisModuleIO *rdb) {
+crdt_rc_tombstone* load_rc_tombstone_by_rdb(sio *io) {
     crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(createCrdtRcTombstone());
     // *rct = load_crdt_element_from_rdb(rdb);
-    crdt_element tel = load_crdt_element_from_rdb(rdb);
+    crdt_element tel = load_crdt_element_from_rdb(io);
     set_rc_tombstone_from_element(rct, tel);
     free_external_crdt_element(tel);
     reset_rc_tombstone_type((CRDT_RCTombstone*)rct);
@@ -398,22 +399,36 @@ int rcTryAdd(CRDT_RC* data, CRDT_RCTombstone* tombstone, CrdtMeta* meta, sds val
 }
 
 /*****  value  ***/
-void RdbSaveCrdtRc(RedisModuleIO *rdb, void *value) {
+void sioSaveCrdtRc(sio *io, void *value) {
     crdt_orset_rc* rc = retrieve_crdt_rc(value);
-    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+    saveCrdtRdbHeader(io, ORSET_TYPE);
     crdt_element el = get_element_from_rc(rc);
-    save_crdt_element_to_rdb(rdb, el);
+    save_crdt_element_to_rdb(io, el);
 }
-void *RdbLoadCrdtRc(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
+
+void RdbSaveCrdtRc(RedisModuleIO *rdb, void *value) {
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveCrdtRc(io, value);
+    rdbStreamRelease(io);
+}
+
+void *sioLoadCrdtRc(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);
     if ( type == ORSET_TYPE ) {
         if(version >= 1) {
-            return load_rc_by_rdb(rdb);
+            return load_rc_by_rdb(io);
         }
     }
     return NULL;
+}
+
+void *RdbLoadCrdtRc(RedisModuleIO *rdb, int encver) {
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtRc(io, encver);
+    rdbStreamRelease(io);
+    return res;
 }
 
 
@@ -463,20 +478,26 @@ void crdtRcUpdateLastVC(void* rc, VectorClock vc) {
 
 //about sorted set tombstone module type
 void RdbSaveCrdtRcTombstone(RedisModuleIO *rdb, void *value) {
+    sio *io = rdbStreamCreate(rdb);
     crdt_rc_tombstone* rct = retrieve_crdt_rc_tombstone(value);
-    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+    saveCrdtRdbHeader(io, ORSET_TYPE);
     crdt_element tel = get_element_from_rc_tombstone(rct);
-    save_crdt_element_to_rdb(rdb, tel);
+    save_crdt_element_to_rdb(io, tel);
+    rdbStreamRelease(io);
 }
 void *RdbLoadCrdtRcTombstone(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
+    sio *io = rdbStreamCreate(rdb);
+    long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);
     if ( type == ORSET_TYPE ) {
         if(version >= 1) {
-            return load_rc_tombstone_by_rdb(rdb);
+            void *res = load_rc_tombstone_by_rdb(io);
+            rdbStreamRelease(io);
+            return res;
         }
     }
+    rdbStreamRelease(io);
     return NULL;
 }
 

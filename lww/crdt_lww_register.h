@@ -3,6 +3,7 @@
 #include "../crdt_register.h"
 #include "../include/rmutil/sds.h"
 #include "../crdt_util.h"
+#include "../ctrip_stream_io.h"
 #define NDEBUG
 #include <assert.h>
 
@@ -24,7 +25,7 @@ int getCrdtRegisterLastGid(CRDT_Register* r) {
 }
 sds getCrdtLWWRegisterValue(CRDT_LWW_Register* r);
 sds getCrdtRegisterLastValue(CRDT_Register* r) {
-    return getCrdtLWWRegisterValue((CRDT_LWW_Register*)r);
+   return getCrdtLWWRegisterValue((CRDT_LWW_Register*)r);
 }
 VectorClock getCrdtLWWRegisterVectorClock(CRDT_LWW_Register* r);
 VectorClock getCrdtRegisterLastVc(void* r) {
@@ -89,9 +90,9 @@ int compareLWWCrdtRegisterAndDelMeta(CRDT_Register* current, CrdtMeta* meta);
 int compareCrdtRegisterAndDelMeta(CRDT_Register* current, CrdtMeta* meta) {
     return compareLWWCrdtRegisterAndDelMeta(current, meta);
 }
-void RdbSaveLWWCrdtRegister(RedisModuleIO *rdb, void *value);
-void *RdbLoadLWWCrdtRegister(RedisModuleIO *rdb, int version, int encver);
-void *RdbLoadLWWCrdtRegisterTombstone(RedisModuleIO *rdb, int version, int encver);
+void sioSaveLWWCrdtRegister(sio *io, void *value);
+void *sioLoadLWWCrdtRegister(sio *io, int version, int encver);
+void *sioLoadLWWCrdtRegisterTombstone(sio *io, int version, int encver);
 CRDT_LWW_RegisterTombstone* dupLWWCrdtRegisterTombstone(CRDT_LWW_RegisterTombstone *target);
 CRDT_RegisterTombstone* dupCrdtRegisterTombstone(CRDT_RegisterTombstone *target) {
     return (CRDT_RegisterTombstone*)dupLWWCrdtRegisterTombstone((CRDT_LWW_RegisterTombstone*)target);
@@ -101,7 +102,7 @@ void initRegister(CRDT_Register *r) {
     return initLWWReigster((CRDT_LWW_Register*)r);
 }
 
-void RdbSaveLWWCrdtRegisterTombstone(RedisModuleIO *rdb, void *value);
+void sioSaveLWWCrdtRegisterTombstone(sio *io, void *value);
 CRDT_RegisterTombstone** filterLWWRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time, long long maxsize, int* length);
 CRDT_RegisterTombstone** filterRegisterTombstone(CRDT_RegisterTombstone* target, int gid, long long logic_time, long long maxsize, int* length) {
     return filterLWWRegisterTombstone(target, gid, logic_time, maxsize, length);
@@ -155,16 +156,30 @@ CRDT_RegisterTombstone* createCrdtRegisterTombstone() {
 
 //CrdtRegister
 void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtRegister(io, encver);
+    rdbStreamRelease(io);
+    return res;
+}
+void *sioLoadCrdtRegister(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);
     if( type == LWW_TYPE) {
-        return RdbLoadLWWCrdtRegister(rdb, version, encver);
+        return sioLoadLWWCrdtRegister(io, version, encver);
     }
+    rdbStreamRelease(io);
     return NULL;
 }
+
+void sioSaveCrdtRegister(sio *io, void *value) {
+    sioSaveLWWCrdtRegister(io, value);
+} 
+
 void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value) {
-    RdbSaveLWWCrdtRegister(rdb, value);
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveCrdtRegister(io, value);
+    rdbStreamRelease(io);
 } 
 void AofRewriteCrdtRegister(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     AofRewriteCrdtLWWRegister(aof, key, value);
@@ -179,19 +194,28 @@ void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value) {
     crdtLWWRegisterDigestFunc(md, value);
 }
 
-//CrdtRegisterTombstone
-void *RdbLoadCrdtRegisterTombstone(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
+static void *sioLoadCrdtRegisterTombstone(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);
     if( type == LWW_TYPE) {
-        return RdbLoadLWWCrdtRegisterTombstone(rdb, version, encver);
+       return sioLoadLWWCrdtRegisterTombstone(io, version, encver);
     }
     return NULL;
 }
 
+//CrdtRegisterTombstone
+void *RdbLoadCrdtRegisterTombstone(RedisModuleIO *rdb, int encver) {
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtRegisterTombstone(io, encver);
+    rdbStreamRelease(io);
+    return res;
+}
+
 void RdbSaveCrdtRegisterTombstone(RedisModuleIO *rdb, void *value) {
-    RdbSaveLWWCrdtRegisterTombstone(rdb, value);
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveLWWCrdtRegisterTombstone(io, value);
+    rdbStreamRelease(io);
 }
 
 void AofRewriteCrdtRegisterTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {

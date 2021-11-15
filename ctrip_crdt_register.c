@@ -30,6 +30,8 @@
 #include "crdt_register.h"
 #include "ctrip_crdt_register.h"
 #include "ctrip_crdt_expire.h"
+#include "ctrip_swap.h"
+#include <string.h>
 #include <strings.h>
 
 /******************    about type  +************************/
@@ -749,6 +751,12 @@ int getGeneric(RedisModuleCtx* ctx, RedisModuleString *key, int sendtype) {
                 RedisModule_ReplyWithStringBuffer(ctx, buf, len);
             }
             break;
+            case VALUE_TYPE_DOUBLE: {
+                char buf[MAX_LONG_DOUBLE_CHARS];
+                int len = d2string(buf, sizeof(buf), value.value.d);
+                RedisModule_ReplyWithStringBuffer(ctx, buf, len);
+            }
+            break;
             case VALUE_TYPE_LONGLONG: {
                 // RedisModule_ReplyWithLongLong(ctx, value.value.i);
                 //noncrdt redis callback  string not int
@@ -1331,7 +1339,12 @@ int initRcModule(RedisModuleCtx *ctx) {
         .aof_rewrite = AofRewriteCrdtRc,
         .mem_usage = crdtRcMemUsageFunc,
         .free = freeCrdtRc,
-        .digest = crdtRcDigestFunc
+        .digest = crdtRcDigestFunc,
+        .lookup_swapping_clients = lookupSwappingClientsString,
+        .setup_swapping_clients = setupSwappingClientsString,
+        .get_data_swaps = getDataSwapsString,
+        .get_complement_swaps = getComplementSwapsString,
+        .swap_ana = swapAnaString,
     };
     CrdtRC = RedisModule_CreateDataType(ctx, CRDT_RC_DATATYPE_NAME, 0, &tm);
     if (CrdtRC == NULL) return REDISMODULE_ERR;
@@ -1346,61 +1359,61 @@ int initRcModule(RedisModuleCtx *ctx) {
     };
     CrdtRCT = RedisModule_CreateDataType(ctx, CRDT_RC_TOMBSTONE_DATATYPE_NAME, 0, &tombtm);
     if (CrdtRCT == NULL) return REDISMODULE_ERR;
-    // write readonly admin deny-oom deny-script allow-loading pubsub random allow-stale no-monitor fast getkeys-api no-cluster
+    // write readonly admin deny-oom deny-script allow-loading pubsub random allow-stale no-monitor fast getkeys-api no-cluster swap-get|swap-put|swap-del|swap-nop
     if (RedisModule_CreateCommand(ctx,"SET",
-                                  setCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                  setCommand, NULL, "write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.RC",
-                                  crdtRcCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
+                                  crdtRcCommand, NULL, "write deny-oom allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"GET",
-                                  getCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  getCommand, NULL, "readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx,"CRDT.GET",
-                                  crdtGetCommand,"readonly fast",1,1,1) == REDISMODULE_ERR)
+                                  crdtGetCommand, NULL, "readonly fast swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.del_rc",
-                                  crdtDelRcCommand,"write allow-loading",1,1,1) == REDISMODULE_ERR)
+                                  crdtDelRcCommand, NULL, "write allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "SETEX", 
-                                    setexCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    setexCommand, NULL, "write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "SETNX", 
-                                    setnxCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    setnxCommand, NULL, "write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "PSETEX", 
-                                    psetexCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    psetexCommand, NULL, "write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "incrby",
-                                    incrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    incrbyCommand, NULL, "write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "incrbyfloat",
-                                    incrbyfloatCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    incrbyfloatCommand, NULL ,"write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "incr",
-                                    incrCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    incrCommand, NULL, "write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "decr",
-                                    decrCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    decrCommand, NULL, "write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "decrby",
-                                    decrbyCommand,"write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    decrbyCommand, NULL, "write deny-oom swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.counter",
-                                    crdtCounterCommand,"write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
+                                    crdtCounterCommand, NULL, "write deny-oom allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "MSET", 
-                                    msetCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    msetCommand, NULL, "write deny-oom swap-get",1,-1,2) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "MSETNX", 
-                                    msetnxCommand, "write deny-oom",1,1,1) == REDISMODULE_ERR)
+                                    msetnxCommand, NULL, "write deny-oom swap-get",1,-1,2) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "MGET", 
-                                    mgetCommand, "readonly fast",1,1,1) == REDISMODULE_ERR)
+                                    mgetCommand, NULL, "readonly fast swap-get",1,-1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     if (RedisModule_CreateCommand(ctx, "crdt.mset_rc", 
-                                    crdtMsetRcCommand, "write deny-oom allow-loading",1,1,1) == REDISMODULE_ERR)
+                                    crdtMsetRcCommand, NULL, "write deny-oom allow-loading swap-get",3,-1,3) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
     return REDISMODULE_OK;
 }

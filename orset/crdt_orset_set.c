@@ -1,25 +1,38 @@
 #include "crdt_orset_set.h"
 #define NDEBUG
 #include <assert.h>
+
 /**    module function **/
-void *RdbLoadCrdtSet(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
+
+static void *sioLoadCrdtSet(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);
     if ( type == ORSET_TYPE ) {
-        return RdbLoadCrdtORSETSet(rdb, version, encver);
+        return sioLoadCrdtORSETSet(io, version, encver);
     }
     return NULL;
 }
-
-void *RdbLoadCrdtSetTombstone(RedisModuleIO *rdb, int encver) {
-    long long header = loadCrdtRdbHeader(rdb);
+void *RdbLoadCrdtSet(RedisModuleIO *rdb, int encver) {
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtSet(io, encver);
+    rdbStreamRelease(io);
+    return res;
+}
+static void *sioLoadCrdtSetTombstone(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);
     if ( type == ORSET_TYPE ) {
-        return RdbLoadCrdtORSETSetTombstone(rdb, version, encver);
+        return sioLoadCrdtORSETSetTombstone(io, version, encver);
     }
     return NULL;
+}
+void *RdbLoadCrdtSetTombstone(RedisModuleIO *rdb, int encver) {
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtSetTombstone(io, encver);
+    rdbStreamRelease(io);
+    return res;
 }
 
 //utils
@@ -196,15 +209,15 @@ int purget_dict_entry(dict* di,  sds field,  dictEntry* de, VectorClock vc) {
     }
 }
 
-void save_set_dict_to_rdb(RedisModuleIO *rdb, dict* map) {
-    RedisModule_SaveUnsigned(rdb, dictSize(map));
+void save_set_dict_to_rdb(sio *io, dict* map) {
+    sioSaveUnsigned(io, dictSize(map));
     dictIterator *di = dictGetIterator(map);
     dictEntry *de;
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
         VectorClock vc = dict_entry_get_vc(de);
-        RedisModule_SaveStringBuffer(rdb, field, sdslen(field));
-        rdbSaveVectorClock(rdb, vc, CRDT_RDB_VERSION);
+        sioSaveStringBuffer(io, field, sdslen(field));
+        rdbSaveVectorClock(io, vc, CRDT_RDB_VERSION);
     }
     dictReleaseIterator(di);
 }
@@ -360,10 +373,10 @@ sds getRandomSetKey(CRDT_Set* data) {
 //module 
 
 
-void *RdbLoadCrdtORSETSet(RedisModuleIO *rdb, int version, int encver) {
+void *sioLoadCrdtORSETSet(sio *io, int version, int encver) {
     CRDT_Set* set = createCrdtSet();
-    VectorClock lastvc = rdbLoadVectorClock(rdb, version);
-    uint64_t len = RedisModule_LoadUnsigned(rdb);
+    VectorClock lastvc = rdbLoadVectorClock(io, version);
+    uint64_t len = sioLoadUnsigned(io);
     if (len >= UINT64_MAX) return NULL;
     
     size_t strLength;
@@ -372,9 +385,9 @@ void *RdbLoadCrdtORSETSet(RedisModuleIO *rdb, int version, int encver) {
     while (len > 0) {
         len--;
         /* Load encoded strings */
-        char* str = RedisModule_LoadStringBuffer(rdb, &strLength);
+        char* str = sioLoadStringBuffer(io, &strLength);
         sds field = sdsnewlen(str, strLength);
-        VectorClock vc = rdbLoadVectorClock(rdb, version);
+        VectorClock vc = rdbLoadVectorClock(io, version);
         /* Add pair to hash table */
         dict_add_or_update_vc(map, field, vc, 0);
         freeVectorClock(vc);
@@ -382,12 +395,17 @@ void *RdbLoadCrdtORSETSet(RedisModuleIO *rdb, int version, int encver) {
     }
     return set;
 }
-void RdbSaveCrdtSet(RedisModuleIO *rdb, void *value) {
-    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+void sioSaveCrdtSet(sio *io, void *value) {
+    saveCrdtRdbHeader(io, ORSET_TYPE);
     crdt_orset_set *set = retrieve_crdt_orset_set(value);
-    rdbSaveVectorClock(rdb, getCrdtSetLastVc((CRDT_Set*)set), CRDT_RDB_VERSION);
+    rdbSaveVectorClock(io, getCrdtSetLastVc((CRDT_Set*)set), CRDT_RDB_VERSION);
     dict* map = getSetDict((CRDT_Set*)set);
-    save_set_dict_to_rdb(rdb, map);
+    save_set_dict_to_rdb(io, map);
+}
+void RdbSaveCrdtSet(RedisModuleIO *rdb, void *value) {
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveCrdtSet(io, value);
+    rdbStreamRelease(io);
 }
 void AofRewriteCrdtSet(RedisModuleIO *aof, RedisModuleString *key, void *value) {
     
@@ -412,7 +430,7 @@ sds crdtSetInfo(void *data) {
     int num = 5;
     while((de = dictNext(di)) != NULL && num > 0) {
         sds info = set_element_info(de);
-        result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
+        result = sdscatprintf(result, "  key: %s, %s\n", (sds)dictGetKey(de), info);
         sdsfree(info);
         num--;
     }
@@ -687,13 +705,13 @@ dictEntry* findSetTombstoneDict(CRDT_SetTombstone* tom, sds field) {
 }
 
 //module function
-void *RdbLoadCrdtORSETSetTombstone(RedisModuleIO *rdb, int version, int encver) {
+void *sioLoadCrdtORSETSetTombstone(sio *io, int version, int encver) {
     crdt_orset_set_tombstone* tom = (crdt_orset_set_tombstone* )createCrdtSetTombstone();
     
-    VectorClock lastvc = rdbLoadVectorClock(rdb, version);
-    VectorClock maxdel = rdbLoadVectorClock(rdb, version);
+    VectorClock lastvc = rdbLoadVectorClock(io, version);
+    VectorClock maxdel = rdbLoadVectorClock(io, version);
     
-    uint64_t len = RedisModule_LoadUnsigned(rdb);
+    uint64_t len = sioLoadUnsigned(io);
     if (len >= UINT64_MAX) {
         freeCrdtSetTombstone(tom);
         return NULL;
@@ -704,9 +722,9 @@ void *RdbLoadCrdtORSETSetTombstone(RedisModuleIO *rdb, int version, int encver) 
     while (len > 0) {
         len--;
         /* Load encoded strings */
-        char* str = RedisModule_LoadStringBuffer(rdb, &strLength);
+        char* str = sioLoadStringBuffer(io, &strLength);
         sds field = sdsnewlen(str, strLength);
-        VectorClock vc = rdbLoadVectorClock(rdb, version);
+        VectorClock vc = rdbLoadVectorClock(io, version);
         /* Add pair to hash table */
         dict_add_or_update_vc(map, field, vc, 0);
         freeVectorClock(vc);
@@ -716,13 +734,20 @@ void *RdbLoadCrdtORSETSetTombstone(RedisModuleIO *rdb, int version, int encver) 
     setCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom, lastvc);
     return tom;
 }
-void RdbSaveCrdtSetTombstone(RedisModuleIO *rdb, void *value) {
-    saveCrdtRdbHeader(rdb, ORSET_TYPE);
+
+static void sioSaveCrdtSetTombstone(sio *io, void *value) {
+    saveCrdtRdbHeader(io, ORSET_TYPE);
     crdt_orset_set_tombstone *tom = retrieve_set_tombstone(value);
-    rdbSaveVectorClock(rdb, getCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom), CRDT_RDB_VERSION);
-    rdbSaveVectorClock(rdb, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)tom), CRDT_RDB_VERSION);
+    rdbSaveVectorClock(io, getCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom), CRDT_RDB_VERSION);
+    rdbSaveVectorClock(io, getCrdtSetTombstoneMaxDelVc((CRDT_SetTombstone*)tom), CRDT_RDB_VERSION);
     dict* map = getSetTombstoneDict(tom);
-    save_set_dict_to_rdb(rdb, map);
+    save_set_dict_to_rdb(io, map);
+}
+
+void RdbSaveCrdtSetTombstone(RedisModuleIO *rdb, void *value) {
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveCrdtSetTombstone(io, value);
+    rdbStreamRelease(io);
 }
 
 void AofRewriteCrdtSetTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {
@@ -916,7 +941,7 @@ sds crdtSetTombstoneInfo(void *data) {
     int num = 5;
     while((de = dictNext(di)) != NULL && num > 0) {
         sds info = set_element_info(de);
-        result = sdscatprintf(result, "  key: %s, vc: %s\n", dictGetKey(de), info);
+        result = sdscatprintf(result, "  key: %s, vc: %s\n", (sds)dictGetKey(de), info);
         sdsfree(info);
         num--;
     }

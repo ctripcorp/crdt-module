@@ -403,17 +403,19 @@ sds printf_value(sds result, long long type, union tag_data value) {
     
 } 
 
+typedef unsigned long long LLU;
+
 #define printf_base(result, tag) do {\
-    result = sdscatprintf(result,", vcu: %lld, time: %lld, score: ", tag->base_vcu, tag->base_timespace);\
+    result = sdscatprintf(result,", vcu: %llu, time: %lld, score: ", (LLU)tag->base_vcu, tag->base_timespace);\
     result = printf_value(result, tag->base_data_type, tag->score);\
 } while(0)
 #define printf_add(result, tag) do {\
-    result = sdscatprintf(result,", add_vcu: %lld, add: ", tag->add_vcu);\
+    result = sdscatprintf(result,", add_vcu: %llu, add: ", (LLU)tag->add_vcu);\
     result = printf_value(result, tag->counter_type, tag->add_counter);\
 } while(0)
 
 #define printf_ld_add(result, tag) do {\
-    result = sdscatprintf(result,", add_vcu: %lld, add: %.17Lf", tag->add_vcu, tag->add_counter);\
+    result = sdscatprintf(result,", add_vcu: %llu, add: %.17Lf", (LLU)tag->add_vcu, tag->add_counter);\
 } while(0)
 
 #define printf_del(result, tag) do {\
@@ -1472,7 +1474,7 @@ static int sort_tag_by_gid(const void *a, const void *b) {
         }
         if(el.len == 1) {
             long long ll = el.tags;
-            return ll;
+            return (crdt_tag*)ll;
         }
         crdt_tag** tags = (crdt_tag**)(el.tags);
         return tags[index];
@@ -1497,7 +1499,7 @@ static int sort_tag_by_gid(const void *a, const void *b) {
     crdt_element element_add_tag(crdt_element el, crdt_tag* tag) {
         if(tag == NULL) {return el;}
         if(el.len == 0) {
-            crdt_element e = {.len = 1, .tags = tag};
+            crdt_element e = {.len = 1, .tags = (unsigned long long)tag};
             return e;
         } else if(el.len == 1) {
             crdt_tag** tags = counter_malloc(sizeof(crdt_tag*) * 2);
@@ -1797,7 +1799,7 @@ size_t get_tag_memory(crdt_tag* tag) {
             return sizeof(crdt_tag_base_and_add_del_counter);
         break;
         default:
-            printf("filter type error: type is %lld", tag->type);
+            printf("filter type error: type is %d", tag->type);
             assert( 1 == 0);
         break;
     } 
@@ -2081,40 +2083,6 @@ sds sds_exec_add(sds a, sds b) {
     }   \
 } while(0)
 
-// switch (other->counter_type)\
-//     {\
-//     case VALUE_TYPE_DOUBLE:\
-//         if(incr) { \
-//             tag1->add_counter += (long double)other->add_counter.f;\
-//         } else {\
-//             tag1->add_counter = (long double)other->add_counter.f;\
-//         }\
-//         break;\
-//     case VALUE_TYPE_LONGLONG:\
-//         if(incr) { \
-//             tag1->add_counter += (long double)other->add_counter.i;\
-//         } else {\
-//             tag1->add_counter = (long double)other->add_counter.i;\
-//         }\
-//         break;\
-//     case VALUE_TYPE_SDS: {\
-//         long double ld = 0;\
-//         if(!string2ld(other->add_counter.s, sdslen(other->add_counter.s), &ld)) {\
-//             printf("[ld_plus_nld_add_counter] other value:%s", other->add_counter.s);\
-//             assert(1 == 0);\
-//         }\
-//         if(incr) {\
-//             tag1->add_counter += ld;\
-//         } else {\
-//             tag1->add_counter = ld;\
-//         }\
-//     }\
-//         break;\
-//     default:\
-//         printf("[ld_plus_nld_add_counter] type Unimplemented code"); \
-//         assert(1 == 0);\
-//         break;\
-//     }
 #define ld_plus_nld_add_counter(tag1, other, incr) do {\
     assert(tag1->counter_type == VALUE_TYPE_LONGDOUBLE && other->counter_type != VALUE_TYPE_LONGDOUBLE);\
     if(tag1->add_vcu < other->add_vcu) {\
@@ -2218,42 +2186,42 @@ crdt_tag* tag_add_tag(crdt_tag* tag, crdt_tag_add_counter* other) {
 
 #ifndef COUNTER_BENCHMARK_MAIN
 
-#define load_add(tag, rdb) do { \
-    tag->add_vcu = RedisModule_LoadUnsigned(rdb); \
+#define load_add(tag, io) do { \
+    tag->add_vcu = sioLoadUnsigned(io); \
     switch(tag->counter_type) { \
         case VALUE_TYPE_LONGLONG: \
-            tag->add_counter.i = RedisModule_LoadUnsigned(rdb); \
+            tag->add_counter.i = sioLoadUnsigned(io); \
         break; \
         case VALUE_TYPE_DOUBLE: \
-            tag->add_counter.f = RedisModule_LoadDouble(rdb); \
+            tag->add_counter.f = sioLoadDouble(io); \
         break;\
         case VALUE_TYPE_SDS: { \
-            tag->add_counter.s = RedisModule_LoadSds(rdb); \
+            tag->add_counter.s = sioLoadSds(io); \
         }\
         break; \
     } \
 } while(0)
 
-#define load_ld_add(tag, rdb) do {\
-    tag->add_vcu = RedisModule_LoadUnsigned(rdb); \
-    long double ld = RedisModule_LoadLongDouble(rdb);\
+#define load_ld_add(tag, io) do {\
+    tag->add_vcu = sioLoadUnsigned(io); \
+    long double ld = sioLoadLongDouble(io);\
     tag->add_counter = ld;\
 } while(0)
 
 
-#define load_base(tag, rdb) do { \
-    tag->base_vcu = RedisModule_LoadUnsigned(rdb);\
-    tag->base_timespace = RedisModule_LoadUnsigned(rdb);\
-    tag->base_data_type = RedisModule_LoadUnsigned(rdb); \
+#define load_base(tag, io) do { \
+    tag->base_vcu = sioLoadUnsigned(io);\
+    tag->base_timespace = sioLoadUnsigned(io);\
+    tag->base_data_type = sioLoadUnsigned(io); \
     switch(tag->base_data_type) { \
         case VALUE_TYPE_LONGLONG: \
-            tag->score.i = RedisModule_LoadUnsigned(rdb); \
+            tag->score.i = sioLoadUnsigned(io); \
         break; \
         case VALUE_TYPE_DOUBLE: \
-            tag->score.f = RedisModule_LoadDouble(rdb); \
+            tag->score.f = sioLoadDouble(io); \
         break;\
         case VALUE_TYPE_SDS: { \
-            tag->score.s = RedisModule_LoadSds(rdb); \
+            tag->score.s = sioLoadSds(io); \
         } \
         break; \
         case VALUE_TYPE_NONE: {\
@@ -2267,82 +2235,82 @@ crdt_tag* tag_add_tag(crdt_tag* tag, crdt_tag_add_counter* other) {
     } \
 } while(0)
 
-#define load_del(tag, rdb) do { \
-    tag->del_vcu = RedisModule_LoadUnsigned(rdb); \
+#define load_del(tag, io) do { \
+    tag->del_vcu = sioLoadUnsigned(io); \
     switch(tag->counter_type) { \
         case VALUE_TYPE_LONGLONG: \
-            tag->del_counter.i = RedisModule_LoadUnsigned(rdb); \
+            tag->del_counter.i = sioLoadUnsigned(io); \
         break; \
         case VALUE_TYPE_DOUBLE: \
-            tag->del_counter.f = RedisModule_LoadDouble(rdb); \
+            tag->del_counter.f = sioLoadDouble(io); \
         break;\
         case VALUE_TYPE_SDS: { \
-            tag->del_counter.s = RedisModule_LoadSds(rdb); \
+            tag->del_counter.s = sioLoadSds(io); \
         } \
         break; \
     } \
 } while(0)
 
-#define load_ld_del(tag, rdb) do {\
-    tag->del_vcu = RedisModule_LoadUnsigned(rdb); \
-    tag->del_counter = RedisModule_LoadLongDouble(rdb);\
+#define load_ld_del(tag, io) do {\
+    tag->del_vcu = sioLoadUnsigned(io); \
+    tag->del_counter = sioLoadLongDouble(io);\
 } while(0)
 
-crdt_tag* load_crdt_tag_from_rdb(RedisModuleIO *rdb) {
-    uint64_t gid = RedisModule_LoadUnsigned(rdb);
-    uint64_t type = RedisModule_LoadUnsigned(rdb);
-    uint64_t data_type = RedisModule_LoadUnsigned(rdb);
+crdt_tag* load_crdt_tag_from_rdb(sio *io) {
+    uint64_t gid = sioLoadUnsigned(io);
+    uint64_t type = sioLoadUnsigned(io);
+    uint64_t data_type = sioLoadUnsigned(io);
     //future support tombstone tag
     assert(data_type != TOMBSTONE_TAG);
     switch(type) {
         case TAG_A: {
-            uint64_t counter_type = RedisModule_LoadUnsigned(rdb); 
+            uint64_t counter_type = sioLoadUnsigned(io); 
             if(counter_type != VALUE_TYPE_LONGDOUBLE) {
                 crdt_tag_add_counter* a = create_add_tag(gid);
                 a->counter_type = counter_type;
-                load_add(a, rdb);
+                load_add(a, io);
                 return (crdt_tag*)a;
             }
             crdt_tag_ld_add_counter* lda = create_ld_add_tag(gid);
-            load_ld_add(lda, rdb);
+            load_ld_add(lda, io);
             return (crdt_tag*)lda;
         }
         break;
         case TAG_B: {
             crdt_tag_base* b = create_base_tag(gid);
-            load_base(b,rdb);
+            load_base(b,io);
             return (crdt_tag*)b;
         }
         break;
         case TAG_BA: {
-            uint64_t counter_type = RedisModule_LoadUnsigned(rdb); 
+            uint64_t counter_type = sioLoadUnsigned(io); 
             if(counter_type != VALUE_TYPE_LONGDOUBLE) {
                 crdt_tag_base_and_add_counter* ba = create_base_add_tag(gid);
                 ba->counter_type = counter_type;
-                load_add(ba, rdb);
-                load_base(ba, rdb);
+                load_add(ba, io);
+                load_base(ba, io);
                 return (crdt_tag*)ba;
             }
             crdt_tag_base_and_ld_add_counter* ldba = create_base_ld_add(gid);
-            load_ld_add(ldba, rdb);
-            load_base(ldba, rdb);
+            load_ld_add(ldba, io);
+            load_base(ldba, io);
             return (crdt_tag*)ldba;
         }
         break;
         case TAG_BAD: {
-            uint64_t counter_type = RedisModule_LoadUnsigned(rdb); 
+            uint64_t counter_type = sioLoadUnsigned(io); 
             if(counter_type != VALUE_TYPE_LONGDOUBLE) {
                 crdt_tag_base_and_add_del_counter* bad = create_base_add_del_tag(gid);
                 bad->counter_type = counter_type;
-                load_add(bad, rdb);
-                load_del(bad, rdb);
-                load_base(bad, rdb); 
+                load_add(bad, io);
+                load_del(bad, io);
+                load_base(bad, io); 
                 return (crdt_tag*)bad;
             }
             crdt_tag_base_and_ld_add_del_counter* ldbad = create_base_ld_add_del(gid);
-            load_ld_add(ldbad, rdb);
-            load_ld_del(ldbad, rdb);
-            load_base(ldbad, rdb);
+            load_ld_add(ldbad, io);
+            load_ld_del(ldbad, io);
+            load_base(ldbad, io);
             return (crdt_tag*)ldbad;
         }
         break;
@@ -2353,106 +2321,106 @@ crdt_tag* load_crdt_tag_from_rdb(RedisModuleIO *rdb) {
     }
 }
 
-crdt_element load_crdt_element_from_rdb(RedisModuleIO *rdb) {
+crdt_element load_crdt_element_from_rdb(sio *io) {
     crdt_element el = create_crdt_element();
-    uint64_t len = RedisModule_LoadUnsigned(rdb);
+    uint64_t len = sioLoadUnsigned(io);
     for(int i = 0; i < len; i++) {
-        crdt_tag* tag = load_crdt_tag_from_rdb(rdb);
+        crdt_tag* tag = load_crdt_tag_from_rdb(io);
         el = element_add_tag(el, tag);
     }
     return el;
 }
 
-#define save_add(tag, rdb) do { \
-    RedisModule_SaveUnsigned(rdb, tag->counter_type); \
-    RedisModule_SaveUnsigned(rdb, tag->add_vcu);\
+#define save_add(tag, io) do { \
+    sioSaveUnsigned(io, tag->counter_type); \
+    sioSaveUnsigned(io, tag->add_vcu);\
     switch(tag->counter_type) { \
         case VALUE_TYPE_LONGLONG: \
-            RedisModule_SaveUnsigned(rdb, tag->add_counter.i); \
+            sioSaveUnsigned(io, tag->add_counter.i); \
         break; \
         case VALUE_TYPE_DOUBLE: \
-            RedisModule_SaveDouble(rdb, tag->add_counter.f); \
+            sioSaveDouble(io, tag->add_counter.f); \
         break;\
         case VALUE_TYPE_SDS: \
-            RedisModule_SaveStringBuffer(rdb, tag->add_counter.s, sdslen(tag->add_counter.s)); \
+            sioSaveStringBuffer(io, tag->add_counter.s, sdslen(tag->add_counter.s)); \
         break; \
     } \
 } while(0)
 
-#define save_ld_add(tag, rdb) do { \
-    RedisModule_SaveUnsigned(rdb, tag->counter_type); \
-    RedisModule_SaveUnsigned(rdb, tag->add_vcu);\
-    RedisModule_SaveLongDouble(rdb, tag->add_counter);\
+#define save_ld_add(tag, io) do { \
+    sioSaveUnsigned(io, tag->counter_type); \
+    sioSaveUnsigned(io, tag->add_vcu);\
+    sioSaveLongDouble(io, tag->add_counter);\
 } while(0)
 
-#define save_ld_del(tag, rdb) do { \
-    RedisModule_SaveUnsigned(rdb, tag->del_vcu);\
-    RedisModule_SaveLongDouble(rdb, tag->del_counter);\
+#define save_ld_del(tag, io) do { \
+    sioSaveUnsigned(io, tag->del_vcu);\
+    sioSaveLongDouble(io, tag->del_counter);\
 } while(0)
 
-#define save_base(tag, rdb) do { \
-    RedisModule_SaveUnsigned(rdb, tag->base_vcu);\
-    RedisModule_SaveUnsigned(rdb, tag->base_timespace);\
-    RedisModule_SaveUnsigned(rdb, tag->base_data_type); \
+#define save_base(tag, io) do { \
+    sioSaveUnsigned(io, tag->base_vcu);\
+    sioSaveUnsigned(io, tag->base_timespace);\
+    sioSaveUnsigned(io, tag->base_data_type); \
     switch(tag->base_data_type) { \
         case VALUE_TYPE_LONGLONG: \
-            RedisModule_SaveUnsigned(rdb, tag->score.i); \
+            sioSaveUnsigned(io, tag->score.i); \
         break; \
         case VALUE_TYPE_DOUBLE: \
-            RedisModule_SaveDouble(rdb, tag->score.f); \
+            sioSaveDouble(io, tag->score.f); \
         break;\
         case VALUE_TYPE_SDS: \
-           RedisModule_SaveStringBuffer(rdb, tag->score.s, sdslen(tag->score.s)); \
+           sioSaveStringBuffer(io, tag->score.s, sdslen(tag->score.s)); \
         break; \
     } \
 } while(0)
 
-#define save_del(tag, rdb) do { \
-    RedisModule_SaveUnsigned(rdb, tag->del_vcu);\
+#define save_del(tag, io) do { \
+    sioSaveUnsigned(io, tag->del_vcu);\
     switch(tag->counter_type) { \
         case VALUE_TYPE_LONGLONG: \
-            RedisModule_SaveUnsigned(rdb, tag->del_counter.i); \
+            sioSaveUnsigned(io, tag->del_counter.i); \
         break; \
         case VALUE_TYPE_DOUBLE: \
-            RedisModule_SaveDouble(rdb, tag->del_counter.f); \
+            sioSaveDouble(io, tag->del_counter.f); \
         break;\
         case VALUE_TYPE_SDS: \
-           RedisModule_SaveStringBuffer(rdb, tag->del_counter.s, sdslen(tag->del_counter.s)); \
+           sioSaveStringBuffer(io, tag->del_counter.s, sdslen(tag->del_counter.s)); \
         break; \
     } \
 } while(0)
 
-void save_crdt_tag_to_rdb(RedisModuleIO *rdb, crdt_tag* tag) {
-    RedisModule_SaveUnsigned(rdb, tag->gid);
-    RedisModule_SaveUnsigned(rdb, tag->type);
-    RedisModule_SaveUnsigned(rdb, tag->data_type);
+void save_crdt_tag_to_rdb(sio *io, crdt_tag* tag) {
+    sioSaveUnsigned(io, tag->gid);
+    sioSaveUnsigned(io, tag->type);
+    sioSaveUnsigned(io, tag->data_type);
     switch (get_tag_type(tag))
     {
     case TAG_A: {
         crdt_tag_add_counter* a = (crdt_tag_add_counter*)tag;
         if(a->counter_type != VALUE_TYPE_LONGDOUBLE) {
-            save_add(a, rdb);
+            save_add(a, io);
         } else {
             crdt_tag_ld_add_counter* lda = (crdt_tag_ld_add_counter*)tag;
-            save_ld_add(lda, rdb);
+            save_ld_add(lda, io);
         }
         break;
     }
     case TAG_B: {
         crdt_tag_base* b = (crdt_tag_base*)tag;
-        save_base(b, rdb);
+        save_base(b, io);
     }
         break;
     case TAG_BA: {
         crdt_tag_base_and_add_counter* ba = (crdt_tag_base_and_add_counter*)tag;
         if(ba->counter_type != VALUE_TYPE_LONGDOUBLE) {
-            save_add(ba, rdb);
-            save_base(ba, rdb);
+            save_add(ba, io);
+            save_base(ba, io);
             
         } else {
             crdt_tag_base_and_ld_add_counter* ldba = (crdt_tag_base_and_ld_add_counter*)tag;
-            save_ld_add(ldba, rdb);
-            save_base(ldba, rdb);
+            save_ld_add(ldba, io);
+            save_base(ldba, io);
             
         }
         
@@ -2461,14 +2429,14 @@ void save_crdt_tag_to_rdb(RedisModuleIO *rdb, crdt_tag* tag) {
     case TAG_BAD: {
         crdt_tag_base_and_add_del_counter* bad = (crdt_tag_base_and_add_del_counter*)tag;
         if(bad->counter_type != VALUE_TYPE_LONGDOUBLE) {
-            save_add(bad, rdb);
-            save_del(bad, rdb);
-            save_base(bad, rdb);
+            save_add(bad, io);
+            save_del(bad, io);
+            save_base(bad, io);
         } else {
             crdt_tag_base_and_ld_add_del_counter* ldbad = (crdt_tag_base_and_ld_add_del_counter*)tag;
-            save_ld_add(ldbad, rdb);
-            save_ld_del(ldbad, rdb);
-            save_base(ldbad, rdb);
+            save_ld_add(ldbad, io);
+            save_ld_del(ldbad, io);
+            save_base(ldbad, io);
         }
         
     }
@@ -2479,12 +2447,12 @@ void save_crdt_tag_to_rdb(RedisModuleIO *rdb, crdt_tag* tag) {
         break;
     }
 }
-void save_crdt_element_to_rdb(RedisModuleIO *rdb, crdt_element el) {
+void save_crdt_element_to_rdb(sio *io, crdt_element el) {
     int len = get_element_len(el);
-    RedisModule_SaveUnsigned(rdb, len);
+    sioSaveUnsigned(io, len);
     for(int i = 0; i < len; i++) {
         crdt_tag* tag = element_get_tag_by_index(el, i);
-        save_crdt_tag_to_rdb(rdb, tag);
+        save_crdt_tag_to_rdb(io, tag);
     }
 }
 #endif
@@ -2840,7 +2808,6 @@ int find_meta_by_gid(int gid, int gcounter_len, g_counter_meta** metas) {
 
 crdt_element create_element_from_vc_and_g_counter(VectorClock vc, int gcounter_len, g_counter_meta** metas, crdt_tag* base_tag) {
     crdt_element el =  create_crdt_element();
-    int added = 0;
     assert(gcounter_len <= get_len(vc));
     for(int i = 0, len = get_len(vc); i < len; i++) {
         clk* c = get_clock_unit_by_index(&vc, i);
@@ -2851,7 +2818,6 @@ crdt_element create_element_from_vc_and_g_counter(VectorClock vc, int gcounter_l
         if(base_tag && base_tag->gid == gid) {
             tag = base_tag;
             base_tag = NULL;
-            added = 1;
         }else  {
             crdt_tag_base* b =  create_base_tag(gid);
             b->base_vcu = vcu;

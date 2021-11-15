@@ -37,7 +37,7 @@ typedef struct crdt_orset_set_tombstone {
 } __attribute__ ((packed, aligned(1))) crdt_orset_set_tombstone;
 #endif
 int set_gc_stats = 1;
-void *RdbLoadCrdtORSETSet(RedisModuleIO *rdb, int version, int encver);
+void *sioLoadCrdtORSETSet(sio *io, int version, int encver);
 
 
 
@@ -66,7 +66,7 @@ static dictType crdtSetFileterDictType = {
 };
 
 //about tombstone
-void *RdbLoadCrdtORSETSetTombstone(RedisModuleIO *rdb, int version, int encver);
+void *sioLoadCrdtORSETSetTombstone(sio *io, int version, int encver);
 // void RdbSaveCrdtORSETSetTombstone(RedisModuleIO *rdb, void *value);
 // void AofRewriteCrdtORSETSetTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value);
 // size_t crdtORSETSetTombstoneMemUsageFunc(const void *value);
