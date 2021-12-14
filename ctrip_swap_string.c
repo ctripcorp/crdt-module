@@ -119,13 +119,10 @@ void swapInString(RedisModuleCtx *ctx, int action, char* _rawkey, char *_rawval,
     RedisModule_CloseKey(key);
 }
 
-void swapOutString(RedisModuleCtx *ctx, int action, char* _rawkey, char *_rawval, void *pd) {
+static void swapOutStringKey(RedisModuleKey *key) {
     CrdtObject *old;
-    sds rawkey = _rawkey, rawval = _rawval;
-    RedisModuleString *keyobj = pd;
-    RedisModuleKey *key = RedisModule_OpenKey(ctx, keyobj, REDISMODULE_EVICT|REDISMODULE_OPEN_KEY_NOEXPIRE);
     RedisModuleType *mt = RedisModule_ModuleTypeGetType(key);
-    
+
     if (mt == getCrdtRegister()) {
         crdtAssert(RedisModule_ModuleTypeSwapOut(key, (void**)&old) == REDISMODULE_OK);
         freeCrdtRegister(old);
@@ -135,6 +132,14 @@ void swapOutString(RedisModuleCtx *ctx, int action, char* _rawkey, char *_rawval
     } else {
         /* unexpected. */
     }
+}
+
+void swapOutString(RedisModuleCtx *ctx, int action, char* _rawkey, char *_rawval, void *pd) {
+    sds rawkey = _rawkey, rawval = _rawval;
+    RedisModuleString *keyobj = pd;
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, keyobj, REDISMODULE_EVICT|REDISMODULE_OPEN_KEY_NOEXPIRE);
+    
+    swapOutStringKey(key);
 
     RedisModule_FreeString(NULL, keyobj);
     RedisModule_CloseKey(key);
@@ -183,12 +188,24 @@ int swapAnaString(RedisModuleCtx *ctx, RedisModuleString *keyobj,
         *pd = keyobj;
     } else if (swapaction == REDISMODULE_SWAP_PUT &&
             RedisModule_ModuleTypeGetValue(key) != NULL) {
-        *action = REDISMODULE_SWAP_PUT;
-        *rawkey = encodeKeyString(keyobj);
-        *rawval = encodeValString(key);
-        *cb = swapOutString;
-        RedisModule_RetainString(NULL, keyobj);
-        *pd = keyobj;
+        /* Only dirty key needs to swap out to rocksdb, non-dirty key could be
+         * freed right away (no rocksdb IO needed). */
+        if (!RedisModule_ModuleTypeGetDirty(key)) {
+            swapOutStringKey(key);
+
+            *action = REDISMODULE_SWAP_NOP;
+            *rawkey = NULL;
+            *rawval = NULL;
+            *cb = NULL;
+            *pd = NULL;
+        } else {
+            *action = REDISMODULE_SWAP_PUT;
+            *rawkey = encodeKeyString(keyobj);
+            *rawval = encodeValString(key);
+            *cb = swapOutString;
+            RedisModule_RetainString(NULL, keyobj);
+            *pd = keyobj;
+        }
     } else if (swapaction == REDISMODULE_SWAP_DEL) {
         *action = REDISMODULE_SWAP_DEL;
         *rawkey = encodeKeyString(keyobj);

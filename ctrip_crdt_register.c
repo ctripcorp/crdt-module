@@ -256,9 +256,9 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString* key, int type, 
     replicationCrdtCounterCommand(ctx, RedisModule_GetSds(key), &set_meta, type, result);
     sdsfree(result);
     if(type == VALUE_TYPE_LONGDOUBLE) {
-        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrbyfloat", key);
+        RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "incrbyfloat", key, moduleKey, NULL);
     } else {
-        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrby", key);
+        RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "incrby", key, moduleKey, NULL);
     }
     ctrip_value v = {.type = VALUE_TYPE_NONE, .value.i = 0};
     crdtAssert(get_crdt_rc_value(rc, &v));
@@ -376,9 +376,9 @@ int crdtCounterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         }
         if(need_add) RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, current);
         if(type == VALUE_TYPE_LONGDOUBLE) {
-             RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrbyfloat", argv[1]);
+             RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "incrbyfloat", argv[1], moduleKey, NULL);
         } else {
-            RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrby", argv[1]);
+            RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "incrby", argv[1], moduleKey, NULL);
         }
     }
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
@@ -578,7 +578,7 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
         expire_time = setExpireByModuleKey(moduleKey, flags, expire, milliseconds, &set_meta);
         replicationCrdtSetCommand(ctx, RedisModule_GetSds(key), RedisModule_GetSds(val), &set_meta,  expire_time);
     }
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", key);
+    RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "set", key, moduleKey, NULL);
     if(expire) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "expire", key);
     }
@@ -831,7 +831,7 @@ int crdtRcGeneric(RedisModuleCtx *ctx, RedisModuleString* key, RedisModuleString
         if(expire_time != -2) {
             trySetExpire(moduleKey, key, getMetaTimestamp(meta),  CRDT_RC_TYPE, expire_time);
         }
-        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", key);
+        RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "set", key, moduleKey, NULL);
     }
 end:
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
@@ -875,7 +875,6 @@ int crdtMsetRcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     for(int i = 3; i < argc; i+=3) {
         meta.vectorClock = getVectorClockFromString(argv[i+2]);
         crdtRcGeneric(ctx, argv[i], argv[i+1], &meta, -2);
-        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[i]);
         freeVectorClock(meta.vectorClock);
     }
     RedisModule_CrdtReplicateVerbatim(meta.gid, ctx);
@@ -998,6 +997,7 @@ int replicationFeedCrdtMsetCommandByRc(RedisModuleCtx* ctx, char* cmdbuf, int le
         freeVectorClock(getMetaVectorClock(&m));
         // sdsfree(value);
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", keys[i]);
+        RedisModule_DbSetDirty(ctx, keys[i]);
         RedisModule_SignalModifiedKey(ctx, keys[i]);
     }
     // RedisModule_Debug(logLevel, "cmd: %d - %s", cmdlen, cmdbuf);
@@ -1054,6 +1054,7 @@ int replicationFeedCrdtMsetCommandByReg(RedisModuleCtx* ctx, char* cmdbuf, int l
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, values[i], sdslen(values[i]));
         cmdlen += feedVectorClock2Buf(cmdbuf + cmdlen, getCrdtRegisterLastVc(reg));
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", keys[i]);
+        RedisModule_DbSetDirty(ctx, keys[i]);
         RedisModule_SignalModifiedKey(ctx, keys[i]);
     }
     // RedisModule_Debug(logLevel, "cmd: %d - %s", cmdlen, cmdbuf);

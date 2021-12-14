@@ -279,7 +279,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         }
     } 
     RedisModule_MergeVectorClock(getMetaGid(&del_meta), getMetaVectorClockToLongLong(&del_meta));
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
+    RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1], moduleKey, NULL);
 end: 
     if(getMetaGid(&del_meta) != 0) {
         RedisModule_CrdtReplicateVerbatim(getMetaGid(&del_meta), ctx);
@@ -451,7 +451,7 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         }
         current = addOrUpdateRegister(ctx, moduleKey, tombstone, current, &meta, argv[i], RedisModule_GetSds(argv[i+1]));
         RedisModule_MergeVectorClock(gid, VC2LL(meta.vectorClock));
-        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
+        RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1], moduleKey, NULL);
         RedisModule_CloseKey(moduleKey);
         freeVectorClock(meta.vectorClock);
         result++;
@@ -559,7 +559,7 @@ int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         trySetExpire(moduleKey, argv[1], getMetaTimestamp(&meta),  CRDT_REGISTER_TYPE, expire_time);
     }
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1]);
+    RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "set", argv[1], moduleKey, NULL);
     
 end:
     if (meta.gid != 0) {

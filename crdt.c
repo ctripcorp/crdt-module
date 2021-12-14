@@ -115,7 +115,7 @@ int delCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             }
             int result = method->propagateDel(RedisModule_GetSelectedDb(ctx), argv[i], moduleKey, crdtObj);
             if(result) {
-                RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[i]);
+                RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[i], moduleKey, NULL);
                 numl ++;
             }
         }
