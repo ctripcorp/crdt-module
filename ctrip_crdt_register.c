@@ -376,11 +376,12 @@ int crdtCounterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         }
         if(need_add) RedisModule_ModuleTypeSetValue(moduleKey, CrdtRC, current);
         if(type == VALUE_TYPE_LONGDOUBLE) {
-             RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "incrbyfloat", argv[1], moduleKey, NULL);
+             RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrbyfloat", argv[1]);
         } else {
-            RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "incrby", argv[1], moduleKey, NULL);
+            RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrby", argv[1]);
         }
     }
+    RedisModule_DbSetDirty(ctx, argv[1]);
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
 end:
     if (meta.gid != 0) {
@@ -831,8 +832,9 @@ int crdtRcGeneric(RedisModuleCtx *ctx, RedisModuleString* key, RedisModuleString
         if(expire_time != -2) {
             trySetExpire(moduleKey, key, getMetaTimestamp(meta),  CRDT_RC_TYPE, expire_time);
         }
-        RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_STRING, "set", key, moduleKey, NULL);
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", key);
     }
+    RedisModule_DbSetDirty(ctx, key);
 end:
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);
     RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
@@ -914,6 +916,7 @@ int crdtDelRcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtRCT, tombstone);
         }
     }
+    RedisModule_DbSetDirty(ctx, argv[1]);
     RedisModule_MergeVectorClock(getMetaGid(&meta), getMetaVectorClockToLongLong(&meta));
 end:
     if(meta.gid != 0) {
