@@ -150,11 +150,11 @@ int initRegisterModule(RedisModuleCtx *ctx) {
             .mem_usage = crdtRegisterMemUsageFunc,
             .free = freeCrdtRegister,
             .digest = crdtRegisterDigestFunc,
-            .lookup_swapping_clients = lookupSwappingClientsString,
-            .setup_swapping_clients = setupSwappingClientsString,
-            .get_data_swaps = getDataSwapsString,
-            .get_complement_swaps = getComplementSwapsString,
-            .swap_ana = swapAnaString,
+            .lookup_swapping_clients = lookupSwappingClientsWk,
+            .setup_swapping_clients = setupSwappingClientsWk,
+            .get_data_swaps = getDataSwapsWk,
+            .get_complement_swaps = getComplementSwapsWk,
+            .swap_ana = swapAnaWk,
     };
 
     CrdtRegister = RedisModule_CreateDataType(ctx, CRDT_REGISTER_DATATYPE_NAME, 0, &tm);

@@ -8,6 +8,9 @@
 
 struct sio;
 
+typedef void *(*sioRedisModuleTypeLoadFunc)(struct sio *io, int encver);
+typedef void (*sioRedisModuleTypeSaveFunc)(struct sio *io, void *value);
+
 typedef struct sioType {
     void (*save_unsigned)(struct sio *io, uint64_t value);
     uint64_t (*load_unsigned)(struct sio *io);
@@ -83,7 +86,6 @@ static inline float sioLoadFloat(struct sio *io) {
 }
 
 sio *rdbStreamCreate(RedisModuleIO *rdb);
-RedisModuleIO *rdbStreamGetRdb(sio *io);
 void rdbStreamRelease(sio *io);
 sio *sdsStreamCreate(sds val);
 sds sdsStreamRelease(sio *io);

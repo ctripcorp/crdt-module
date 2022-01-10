@@ -47,7 +47,6 @@
 #define CRDT_HASH_TOMBSOTNE_DATATYPE_NAME "crdt_htom"
 #define HASHTABLE_MIN_FILL        10
 
-//#define UINT64_MAX        18446744073709551615ULL
 #define RDB_LENERR UINT64_MAX
 
 #define OBJ_HASH_KEY 1
@@ -57,7 +56,7 @@ static RedisModuleType *CrdtHash;
 static RedisModuleType *CrdtHashTombstone;
 int hashStartGc();
 int hashStopGc();
-//common methods
+
 CrdtObject *crdtHashMerge(CrdtObject *currentVal, CrdtObject *value);
 int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value);
 CrdtObject** crdtHashFilter(CrdtObject* common, int gid, long long logic_time,long long maxsize,int* length);
@@ -67,25 +66,27 @@ int crdtHashGc(CrdtObject* target, VectorClock clock);
 VectorClock crdtHashGetLastVC(void* data);
 void crdtHashUpdateLastVC(void* r, VectorClock vc);
 void freeHashFilter(CrdtObject** filters, int num);
+sds crdtHashInfo(void* data);
+
 static CrdtObjectMethod HashCommonMethod = {
     .merge = crdtHashMerge,
     .filterAndSplit = crdtHashFilter,
     .filterAndSplit2 = crdtHashFilter2,
     .freefilter = freeHashFilter
 };
-sds crdtHashInfo(void* data);
+
 static CrdtDataMethod HashDataMethod = {
-    .propagateDel = crdtHashDelete,
     .getLastVC = crdtHashGetLastVC,
     .updateLastVC = crdtHashUpdateLastVC,
+    .propagateDel = crdtHashDelete,
     .info = crdtHashInfo,
 };
-
 
 typedef struct CRDT_Hash {
     unsigned char type;
     dict *map;
 } __attribute__ ((packed, aligned(1))) CRDT_Hash;
+
 //hash methods
 typedef int (*changeCrdtHashFunc)(CRDT_Hash* target, CrdtMeta* meta);
 typedef CRDT_Hash* (*dupCrdtHashFunc)(CRDT_Hash* target);
@@ -127,8 +128,8 @@ typedef struct CrdtHashTombstoneMethod {
 typedef struct CRDT_HashTombstone {
     unsigned long long type:8;
     unsigned long long maxDelGid:4; 
-    unsigned long long maxDelTimestamp:52; //52
-    VectorClock maxDelvectorClock;//8
+    unsigned long long maxDelTimestamp:52;
+    VectorClock maxDelvectorClock;
     dict *map;
 } __attribute__ ((packed, aligned(1))) CRDT_HashTombstone;
 
@@ -186,40 +187,9 @@ int sioLoadCrdtBasicHashTombstone(sio *io, int encver, void *data);
 void sioSaveCrdtBasicHashTombstone(sio *io, void *value);
 size_t crdtBasicHashMemUsageFunc(void* data);
 size_t crdtBasicHashTombstoneMemUsageFunc(void* data);
-/**
- * about dict
- */
-// uint64_t dictSdsHash(const void *key);
-// int dictSdsKeyCompare(void *privdata, const void *key1,
-//                       const void *key2);
-// void dictSdsDestructor(void *privdata, void *val);
-void dictCrdtRegisterDestructor(void *privdata, void *val);
 
-void dictCrdtRegisterTombstoneDestructor(void *privdata, void *val);
-static dictType crdtHashDictType = {
-        dictSdsHash,                /* hash function */
-        NULL,                       /* key dup */
-        NULL,                       /* val dup */
-        dictSdsKeyCompare,          /* key compare */
-        dictSdsDestructor,          /* key destructor */
-        dictCrdtRegisterDestructor   /* val destructor */
-};
-static dictType crdtHashFileterDictType = {
-        dictSdsHash,                /* hash function */
-        NULL,                       /* key dup */
-        NULL,                       /* val dup */
-        dictSdsKeyCompare,          /* key compare */
-        NULL,          /* key destructor */
-        NULL   /* val destructor */
-};
-static dictType crdtHashTombstoneDictType = {
-        dictSdsHash,                /* hash function */
-        NULL,                       /* key dup */
-        NULL,                       /* val dup */
-        dictSdsKeyCompare,          /* key compare */
-        dictSdsDestructor,          /* key destructor */
-        dictCrdtRegisterTombstoneDestructor   /* val destructor */
-};
+extern dictType crdtHashFileterDictType;
+
 RedisModuleType* getCrdtHash();
 RedisModuleType* getCrdtHashTombstone();
 

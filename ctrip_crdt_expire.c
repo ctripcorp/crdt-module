@@ -82,9 +82,6 @@ end:
             char cmdbuf[alllen]; 
             replicationFeedCrdtExpireAtCommand(ctx, cmdbuf, keystr, keylen, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
         }
-
-
-        // RedisModule_CrdtReplicateAlsoNormReplicate(ctx, "CRDT.EXPIRE", "sllll", key, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
     }
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     return RedisModule_ReplyWithLongLong(ctx, result);

@@ -34,6 +34,18 @@
 #include "utils.h"
 #include "crdt.h"
 #include "crdt_statistics.h"
+#include "lww/crdt_lww_hashmap.h"
+#include "ctrip_swap.h"
+
+dictType crdtHashFileterDictType = {
+        dictSdsHash,                /* hash function */
+        NULL,                       /* key dup */
+        NULL,                       /* val dup */
+        dictSdsKeyCompare,          /* key compare */
+        NULL,          /* key destructor */
+        NULL   /* val destructor */
+};
+
 /*
     util 
 */
@@ -322,7 +334,7 @@ int hsetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     #if defined(HSET_STATISTICS) 
         send_event_start();
     #endif
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hset", argv[1]);
+    RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_HASH, "hset", argv[1], moduleKey, NULL);
     #if defined(HSET_STATISTICS) 
         send_event_end();
     #endif
@@ -474,11 +486,11 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     
     if(deleted > 0) {
         changeCrdtHashTombstone(tombstone, &hdel_meta);
-        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH,"hdel", argv[1]);
+        RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_HASH,"hdel", argv[1], moduleKey, NULL);
     }    
     if (dictSize(current->map) == 0) {
         RedisModule_DeleteKey(moduleKey);
-        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
+        RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1], moduleKey, NULL);
     } else {
         if (crdtHtNeedsResize(current->map)) dictResize(current->map);
         if (deleted > 0) changeCrdtHash(current, &hdel_meta);
@@ -572,7 +584,7 @@ int CRDT_HSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         goto end;
     }
     RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hset", argv[1]);
+    RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_HASH, "hset", argv[1], moduleKey, NULL);
 end:
     if (meta != NULL) {
         RedisModule_CrdtReplicateVerbatim(getMetaGid(meta), ctx);
@@ -796,7 +808,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
         if (crdtHtNeedsResize(current->map)) dictResize(current->map);
     }
     RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
+    RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1], moduleKey, NULL);
 end:
     if(meta) {
         RedisModule_CrdtReplicateVerbatim(getMetaGid(meta), ctx);
@@ -907,9 +919,9 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         }
     }
     RedisModule_MergeVectorClock(getMetaGid(meta), getMetaVectorClockToLongLong(meta));
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "hdel", argv[1]);
+    RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_HASH, "hdel", argv[1], moduleKey, NULL);
     if(keyremoved == CRDT_OK) {
-        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
+        RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1], moduleKey, NULL);
     }
 end:
     if(meta) {
@@ -1069,6 +1081,167 @@ int hexistsCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_CloseKey(moduleKey);
     return RedisModule_ReplyWithLongLong(ctx, result);
 }
+
+/*
+ * Hash Polymorphism
+ */
+//create hash
+void *createCrdtHash(void) {
+    return createCrdtLWWHash();
+}
+void freeCrdtHash(void *data) {
+    freeCrdtLWWHash(data);
+}
+//create hash tombstone
+void *createCrdtHashTombstone(void) {
+    return createCrdtLWWHashTombstone();
+}
+void freeCrdtHashTombstone(void *data) {
+    freeCrdtLWWHashTombstone(data);
+}
+//basic hash module functions
+void *sioLoadCrdtHash(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
+    if( type == LWW_TYPE) {
+        return sioLoadCrdtLWWHash(io, version, encver);
+    }
+    return NULL;
+}
+void *RdbLoadCrdtHash(RedisModuleIO *rdb, int encver) {
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtHash(io, encver);
+    rdbStreamRelease(io);
+    return res;
+}
+
+void RdbSaveCrdtHash(RedisModuleIO *rdb, void *value) {
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveCrdtLWWHash(io, value);
+    rdbStreamRelease(io);
+}
+void AofRewriteCrdtHash(RedisModuleIO *aof, RedisModuleString *key, void *value) {
+    AofRewriteCrdtLWWHash(aof, key, value);
+}
+
+size_t crdtHashMemUsageFunc(const void *value) {
+    return crdtLWWHashMemUsageFunc(value);
+}
+void crdtHashDigestFunc(RedisModuleDigest *md, void *value) {
+    crdtLWWHashDigestFunc(md, value);
+}
+void *sioLoadCrdtHashTombstone(sio *io, int encver) {
+    long long header = loadCrdtRdbHeader(io);
+    int type = getCrdtRdbType(header);
+    int version = getCrdtRdbVersion(header);
+    if( type == LWW_TYPE) {
+        return sioLoadCrdtLWWHashTombstone(io, version, encver);
+    }
+    return NULL;
+}
+//basic hash tombstone module functions
+void *RdbLoadCrdtHashTombstone(RedisModuleIO *rdb, int encver) {
+    sio *io = rdbStreamCreate(rdb);
+    void *res = sioLoadCrdtHashTombstone(io, encver);
+    rdbStreamRelease(io);
+    return res;
+}
+void RdbSaveCrdtHashTombstone(RedisModuleIO *rdb, void *value) {
+    sio *io = rdbStreamCreate(rdb);
+    sioSaveCrdtLWWHashTombstone(io, value);
+    rdbStreamRelease(io);
+}
+void AofRewriteCrdtHashTombstone(RedisModuleIO *aof, RedisModuleString *key, void *value) {
+    AofRewriteCrdtLWWHashTombstone(aof, key, value);
+}
+
+size_t crdtHashTombstoneMemUsageFunc(const void *value) {
+    return crdtLWWHashTombstoneMemUsageFunc(value);
+}
+void crdtHashTombstoneDigestFunc(RedisModuleDigest *md, void *value) {
+    crdtLWWHashTombstoneDigestFunc(md, value);
+}
+
+int changeCrdtHash(CRDT_Hash* hash, CrdtMeta* meta) {
+    return changeCrdtLWWHash(retrieveCrdtLWWHash(hash), meta);
+}
+
+CRDT_Hash* dupCrdtHash(CRDT_Hash* data) {
+    return (CRDT_Hash*)dupCrdtLWWHash(data);
+}
+
+void updateLastVCHash(CRDT_Hash* data, VectorClock vc) {
+    return updateLastVCLWWHash(data, vc);
+}
+
+CrdtMeta* updateMaxDelCrdtHashTombstone(void* data, CrdtMeta* meta, int* comapre) {
+    return updateMaxDelCrdtLWWHashTombstone(data, meta, comapre);
+}
+
+int compareCrdtHashTombstone(void* data, CrdtMeta* meta) {
+    return compareCrdtLWWHashTombstone(data, meta);
+}
+
+CRDT_HashTombstone* dupCrdtHashTombstone(void* data) {
+    return (CRDT_HashTombstone*)dupCrdtLWWHashTombstone(data);
+}
+
+int hash_gc_stats = 1;
+
+int hashStartGc() {
+    hash_gc_stats = 1;
+    return hash_gc_stats;
+}
+
+int hashStopGc() {
+    hash_gc_stats = 0;
+    return hash_gc_stats;
+}
+
+int gcCrdtHashTombstone(void* data, VectorClock clock) {
+    if(!hash_gc_stats) {
+        return 0;
+    }
+    return gcCrdtLWWHashTombstone(data, clock);
+}
+
+VectorClock getCrdtHashTombstoneLastVc(CRDT_HashTombstone* t) {
+    return getCrdtLWWHashTombstoneLastVc(retrieveCrdtLWWHashTombstone(t));
+}
+
+void mergeCrdtHashTombstoneLastVc(CRDT_HashTombstone* t, VectorClock vc) {
+    CRDT_LWW_HashTombstone* tombstone = retrieveCrdtLWWHashTombstone(t);
+    setCrdtLWWHashTombstoneLastVc(tombstone, vectorClockMerge(getCrdtLWWHashTombstoneLastVc(tombstone), vc));
+}
+
+CrdtMeta* getMaxDelCrdtHashTombstone(void* data) {
+    return getCrdtLWWHashTombstoneMaxDelMeta(retrieveCrdtLWWHashTombstone(data));
+}
+
+int changeCrdtHashTombstone(void* data, CrdtMeta* meta) {
+    return changeCrdtLWWHashTombstone(data, meta);
+}
+
+/**
+ *  LWW Hash Get Set Function
+ */ 
+VectorClock getCrdtHashLastVc(CRDT_Hash* hash) {
+    CRDT_LWW_Hash* r = retrieveCrdtLWWHash(hash);
+    return getCrdtLWWHashLastVc(r);
+}
+
+void setCrdtHashLastVc(CRDT_Hash* hash, VectorClock vc) {
+    CRDT_LWW_Hash* r = retrieveCrdtLWWHash(hash);
+    setCrdtLWWHashLastVc(r, vc);
+}
+
+void mergeCrdtHashLastVc(CRDT_Hash* hash, VectorClock vc) {
+    VectorClock old = getCrdtHashLastVc(hash);
+    VectorClock now = vectorClockMerge(old, vc);
+    setCrdtHashLastVc(hash, now);
+}
+
 /*
  * Init Hash Module 
  */
@@ -1081,13 +1254,18 @@ RedisModuleType* getCrdtHashTombstone() {
 int initCrdtHashModule(RedisModuleCtx *ctx) {
     //hash object type
     RedisModuleTypeMethods tm = {
-            .version = REDISMODULE_APIVER_1,
-            .rdb_load = RdbLoadCrdtHash,
-            .rdb_save = RdbSaveCrdtHash,
-            .aof_rewrite = AofRewriteCrdtHash,
-            .mem_usage = crdtHashMemUsageFunc,
-            .free = freeCrdtHash,
-            .digest = crdtHashDigestFunc
+        .version = REDISMODULE_APIVER_1,
+        .rdb_load = RdbLoadCrdtHash,
+        .rdb_save = RdbSaveCrdtHash,
+        .aof_rewrite = AofRewriteCrdtHash,
+        .mem_usage = crdtHashMemUsageFunc,
+        .free = freeCrdtHash,
+        .digest = crdtHashDigestFunc,
+        .lookup_swapping_clients = lookupSwappingClientsWk,
+        .setup_swapping_clients = setupSwappingClientsWk,
+        .get_data_swaps = getDataSwapsWk,
+        .get_complement_swaps = getComplementSwapsWk,
+        .swap_ana = swapAnaWk
     };
     CrdtHash = RedisModule_CreateDataType(ctx, CRDT_HASH_DATATYPE_NAME, 0, &tm);
     if (CrdtHash == NULL) return REDISMODULE_ERR;
@@ -1151,7 +1329,7 @@ int initCrdtHashModule(RedisModuleCtx *ctx) {
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"CRDT.REM_HASH",
-                                  CRDT_RemHashCommand, NULL,"write allow-loading",1,1,1) == REDISMODULE_ERR)
+                                  CRDT_RemHashCommand, NULL,"write allow-loading swap-get",1,1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
 
     if (RedisModule_CreateCommand(ctx,"hlen",
@@ -1168,7 +1346,7 @@ int initCrdtHashModule(RedisModuleCtx *ctx) {
 /**
  *  Basic utils
 */
-int sioLoadDict(sio *io, int encver, dict *map, RedisModuleTypeLoadFunc func) {
+int sioLoadDict(sio *io, int encver, dict *map, sioRedisModuleTypeLoadFunc func) {
     uint64_t len;
     sds field;
     CRDT_Register *value;
@@ -1180,7 +1358,7 @@ int sioLoadDict(sio *io, int encver, dict *map, RedisModuleTypeLoadFunc func) {
         /* Load encoded strings */
         char* str = sioLoadStringBuffer(io, &strLength);
         field = sdsnewlen(str, strLength);
-        value = func(rdbStreamGetRdb(io), encver);
+        value = func(io, encver);
         /* Add pair to hash table */
         dictAdd(map, field, value);
         RedisModule_ZFree(str);
@@ -1189,9 +1367,9 @@ int sioLoadDict(sio *io, int encver, dict *map, RedisModuleTypeLoadFunc func) {
 }
 int sioLoadCrdtBasicHash(sio *io, int encver, void *data) {
     CRDT_Hash* hash = data;
-    return sioLoadDict(io, encver, hash->map, RdbLoadCrdtRegister);
+    return sioLoadDict(io, encver, hash->map, sioLoadCrdtRegister);
 }
-void sioSaveDict(sio *io, dict* map, RedisModuleTypeSaveFunc func) {
+void sioSaveDict(sio *io, dict* map, sioRedisModuleTypeSaveFunc func) {
     
     dictIterator *di = dictGetSafeIterator(map);
     dictEntry *de;
@@ -1201,17 +1379,19 @@ void sioSaveDict(sio *io, dict* map, RedisModuleTypeSaveFunc func) {
         void *crdtRegister = dictGetVal(de);
 
         sioSaveStringBuffer(io, field, sdslen(field));
-        func(rdbStreamGetRdb(io), crdtRegister);
+        func(io, crdtRegister);
     }
     dictReleaseIterator(di);
 }
 void sioSaveCrdtBasicHash(sio *io, void *value) {
     CRDT_Hash* crdtHash = value;
-    sioSaveDict(io, crdtHash->map, RdbSaveCrdtRegister);
+    sioSaveDict(io, crdtHash->map, sioSaveCrdtRegister);
 }
+
+void sioSaveLWWCrdtRegisterTombstone(sio *io, void *value);
 void sioSaveCrdtBasicHashTombstone(sio *io, void *value) {
     CRDT_HashTombstone* crdtHashTombstone = retrieveCrdtHashTombstone(value);
-     sioSaveDict(io, crdtHashTombstone->map, RdbSaveCrdtRegisterTombstone);
+     sioSaveDict(io, crdtHashTombstone->map, sioSaveLWWCrdtRegisterTombstone);
 }
 CrdtMeta* appendBasicHash(CRDT_Hash* target, CRDT_Hash* other) {
     CrdtMeta* result = NULL;
@@ -1250,9 +1430,10 @@ CrdtMeta* appendBasicHash(CRDT_Hash* target, CRDT_Hash* other) {
     return result;
 }
 
+void *sioLoadCrdtRegisterTombstone(sio *io, int encver);
 int sioLoadCrdtBasicHashTombstone(sio *io, int encver, void *data) {
     CRDT_HashTombstone* tombstone = data;
-    return sioLoadDict(io, encver, tombstone->map, RdbLoadCrdtRegisterTombstone);
+    return sioLoadDict(io, encver, tombstone->map, sioLoadCrdtRegisterTombstone);
 }
 size_t crdtBasicHashMemUsageFunc(void* data) {
     CRDT_Hash* result = retrieveCrdtHash(data);
@@ -1261,41 +1442,6 @@ size_t crdtBasicHashMemUsageFunc(void* data) {
 size_t crdtBasicHashTombstoneMemUsageFunc(void* data) {
     CRDT_HashTombstone* result = retrieveCrdtHashTombstone(data);
     return dictSize(result->map) ;
-}
-/* --------------------------------------------------------------------------
- * About Dict
- * -------------------------------------------------------------------------- */
-// uint64_t dictSdsHash(const void *key) {
-//     return dictGenHashFunction((unsigned char*)key, sdslen((char*)key));
-// }
-// int dictSdsKeyCompare(void *privdata, const void *key1,
-//                       const void *key2) {
-//     int l1,l2;
-//     DICT_NOTUSED(privdata);
-
-//     l1 = sdslen((sds)key1);
-//     l2 = sdslen((sds)key2);
-//     if (l1 != l2) return 0;
-//     return memcmp(key1, key2, l1) == 0;
-// }
-
-// void dictSdsDestructor(void *privdata, void *val) {
-//     DICT_NOTUSED(privdata);
-
-//     sdsfree(val);
-// }
-
-void dictCrdtRegisterDestructor(void *privdata, void *val) {
-    DICT_NOTUSED(privdata);
-
-    if (val == NULL) return; /* Lazy freeing will set value to NULL. */
-    freeCrdtRegister(val);
-}
-void dictCrdtRegisterTombstoneDestructor(void *privdata, void *val) {
-    DICT_NOTUSED(privdata);
-
-    if (val == NULL) return; /* Lazy freeing will set value to NULL. */
-    freeCrdtRegisterTombstone(val);
 }
 
 //hash common methods
@@ -1706,4 +1852,8 @@ VectorClock crdtHashGetLastVC(void* data) {
 void crdtHashUpdateLastVC(void* data, VectorClock vc) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(data);
     updateLastVCHash(crdtHash, vc);
+}
+
+CRDT_HashTombstone* createCrdtHashFilterTombstone(CRDT_HashTombstone* target) {
+    return (CRDT_HashTombstone*)createCrdtLWWHashFilterTombstone(retrieveCrdtLWWHashTombstone(target));
 }

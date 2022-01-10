@@ -204,7 +204,6 @@ CRDT_LWW_Register* retrieveCrdtLWWRegister(void *data) {
 }
 CRDT_LWW_RegisterTombstone* retrieveCrdtLWWRegisterTombstone(void *data) {
     CRDT_LWW_RegisterTombstone* result = (CRDT_LWW_RegisterTombstone*)data;
-    assert(result->parent.parent.dataType == CRDT_REGISTER_TYPE);
     return result;
 }
 int compareLWWCrdtRegisterAndDelMeta(CRDT_Register* current, CrdtMeta* meta) {

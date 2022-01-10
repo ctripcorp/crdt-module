@@ -432,6 +432,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         RedisModule_Log(ctx, "warning", "zset module -- zset failed");
         return REDISMODULE_ERR;
     }
+
     if (RedisModule_CreateCommand(ctx,"del",
                                   delCommand, NULL, "write swap-get",1,-1,1) == REDISMODULE_ERR)
         return REDISMODULE_ERR;
@@ -456,6 +457,12 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         return REDISMODULE_ERR;  
     if (RedisModule_CreateCommand(ctx, "crdt.debug_gc", crdtGcCommand, NULL, "allow-loading write", 1, 2, 1) == REDISMODULE_ERR)  
         return REDISMODULE_ERR;               
+
+    if (initSwap() != REDISMODULE_OK) {
+        RedisModule_Log(ctx, "warning", "init swap failed");
+        return REDISMODULE_ERR;
+    }
+
     return REDISMODULE_OK;
 }
 

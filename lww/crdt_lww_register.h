@@ -194,7 +194,7 @@ void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value) {
     crdtLWWRegisterDigestFunc(md, value);
 }
 
-static void *sioLoadCrdtRegisterTombstone(sio *io, int encver) {
+void *sioLoadCrdtRegisterTombstone(sio *io, int encver) {
     long long header = loadCrdtRdbHeader(io);
     int type = getCrdtRdbType(header);
     int version = getCrdtRdbVersion(header);

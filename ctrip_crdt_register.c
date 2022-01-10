@@ -1344,11 +1344,11 @@ int initRcModule(RedisModuleCtx *ctx) {
         .mem_usage = crdtRcMemUsageFunc,
         .free = freeCrdtRc,
         .digest = crdtRcDigestFunc,
-        .lookup_swapping_clients = lookupSwappingClientsString,
-        .setup_swapping_clients = setupSwappingClientsString,
-        .get_data_swaps = getDataSwapsString,
-        .get_complement_swaps = getComplementSwapsString,
-        .swap_ana = swapAnaString,
+        .lookup_swapping_clients = lookupSwappingClientsWk,
+        .setup_swapping_clients = setupSwappingClientsWk,
+        .get_data_swaps = getDataSwapsWk,
+        .get_complement_swaps = getComplementSwapsWk,
+        .swap_ana = swapAnaWk,
     };
     CrdtRC = RedisModule_CreateDataType(ctx, CRDT_RC_DATATYPE_NAME, 0, &tm);
     if (CrdtRC == NULL) return REDISMODULE_ERR;

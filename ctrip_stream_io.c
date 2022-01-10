@@ -81,10 +81,6 @@ sio *rdbStreamCreate(RedisModuleIO *rdb) {
     return io;
 }
 
-RedisModuleIO *rdbStreamGetRdb(sio *io) {
-    return io->stream;
-}
-
 void rdbStreamRelease(sio *io) {
     zfree(io);
 }
