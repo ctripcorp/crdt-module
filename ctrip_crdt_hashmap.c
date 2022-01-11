@@ -489,6 +489,7 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_HASH,"hdel", argv[1], moduleKey, NULL);
     }    
     if (dictSize(current->map) == 0) {
+        RedisModule_RocksDelete(ctx,argv[1]);
         RedisModule_DeleteKey(moduleKey);
         RedisModule_NotifyKeyspaceEventDirty(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1], moduleKey, NULL);
     } else {
@@ -802,6 +803,7 @@ int CRDT_DelHashCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc)
     }
     dictReleaseIterator(di);
     if (dictSize(current->map) == 0) {
+        RedisModule_RocksDelete(ctx,argv[1]);
         RedisModule_DeleteKey(moduleKey);
     } else {
         /* Always check if the dictionary needs a resize after a delete. */
@@ -911,6 +913,7 @@ int CRDT_RemHashCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     changeCrdtHashTombstone(tombstone, meta);
     if(current != NULL) {
         if (dictSize(current->map) == 0) {
+            RedisModule_RocksDelete(ctx,argv[1]);
             RedisModule_DeleteKey(moduleKey);
             keyremoved = CRDT_OK;
         } else {

@@ -909,6 +909,7 @@ int crdtDelRcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         freeCrdtRcTombstone(tombstone);
     } else {
         if(result == PURGE_VAL && rc != NULL) {
+            RedisModule_RocksDelete(ctx,argv[1]);
             RedisModule_DeleteKey(moduleKey);
             RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "del", argv[1]);
         } 

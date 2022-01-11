@@ -271,6 +271,7 @@ int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         }
         if(result > COMPARE_META_EQUAL) {
             addRegisterTombstone(tombstone, getCrdtRegisterLastMeta(current), &result);
+            RedisModule_RocksDelete(ctx,argv[1]);
             RedisModule_DeleteKey(moduleKey);
             deleted = 1;
         } else {
