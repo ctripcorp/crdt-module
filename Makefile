@@ -81,13 +81,9 @@ ctrip_stream_io.o: ctrip_stream_io.c ctrip_stream_io.h
 	$(CC) $(CFLAGS) -c -o $@ ctrip_stream_io.c
 ctirp_swap.o: ctrip_swap.c ctrip_swap.h
 	$(CC) $(CFLAGS) -c -o $@ ctrip_swap.c
-ctirp_swap_string.o: ctrip_swap_string.c ctrip_swap.h
-	$(CC) $(CFLAGS) -c -o $@ ctrip_swap_string.c
-ctirp_swap_hash.o: ctrip_swap_hash.c ctrip_swap.h
-	$(CC) $(CFLAGS) -c -o $@ ctrip_swap_hash.c
 
-crdt.so: rmutil  g_counter_element.o g_counter.o  ctrip_orset_rc.o ctrip_crdt_register.o ctrip_crdt_zset.o crdt_orset_zset.o crdt_set.o crdt_orset_set.o crdt_statistics.o ctrip_rdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_stream_io.o ctrip_swap.o ctrip_swap_string.o ctrip_swap_hash.o
-	$(LD) -o $@  g_counter_element.o g_counter.o  ctrip_orset_rc.o  ctrip_crdt_register.o ctrip_crdt_zset.o crdt_orset_zset.o crdt_set.o crdt_orset_set.o  crdt_statistics.o ctrip_rdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_stream_io.o ctrip_swap.o ctrip_swap_string.o ctrip_swap_hash.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil $(LIBC)
+crdt.so: rmutil  g_counter_element.o g_counter.o  ctrip_orset_rc.o ctrip_crdt_register.o ctrip_crdt_zset.o crdt_orset_zset.o crdt_set.o crdt_orset_set.o crdt_statistics.o ctrip_rdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_stream_io.o ctrip_swap.o
+	$(LD) -o $@  g_counter_element.o g_counter.o  ctrip_orset_rc.o  ctrip_crdt_register.o ctrip_crdt_zset.o crdt_orset_zset.o crdt_set.o crdt_orset_set.o  crdt_statistics.o ctrip_rdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o ctrip_stream_io.o ctrip_swap.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil $(LIBC)
 
 clean:
 	rm -rf *.xo crdt.so *.o *.pyc *.so *.gcno *.gcda

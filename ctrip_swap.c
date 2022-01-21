@@ -4,84 +4,7 @@
 #include "util.h"
 #include "ctrip_vector_clock.h"
 #include "include/rmutil/sds.h"
-#include "ctrip_stream_io.h"
 #include "crdt_util.h"
-#include "crdt_register.h"
-#include "ctrip_crdt_register.h"
-#include "ctrip_crdt_hashmap.h"
-
-typedef sds (*encodeKeyFunc)(RedisModuleString *keyobj);
-typedef sds (*encodeValFunc)(RedisModuleKey *key);
-typedef void *(*decodeValFunc)(sds rawval);
-typedef void (*freeValFunc)(void *val);
-
-typedef struct {
-    RedisModuleType *mt;
-    encodeKeyFunc encode_key;
-    encodeValFunc encode_val;
-    decodeValFunc decode_val;
-    freeValFunc free_val;
-} wholeKeySwapType;
-
-typedef struct {
-    wholeKeySwapType table[8];
-    int used;
-}wholeKeySwapTypeTable;
-
-static wholeKeySwapTypeTable wksTable;
-
-int initWholeKeySwapTypeTable() {
-    wksTable.used = 0;
-
-    if (getCrdtRegister() == NULL) return REDISMODULE_ERR;
-    wksTable.table[wksTable.used++] = (wholeKeySwapType){
-        .mt = getCrdtRegister(),
-        .encode_key = encodeKeyCrdtString,
-        .encode_val = encodeValCrdtRegister,
-        .decode_val = decodeValCrdtRegister,
-        .free_val = freeCrdtRegister,
-    };
-
-    if (getCrdtRc() == NULL) return REDISMODULE_ERR;
-    wksTable.table[wksTable.used++] = (wholeKeySwapType){
-        .mt = getCrdtRc(),
-        .encode_key = encodeKeyCrdtString,
-        .encode_val = encodeValCrdtRc,
-        .decode_val = decodeValCrdtRC,
-        .free_val = freeCrdtRc,
-    };
-
-    if (getCrdtHash() == NULL) return REDISMODULE_ERR;
-    wksTable.table[wksTable.used++] = (wholeKeySwapType){
-        .mt = getCrdtHash(),
-        .encode_key = encodeKeyCrdtHash,
-        .encode_val = encodeValCrdtHash,
-        .decode_val = decodeValCrdtHash,
-        .free_val = freeCrdtHash,
-    };
-
-    return REDISMODULE_OK;
-}
-
-wholeKeySwapType *lookupWholeKeySwapType(RedisModuleType *mt) {
-    int i;
-    wholeKeySwapType *result = NULL;
-
-    for (i = 0; i < wksTable.used; i++) {
-        wholeKeySwapType *wks = wksTable.table+i;
-        if (mt == wks->mt) {
-            result = wks;
-            break;
-        }
-    }
-    crdtAssert(result != NULL);
-
-    return result;
-}
-
-int initSwap() {
-    return initWholeKeySwapTypeTable();
-}
 
 void *lookupSwappingClientsWk(RedisModuleCtx *ctx, RedisModuleString *keyobj, RedisModuleString *subkeyobj) {
     void *scs = NULL;
@@ -121,6 +44,21 @@ void getDataSwapsWk(RedisModuleCtx *ctx, RedisModuleString *keyobj, int mode, Re
     RedisModule_GetSwapsAppendResult(result, keyobj, NULL, NULL);
 }
 
+static inline sds encodeKeyWk(RedisModuleType *mt, RedisModuleString *keyobj) {
+    sds rawkey = sdsempty();
+    rawkey = sdscat(rawkey, RedisModule_ModuleTypeGetName(mt));
+    rawkey = sdscatsds(rawkey, RedisModule_GetSds(keyobj));
+    return rawkey;
+}
+
+static inline void *decodeValWk(RedisModuleType *mt, sds rawval) {
+    return RedisModule_RdbDecode(mt, rawval);
+}
+
+static inline void *encodeValWk(RedisModuleKey *key) {
+    return RedisModule_RdbEncode(RedisModule_ModuleTypeGetType(key), RedisModule_ModuleTypeGetValue(key));
+}
+
 void swapInWk(RedisModuleCtx *ctx, int action, char* _rawkey, char *_rawval, void *pd) {
     CrdtObject *val;
     sds rawkey = _rawkey, rawval = _rawval;
@@ -128,8 +66,7 @@ void swapInWk(RedisModuleCtx *ctx, int action, char* _rawkey, char *_rawval, voi
     RedisModuleKey *key = RedisModule_OpenKey(ctx, keyobj, REDISMODULE_EVICT|REDISMODULE_OPEN_KEY_NOEXPIRE);
     RedisModuleType *mt = RedisModule_ModuleTypeGetType(key);
 
-    wholeKeySwapType *wks = lookupWholeKeySwapType(mt);
-    val = wks->decode_val(rawval);
+    val = decodeValWk(mt, rawval);
     crdtAssert(RedisModule_ModuleTypeSwapIn(key, val) == REDISMODULE_OK);
 
     RedisModule_FreeString(NULL, keyobj);
@@ -139,9 +76,8 @@ void swapInWk(RedisModuleCtx *ctx, int action, char* _rawkey, char *_rawval, voi
 static void doSwapOutWk(RedisModuleKey *key) {
     CrdtObject *old;
     RedisModuleType *mt = RedisModule_ModuleTypeGetType(key);
-    wholeKeySwapType *wks = lookupWholeKeySwapType(mt);
     crdtAssert(RedisModule_ModuleTypeSwapOut(key, (void**)&old) == REDISMODULE_OK);
-    wks->free_val(old);
+    RedisModule_ModuleTypeFreeValue(mt, old);
 }
 
 void swapOutWk(RedisModuleCtx *ctx, int action, char* _rawkey, char *_rawval, void *pd) {
@@ -176,7 +112,6 @@ int swapAnaWk(RedisModuleCtx *ctx, RedisModuleString *keyobj,
 
     key = RedisModule_OpenKey(ctx, keyobj, REDISMODULE_EVICT|REDISMODULE_OPEN_KEY_NOEXPIRE);
     RedisModuleType *mt = RedisModule_ModuleTypeGetType(key);
-    wholeKeySwapType *wks = lookupWholeKeySwapType(mt);
 
     /* NOTE that rawkey/rawval ownership are moved to rocks, which will be
      * freed when rocksSwapFinished. Also NOTE that if CRDT key expired, we
@@ -184,7 +119,7 @@ int swapAnaWk(RedisModuleCtx *ctx, RedisModuleString *keyobj,
     if (RedisModule_KeyIsExpired(key) &&
             RedisModule_ModuleTypeEvictEvicted(key)) {
         *action = REDISMODULE_SWAP_GET;
-        *rawkey = wks->encode_key(keyobj);
+        *rawkey = encodeKeyWk(mt, keyobj);
         *rawval = NULL;
         *cb = swapInWk;
         RedisModule_RetainString(NULL, keyobj);
@@ -192,7 +127,7 @@ int swapAnaWk(RedisModuleCtx *ctx, RedisModuleString *keyobj,
     } else if (swapaction == REDISMODULE_SWAP_GET &&
             RedisModule_ModuleTypeEvictEvicted(key)) {
         *action = REDISMODULE_SWAP_GET;
-        *rawkey = wks->encode_key(keyobj);
+        *rawkey = encodeKeyWk(mt, keyobj);
         *rawval = NULL;
         *cb = swapInWk;
         RedisModule_RetainString(NULL, keyobj);
@@ -211,15 +146,15 @@ int swapAnaWk(RedisModuleCtx *ctx, RedisModuleString *keyobj,
             *pd = NULL;
         } else {
             *action = REDISMODULE_SWAP_PUT;
-            *rawkey = wks->encode_key(keyobj);
-            *rawval = wks->encode_val(key);
+            *rawkey = encodeKeyWk(mt, keyobj);
+            *rawval = encodeValWk(key);
             *cb = swapOutWk;
             RedisModule_RetainString(NULL, keyobj);
             *pd = keyobj;
         }
     } else if (swapaction == REDISMODULE_SWAP_DEL) {
         *action = REDISMODULE_SWAP_DEL;
-        *rawkey = wks->encode_key(keyobj);
+        *rawkey = encodeKeyWk(mt, keyobj);
         *rawval = NULL;
         *cb = NULL;
         *pd = NULL;
@@ -235,29 +170,44 @@ int swapAnaWk(RedisModuleCtx *ctx, RedisModuleString *keyobj,
     return 0;
 }
 
-int complementWk(void **pdupptr, char* _rawkey, char *_rawval, void *pd) {
-    wholeKeySwapType *wks = pd;
-    sds rawkey = _rawkey, rawval = _rawval;
+int complementWkRaw(void **pdupptr, char* _rawkey, char *_rawval, void *pd) {
+    RedisModuleType *mt = pd;
+    sds rawval = _rawval;
     crdtAssert(pdupptr);
     crdtAssert(*pdupptr == NULL);
-    *pdupptr = wks->decode_val(rawval);
+    *pdupptr = rawval;
+    return 0;
+}
+
+int complementWkObj(void **pdupptr, char* _rawkey, char *_rawval, void *pd) {
+    RedisModuleType *mt = pd;
+    sds rawval = _rawval;
+    crdtAssert(pdupptr);
+    crdtAssert(*pdupptr == NULL);
+    *pdupptr = decodeValWk(mt, rawval);
     return 0;
 }
 
 void *getComplementSwapsWk(RedisModuleCtx *ctx,
-        RedisModuleString *keyobj,
+        RedisModuleString *keyobj, int mode, int *type,
         RedisModuleGetSwapsResult *result,
         RedisModuleComplementObjectFunc *comp, void **pd) {
     RedisModuleKey *key = RedisModule_OpenKey(ctx, keyobj, REDISMODULE_EVICT|REDISMODULE_OPEN_KEY_NOEXPIRE);
     RedisModuleType *mt = RedisModule_ModuleTypeGetType(key);
-    wholeKeySwapType *wks = lookupWholeKeySwapType(mt);
     crdtAssert(RedisModule_ModuleTypeEvictEvicted(key));
 
-    sds rawkey = wks->encode_key(keyobj);
+    sds rawkey = encodeKeyWk(mt, keyobj);
     RedisModule_GetSwapsAppendResult(result, (RedisModuleString*)rawkey, NULL, NULL);
 
-    *comp = complementWk;
-    *pd = wks;
+    if (mode == REDISMODULE_COMP_MODE_RDB) {
+        *type = REDISMODULE_COMP_TYPE_RAW;
+        *comp = complementWkRaw;
+        *pd = mt;
+    } else {
+        *type = REDISMODULE_COMP_TYPE_OBJ;
+        *comp = complementWkObj;
+        *pd = mt;
+    }
 
     RedisModule_CloseKey(key);
     return NULL;
