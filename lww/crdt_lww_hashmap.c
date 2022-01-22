@@ -239,9 +239,40 @@ void freeCrdtLWWHash(void *obj) {
     setCrdtLWWHashLastVc(crdtHash, newVectorClock(0));
     RedisModule_Free(crdtHash);
 }
+
+#define MEM_USAGE_SAMPLES           5
+
 size_t crdtLWWHashMemUsageFunc(const void *value) {
-    return 1;
+    CRDT_LWW_Hash* crdtHash;
+    dict *d;
+    dictIterator *di;
+    dictEntry *de;
+    size_t asize = 0, elesize = 0;
+    int samples = 0, sample_size = MEM_USAGE_SAMPLES;
+    sds field;
+    void *val;
+
+    crdtHash = retrieveCrdtLWWHash((void*)value);
+    if (crdtHash == NULL) return 1;
+    d = crdtHash->map;
+
+    asize = sizeof(CRDT_LWW_Hash) + sizeof(dict) +
+        (sizeof(struct dictEntry*)*dictSlots(crdtHash->map));
+
+    di = dictGetIterator(d);
+    while((de = dictNext(di)) != NULL && samples < sample_size) {
+        field = dictGetKey(de);
+        val = dictGetVal(de);
+        elesize += sdsAllocSize(field) + crdtRegisterMemUsageFunc(val);
+        elesize += sizeof(struct dictEntry);
+        samples++;
+    }
+    dictReleaseIterator(di);
+    if (samples) asize += (double)elesize/samples*dictSize(d);
+
+    return asize;
 }
+
 void crdtLWWHashDigestFunc(RedisModuleDigest *md, void *value) {
     //todo: currently do nothing when digest
 }

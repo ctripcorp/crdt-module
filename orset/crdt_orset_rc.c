@@ -435,8 +435,31 @@ void *RdbLoadCrdtRc(RedisModuleIO *rdb, int encver) {
 void AofRewriteCrdtRc(RedisModuleIO *aof, RedisModuleString *key, void *value) {
 
 }
+
 size_t crdtRcMemUsageFunc(const void *value) {
-    return 1;
+    size_t asize = 0;
+    if (value == NULL) return 1;
+    crdt_orset_rc* rc = retrieve_crdt_rc((void*)value);
+    crdt_element el = get_element_from_rc(rc);
+    int len = get_element_len(el);
+    for(int i = 0; i < len; i++) {
+        crdt_tag* tag = element_get_tag_by_index(el, i);
+        switch (get_tag_type(tag)) {
+        case TAG_A:
+            asize += sizeof(crdt_tag_add_counter);
+            break;
+        case TAG_B:
+            asize += sizeof(crdt_tag_base);
+            break;
+        case TAG_BA:
+            asize += sizeof(crdt_tag_base_and_add_counter);
+            break;
+        case TAG_BAD:
+            asize += sizeof(crdt_tag_base_and_add_del_counter);
+            break;
+        }
+    }
+    return asize;
 }
 
 

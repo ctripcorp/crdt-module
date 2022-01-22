@@ -52,3 +52,4 @@ venv/
 .DS_Store
  tests/.cache/
 cmake-build-debug/
+tags

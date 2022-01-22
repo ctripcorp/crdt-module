@@ -344,9 +344,8 @@ void crdtLWWRegisterDigestFunc(RedisModuleDigest *md, void *value) {
 }
 
 size_t crdtLWWRegisterMemUsageFunc(const void *value) {
-    //to do
     CRDT_LWW_Register *r = retrieveCrdtLWWRegister((void*)value);
-    return sdslen(getCrdtLWWRegisterValue(r)) +  sizeof(int) + sizeof(long long) + ((int)get_len(getCrdtLWWRegisterVectorClock(r))) * sizeof(VectorClockUnit);
+    return sizeof(CRDT_LWW_Register) + sdsAllocSize(getCrdtLWWRegisterValue(r)) + ((int)get_len(getCrdtLWWRegisterVectorClock(r))) * sizeof(VectorClockUnit);
 }
 
 void AofRewriteCrdtLWWRegister(RedisModuleIO *aof, RedisModuleString *key, void *value) {
