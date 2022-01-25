@@ -259,7 +259,7 @@ size_t crdtLWWHashMemUsageFunc(const void *value) {
     asize = sizeof(CRDT_LWW_Hash) + sizeof(dict) +
         (sizeof(struct dictEntry*)*dictSlots(crdtHash->map));
 
-    di = dictGetIterator(d);
+    di = dictGetSafeIterator(d);
     while((de = dictNext(di)) != NULL && samples < sample_size) {
         field = dictGetKey(de);
         val = dictGetVal(de);

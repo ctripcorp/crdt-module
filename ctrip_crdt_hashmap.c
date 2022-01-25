@@ -1560,7 +1560,7 @@ CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,lon
     }
     dictReleaseIterator(di);
     if(hash != NULL) {
-        setCrdtHashLastVc(hash, getCrdtHashLastVc(crdtHash));
+        setCrdtHashLastVc(hash, dupVectorClock(getCrdtHashLastVc(crdtHash)));
     }
     return (CrdtObject**)result;
 }
