@@ -240,19 +240,16 @@ void freeCrdtLWWHash(void *obj) {
     RedisModule_Free(crdtHash);
 }
 
-#define MEM_USAGE_SAMPLES           5
-
-size_t crdtLWWHashMemUsageFunc(const void *value) {
-    CRDT_LWW_Hash* crdtHash;
+size_t crdtLWWHashMemUsage(const void *value, int sample_size) {
     dict *d;
     dictIterator *di;
     dictEntry *de;
     size_t asize = 0, elesize = 0;
-    int samples = 0, sample_size = MEM_USAGE_SAMPLES;
+    int samples = 0;
     sds field;
     void *val;
+    CRDT_LWW_Hash *crdtHash = retrieveCrdtLWWHash((void*)value);
 
-    crdtHash = retrieveCrdtLWWHash((void*)value);
     if (crdtHash == NULL) return 1;
     d = crdtHash->map;
 
@@ -271,6 +268,10 @@ size_t crdtLWWHashMemUsageFunc(const void *value) {
     if (samples) asize += (double)elesize/samples*dictSize(d);
 
     return asize;
+}
+
+size_t crdtLWWHashMemUsageFunc(const void *value) {
+    return crdtLWWHashMemUsage(value, 5);
 }
 
 void crdtLWWHashDigestFunc(RedisModuleDigest *md, void *value) {

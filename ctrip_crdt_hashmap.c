@@ -1128,6 +1128,10 @@ void AofRewriteCrdtHash(RedisModuleIO *aof, RedisModuleString *key, void *value)
     AofRewriteCrdtLWWHash(aof, key, value);
 }
 
+size_t crdtHashMemUsage(const void *value, int sample_size) {
+    return crdtLWWHashMemUsage(value, sample_size);
+}
+
 size_t crdtHashMemUsageFunc(const void *value) {
     return crdtLWWHashMemUsageFunc(value);
 }
@@ -1504,9 +1508,11 @@ int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value) {
 }
 void freeHashFilter(CrdtObject** filters, int num) {
     for(int i = 0; i < num; i++) {
-        freeCrdtHash(filters[i]);
+        CRDT_Hash *filter = (CRDT_Hash*)filters[i];
+        if (filter && filter->map->type == &crdtHashFileterDictType) {
+            freeCrdtHash(filter);
+        }
     }
-    RedisModule_Free(filters);
 }
 void freeHashTombstoneFilter(CrdtObject** filters, int num) {
     for(int i = 0; i < num; i++) {
@@ -1515,13 +1521,31 @@ void freeHashTombstoneFilter(CrdtObject** filters, int num) {
     RedisModule_Free(filters);
 }
 
+#define CRDT_FILTER_MAX_SPLITS 256
+static void* CrdtObjectPtrPool[CRDT_FILTER_MAX_SPLITS]; /* asumming there won't be any key exceeds 256*500mb */
+
+#define CRDT_SMALL_HASH_ELE_MAX 256
 CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,long long maxsize,int* num) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(common);
-    CRDT_Hash** result = NULL;
-    dictIterator *di = dictGetIterator(crdtHash->map);
+    CrdtObject** result = (CrdtObject**)CrdtObjectPtrPool;
+    dictIterator *di;
     dictEntry *de;
     CRDT_Hash* hash = NULL;
     int current_memory = 0;
+
+    if (!not_less_than_vc(min_vc, getCrdtHashLastVc(crdtHash))) {
+        return result;
+    }
+
+    /* if small hash are not totally filted, we skip filt and split to reduce
+     * copy-on-write (filter and split small hash wont help much) */
+    if (dictSize(crdtHash->map) < CRDT_SMALL_HASH_ELE_MAX && 
+            crdtHashMemUsage(crdtHash, CRDT_SMALL_HASH_ELE_MAX) < maxsize) {
+        result[(*num)++] = common;
+        return result;
+    }
+
+    di = dictGetIterator(crdtHash->map);
     while((de = dictNext(di)) != NULL) {
         sds field = dictGetKey(de);
         CRDT_Register *crdtRegister = dictGetVal(de);
@@ -1544,13 +1568,7 @@ CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,lon
                 hash = createCrdtHash();
                 current_memory = 0;
                 hash->map->type = &crdtHashFileterDictType;
-                (*num)++;
-                if(result) {
-                    result = RedisModule_Realloc(result, sizeof(CRDT_Hash*) * (*num));
-                }else {
-                    result = RedisModule_Alloc(sizeof(CRDT_Hash*));
-                }
-                result[(*num)-1] = hash;
+                result[(*num)++] = (CrdtObject*)hash;
             }
             current_memory += sdslen(field) + sdslen(getCrdtRegisterSds(filted[0]));
             dictAdd(hash->map, field, filted[0]);
@@ -1562,7 +1580,8 @@ CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,lon
     if(hash != NULL) {
         setCrdtHashLastVc(hash, dupVectorClock(getCrdtHashLastVc(crdtHash)));
     }
-    return (CrdtObject**)result;
+    crdtAssert(*num < CRDT_FILTER_MAX_SPLITS);
+    return result;
 }
 
 

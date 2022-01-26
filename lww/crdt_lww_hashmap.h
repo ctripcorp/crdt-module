@@ -32,6 +32,7 @@ int crdtLWWHashClean(CrdtObject* current, CrdtTombstone* tombstone);
 void *sioLoadCrdtLWWHash(sio *io, int version, int encver);
 void sioSaveCrdtLWWHash(sio *io, void *value);
 void AofRewriteCrdtLWWHash(RedisModuleIO *aof, RedisModuleString *key, void *value);
+size_t crdtLWWHashMemUsage(const void *crdtHash, int sample_size);
 size_t crdtLWWHashMemUsageFunc(const void *value);
 void crdtLWWHashDigestFunc(RedisModuleDigest *md, void *value);
 void *sioLoadCrdtLWWHashTombstone(sio *io, int version, int encver);
