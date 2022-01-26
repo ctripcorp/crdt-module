@@ -49,6 +49,7 @@ int addSetDict(CRDT_Set* set, sds field, CrdtMeta* meta);
 int updateSetDict(CRDT_Set* set, dictEntry* de, CrdtMeta* meta);
 size_t getSetSize(CRDT_Set* data);
 dictIterator* getSetIterator(CRDT_Set* data);
+dictIterator* getSetSafeIterator(CRDT_Set* data);
 int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value);
 int setValueIterPurge(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta);
 int appendSet(CRDT_Set* targe, CRDT_Set* src);

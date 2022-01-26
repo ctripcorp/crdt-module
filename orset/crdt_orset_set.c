@@ -289,6 +289,11 @@ dict* getSetDict(CRDT_Set* data) {
 
 dictIterator* getSetIterator(CRDT_Set* data) {
     dict* map = getSetDict(data);
+    return dictGetIterator(map);
+}
+
+dictIterator* getSetSafeIterator(CRDT_Set* data) {
+    dict* map = getSetDict(data);
     return dictGetSafeIterator(map);
 }
 

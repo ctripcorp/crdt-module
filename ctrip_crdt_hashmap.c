@@ -1374,7 +1374,7 @@ int sioLoadCrdtBasicHash(sio *io, int encver, void *data) {
 }
 void sioSaveDict(sio *io, dict* map, sioRedisModuleTypeSaveFunc func) {
     
-    dictIterator *di = dictGetSafeIterator(map);
+    dictIterator *di = dictGetIterator(map);
     dictEntry *de;
     sioSaveUnsigned(io, dictSize(map));
     while((de = dictNext(di)) != NULL) {
@@ -1518,7 +1518,7 @@ void freeHashTombstoneFilter(CrdtObject** filters, int num) {
 CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,long long maxsize,int* num) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(common);
     CRDT_Hash** result = NULL;
-    dictIterator *di = dictGetSafeIterator(crdtHash->map);
+    dictIterator *di = dictGetIterator(crdtHash->map);
     dictEntry *de;
     CRDT_Hash* hash = NULL;
     int current_memory = 0;
@@ -1569,7 +1569,7 @@ CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,lon
 CrdtObject** crdtHashFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* num) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(common);
     CRDT_Hash** result = NULL;
-    dictIterator *di = dictGetSafeIterator(crdtHash->map);
+    dictIterator *di = dictGetIterator(crdtHash->map);
     dictEntry *de;
     CRDT_Hash* hash = NULL;
     int current_memory = 0;
@@ -1707,7 +1707,7 @@ CrdtObject** crdtHashTombstoneFilter2(CrdtTombstone* common, int gid, VectorCloc
         return NULL;
     }
     CRDT_HashTombstone** result = NULL;
-    dictIterator *di = dictGetSafeIterator(target->map);
+    dictIterator *di = dictGetIterator(target->map);
     dictEntry *de;
     CRDT_HashTombstone* tombstone = NULL;
     int current_memory = 0;
@@ -1776,7 +1776,7 @@ CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long l
     long long vcu = get_logic_clock(unit);
     if(vcu < logic_time) return NULL;
     CRDT_HashTombstone** result = NULL;
-    dictIterator *di = dictGetSafeIterator(target->map);
+    dictIterator *di = dictGetIterator(target->map);
     dictEntry *de;
     CRDT_HashTombstone* tombstone = NULL;
     int current_memory = 0;

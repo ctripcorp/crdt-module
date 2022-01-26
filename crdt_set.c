@@ -247,7 +247,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
         for (j = 0; j < setnum; j++) {
             if (!target_sets[j]) continue; /* non existing keys are like empty sets */
 
-            di = getSetIterator(target_sets[j]);
+            di = getSetSafeIterator(target_sets[j]);
             while((de = dictNext(di)) != NULL) {
                 ele = dictGetKey(de);
                 if (setTypeAdd(dstset,ele)) cardinality++;
@@ -263,7 +263,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
          *
          * This way we perform at max N*M operations, where N is the size of
          * the first set, and M the number of sets. */
-        di = getSetIterator(target_sets[0]);
+        di = getSetSafeIterator(target_sets[0]);
         while((de = dictNext(di)) != NULL) {
             ele = dictGetKey(de);
             for (j = 1; j < setnum; j++) {
@@ -289,7 +289,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
         for (j = 0; j < setnum; j++) {
             if (!target_sets[j]) continue; /* non existing keys are like empty sets */
 
-            di = getSetIterator(target_sets[j]);
+            di = getSetSafeIterator(target_sets[j]);
             while((de = dictNext(di)) != NULL) {
                 ele = dictGetKey(de);
                 if (j == 0) {
@@ -308,7 +308,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
     /* Output the content of the resulting set, if not in STORE mode */
     if (!dstkey) {
         RedisModule_ReplyWithArray(ctx, cardinality);
-        di = getSetIterator(dstset);
+        di = getSetSafeIterator(dstset);
         while((de = dictNext(di)) != NULL) {
             ele = dictGetKey(de);
             RedisModule_ReplyWithStringBuffer(ctx, ele, sdslen(ele));
@@ -446,7 +446,7 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         }
         updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
     } else {
-        dictIterator* di = getSetIterator(current);
+        dictIterator* di = getSetSafeIterator(current);
         int i = 0;
         dictEntry* de = NULL;
         while((de = dictNext(di)) != NULL) {

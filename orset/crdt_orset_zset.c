@@ -400,7 +400,7 @@ void *RdbLoadCrdtSS(RedisModuleIO *rdb, int encver) {
 
 CrdtObject** crdtSSFilter2(CrdtObject* data, int gid, VectorClock min_vc, long long maxsize, int* num) {
     crdt_zset* zset = retrieve_crdt_zset(data);
-    dictIterator *di = dictGetSafeIterator(zset->dict);
+    dictIterator *di = dictGetIterator(zset->dict);
     dictEntry *de;
     crdt_zset** result = NULL;
     crdt_zset* current = NULL;
@@ -451,7 +451,7 @@ CrdtObject** crdtSSFilter2(CrdtObject* data, int gid, VectorClock min_vc, long l
 
 CrdtObject** crdtSSFilter(CrdtObject* data, int gid, long long logic_time, long long maxsize, int* num) {
     crdt_zset* zset = retrieve_crdt_zset(data);
-    dictIterator *di = dictGetSafeIterator(zset->dict);
+    dictIterator *di = dictGetIterator(zset->dict);
     dictEntry *de;
     crdt_zset** result = NULL;
     crdt_zset* current = NULL;
@@ -561,7 +561,7 @@ void *RdbLoadCrdtSST(RedisModuleIO *rdb, int encver) {
 
 CrdtTombstone** crdtSSTFilter2(CrdtTombstone* target, int gid, VectorClock min_vc, long long maxsize,int* num) {
     crdt_zset_tombstone* zset_tombstone = retrieve_crdt_zset_tombstone(target);
-    dictIterator *di = dictGetSafeIterator(zset_tombstone->dict);
+    dictIterator *di = dictGetIterator(zset_tombstone->dict);
     dictEntry *de;
     crdt_zset_tombstone** result = NULL;
     crdt_zset_tombstone* current = NULL;
@@ -627,7 +627,7 @@ CrdtTombstone** crdtSSTFilter2(CrdtTombstone* target, int gid, VectorClock min_v
 
 CrdtTombstone** crdtSSTFilter(CrdtTombstone* target, int gid, long long logic_time, long long maxsize,int* num) {
     crdt_zset_tombstone* zset_tombstone = retrieve_crdt_zset_tombstone(target);
-    dictIterator *di = dictGetSafeIterator(zset_tombstone->dict);
+    dictIterator *di = dictGetIterator(zset_tombstone->dict);
     dictEntry *de;
     crdt_zset_tombstone** result = NULL;
     crdt_zset_tombstone* current = NULL;
