@@ -593,8 +593,6 @@ VectorClock clone_rt_vc(void* rt) {
 }
 
 void freeRegisterFilter(CrdtObject** filters, int num) {
-    RedisModule_Free(filters);
 }
 void freeRegisterTombstoneFilter(CrdtObject** filters, int num) {
-    RedisModule_Free(filters);
 }

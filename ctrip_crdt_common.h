@@ -171,5 +171,4 @@ long long get_vcu_by_meta(CrdtMeta *data);
 
 // int isPartialOrderDeleted(RedisModuleKey *key, VectorClock *vclock);
 
-
 #endif //REDIS_CTRIP_CRDT_COMMON_H

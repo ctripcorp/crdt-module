@@ -1,5 +1,8 @@
 #include "crdt_lww_register.h"
 
+#define LWW_REGISTER_CRDT_OBJECT_POOL_MAX 4
+static void* LWWRegisterCrdtObjectPtrPool[LWW_REGISTER_CRDT_OBJECT_POOL_MAX];
+
 /**
  *  LWW Register Get Set Function
  */ 
@@ -284,7 +287,7 @@ CRDT_LWW_Register** filterLWWRegister(CRDT_LWW_Register* target, int gid, long l
     long long vcu = get_logic_clock(unit);
     if(vcu > logic_time) {
         *length = 1;
-        CRDT_LWW_Register** re = RedisModule_Alloc(sizeof(CRDT_LWW_Register*));
+        CRDT_LWW_Register** re = (CRDT_LWW_Register**)LWWRegisterCrdtObjectPtrPool;
         re[0] = reg;
         return re;
     }  
@@ -302,9 +305,8 @@ CrdtObject** crdtRegisterFilter2(CrdtObject* target, int gid, VectorClock min_vc
         return NULL;
     }
     *length = 1;
-    CRDT_LWW_Register** re = RedisModule_Alloc(sizeof(CRDT_LWW_Register*));
-    re[0] = reg;
-    return (CrdtObject** )re;
+    LWWRegisterCrdtObjectPtrPool[0] = reg;
+    return (CrdtObject**)LWWRegisterCrdtObjectPtrPool;
 }
 
 sds crdtLWWRegisterInfo(CRDT_LWW_Register *crdtRegister) {
@@ -388,7 +390,7 @@ CrdtObject** crdtRegisterTombstoneFilter2(CrdtTombstone* target, int gid, Vector
         return NULL;
     }
     *length = 1;
-    CRDT_LWW_RegisterTombstone** r = RedisModule_Alloc(sizeof(CRDT_LWW_RegisterTombstone*));
+    CRDT_LWW_RegisterTombstone** r =(CRDT_LWW_RegisterTombstone**)LWWRegisterCrdtObjectPtrPool;
     r[0] = t;
     return (CRDT_RegisterTombstone**)r;
 }
@@ -406,7 +408,7 @@ CRDT_RegisterTombstone** filterLWWRegisterTombstone(CRDT_RegisterTombstone* targ
         return NULL;
     }
     *length = 1;
-    CRDT_LWW_RegisterTombstone** r = RedisModule_Alloc(sizeof(CRDT_LWW_RegisterTombstone*));
+    CRDT_LWW_RegisterTombstone** r = (CRDT_LWW_RegisterTombstone**)LWWRegisterCrdtObjectPtrPool;
     r[0] = t;
     return (CRDT_RegisterTombstone**)r;
 }

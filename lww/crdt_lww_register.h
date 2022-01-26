@@ -4,6 +4,7 @@
 #include "../include/rmutil/sds.h"
 #include "../crdt_util.h"
 #include "../ctrip_stream_io.h"
+#include "../ctrip_crdt_common.h"
 #define NDEBUG
 #include <assert.h>
 

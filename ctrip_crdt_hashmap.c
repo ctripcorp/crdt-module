@@ -37,6 +37,9 @@
 #include "lww/crdt_lww_hashmap.h"
 #include "ctrip_swap.h"
 
+#define HASH_CRDT_OBJECT_POOL_MAX 256
+static void* HashCrdtObjectPtrPool[HASH_CRDT_OBJECT_POOL_MAX]; /* asumming there won't be any key exceeds 256*500mb */
+
 dictType crdtHashFileterDictType = {
         dictSdsHash,                /* hash function */
         NULL,                       /* key dup */
@@ -1516,18 +1519,17 @@ void freeHashFilter(CrdtObject** filters, int num) {
 }
 void freeHashTombstoneFilter(CrdtObject** filters, int num) {
     for(int i = 0; i < num; i++) {
-        freeCrdtHashTombstone(filters[i]);
+        CRDT_HashTombstone *filter = (CRDT_HashTombstone*)filters[i];
+        if (filter && filter->map->type == &crdtHashFileterDictType) {
+            freeCrdtHashTombstone(filters[i]);
+        }
     }
-    RedisModule_Free(filters);
 }
-
-#define CRDT_FILTER_MAX_SPLITS 256
-static void* CrdtObjectPtrPool[CRDT_FILTER_MAX_SPLITS]; /* asumming there won't be any key exceeds 256*500mb */
 
 #define CRDT_SMALL_HASH_ELE_MAX 256
 CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,long long maxsize,int* num) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(common);
-    CrdtObject** result = (CrdtObject**)CrdtObjectPtrPool;
+    CrdtObject** result = (CrdtObject**)HashCrdtObjectPtrPool;
     dictIterator *di;
     dictEntry *de;
     CRDT_Hash* hash = NULL;
@@ -1580,14 +1582,14 @@ CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,lon
     if(hash != NULL) {
         setCrdtHashLastVc(hash, dupVectorClock(getCrdtHashLastVc(crdtHash)));
     }
-    crdtAssert(*num < CRDT_FILTER_MAX_SPLITS);
+    crdtAssert(*num < HASH_CRDT_OBJECT_POOL_MAX);
     return result;
 }
 
 
 CrdtObject** crdtHashFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* num) {
     CRDT_Hash* crdtHash = retrieveCrdtHash(common);
-    CRDT_Hash** result = NULL;
+    CRDT_Hash** result = (CRDT_Hash**)HashCrdtObjectPtrPool;
     dictIterator *di = dictGetIterator(crdtHash->map);
     dictEntry *de;
     CRDT_Hash* hash = NULL;
@@ -1614,13 +1616,7 @@ CrdtObject** crdtHashFilter(CrdtObject* common, int gid, long long logic_time, l
                 hash = createCrdtHash();
                 current_memory = 0;
                 hash->map->type = &crdtHashFileterDictType;
-                (*num)++;
-                if(result) {
-                    result = RedisModule_Realloc(result, sizeof(CRDT_Hash*) * (*num));
-                }else {
-                    result = RedisModule_Alloc(sizeof(CRDT_Hash*));
-                }
-                result[(*num)-1] = hash;
+                result[(*num)++] = hash;
             }
             current_memory += sdslen(field) + sdslen(getCrdtRegisterSds(filted[0]));
             dictAdd(hash->map, field, filted[0]);
@@ -1725,7 +1721,7 @@ CrdtObject** crdtHashTombstoneFilter2(CrdtTombstone* common, int gid, VectorCloc
     if(!not_less_than_vc(min_vc, getCrdtHashTombstoneLastVc(target))) {
         return NULL;
     }
-    CRDT_HashTombstone** result = NULL;
+    CRDT_HashTombstone** result = (CRDT_HashTombstone**)HashCrdtObjectPtrPool;
     dictIterator *di = dictGetIterator(target->map);
     dictEntry *de;
     CRDT_HashTombstone* tombstone = NULL;
@@ -1751,13 +1747,7 @@ CrdtObject** crdtHashTombstoneFilter2(CrdtTombstone* common, int gid, VectorCloc
                 tombstone = createCrdtHashFilterTombstone((CRDT_HashTombstone*)target);
                 current_memory = 0;
                 tombstone->map->type = &crdtHashFileterDictType;
-                (*num)++;
-                if(result) {
-                    result = RedisModule_Realloc(result, sizeof(CRDT_HashTombstone*) * (*num));
-                }else {
-                    result = RedisModule_Alloc(sizeof(CRDT_HashTombstone*));
-                }
-                result[(*num)-1] = tombstone;
+                result[(*num)++] = tombstone;
             }
             current_memory += sdslen(field) ;
             dictAdd(tombstone->map, field, filted[0]);
@@ -1772,13 +1762,7 @@ CrdtObject** crdtHashTombstoneFilter2(CrdtTombstone* common, int gid, VectorCloc
         } else {
             tombstone = createCrdtHashFilterTombstone((CRDT_HashTombstone*)target);
             tombstone->map->type = &crdtHashFileterDictType;
-            (*num)++;
-            if(result) {
-                result = RedisModule_Realloc(result, sizeof(CRDT_HashTombstone*) * (*num));
-            }else {
-                result = RedisModule_Alloc(sizeof(CRDT_HashTombstone*));
-            }
-            result[(*num)-1] = tombstone;
+            result[(*num)++] = tombstone;
         }
         
     }
@@ -1794,7 +1778,7 @@ CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long l
     if(isNullVectorClockUnit(unit)) return NULL;
     long long vcu = get_logic_clock(unit);
     if(vcu < logic_time) return NULL;
-    CRDT_HashTombstone** result = NULL;
+    CRDT_HashTombstone** result = (CRDT_HashTombstone**)HashCrdtObjectPtrPool;
     dictIterator *di = dictGetIterator(target->map);
     dictEntry *de;
     CRDT_HashTombstone* tombstone = NULL;
@@ -1820,13 +1804,7 @@ CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long l
                 tombstone = createCrdtHashFilterTombstone((CRDT_HashTombstone*)target);
                 current_memory = 0;
                 tombstone->map->type = &crdtHashFileterDictType;
-                (*num)++;
-                if(result) {
-                    result = RedisModule_Realloc(result, sizeof(CRDT_HashTombstone*) * (*num));
-                }else {
-                    result = RedisModule_Alloc(sizeof(CRDT_HashTombstone*));
-                }
-                result[(*num)-1] = tombstone;
+                result[(*num)++] = tombstone;
             }
             current_memory += sdslen(field) ;
             dictAdd(tombstone->map, field, filted[0]);
@@ -1841,13 +1819,7 @@ CrdtObject** crdtHashTombstoneFilter(CrdtTombstone* common, int gid, long long l
         } else {
             tombstone = createCrdtHashFilterTombstone((CRDT_HashTombstone*)target);
             tombstone->map->type = &crdtHashFileterDictType;
-            (*num)++;
-            if(result) {
-                result = RedisModule_Realloc(result, sizeof(CRDT_HashTombstone*) * (*num));
-            }else {
-                result = RedisModule_Alloc(sizeof(CRDT_HashTombstone*));
-            }
-            result[(*num)-1] = tombstone;
+            result[(*num)++] = tombstone;
         }
         
     }

@@ -1,5 +1,7 @@
 #include "crdt_orset_rc.h"
 
+#define RC_CRDT_OBJECT_POOL_MAX 4
+static void* RcCrdtObjectPtrPool[RC_CRDT_OBJECT_POOL_MAX];
 
 int rcStartGc() {
     rc_gc_stats = 1;
@@ -191,7 +193,7 @@ CrdtObject** crdtRcFilter2(CrdtObject* target, int gid, VectorClock min_vc, long
         return NULL;
     }
     *length = 1;
-    CrdtObject** re = RedisModule_Alloc(sizeof(crdt_orset_rc*));
+    CrdtObject** re = (CrdtObject**)RcCrdtObjectPtrPool;
     re[0] = target;
     return re;
 }
@@ -208,13 +210,12 @@ CrdtObject** crdtRcFilter(CrdtObject* target, int gid, long long logic_time, lon
         return NULL;
     }
     *length = 1;
-    CrdtObject** re = RedisModule_Alloc(sizeof(crdt_orset_rc*));
+    CrdtObject** re = (CrdtObject**)RcCrdtObjectPtrPool;
     re[0] = target;
     return re;
 }
 
 void freeRcFilter(CrdtObject** filters, int num) {
-    RedisModule_Free(filters);
 }
 
 
@@ -437,28 +438,10 @@ void AofRewriteCrdtRc(RedisModuleIO *aof, RedisModuleString *key, void *value) {
 }
 
 size_t crdtRcMemUsageFunc(const void *value) {
-    size_t asize = 0;
     if (value == NULL) return 1;
     crdt_orset_rc* rc = retrieve_crdt_rc((void*)value);
     crdt_element el = get_element_from_rc(rc);
-    int len = get_element_len(el);
-    for(int i = 0; i < len; i++) {
-        crdt_tag* tag = element_get_tag_by_index(el, i);
-        switch (get_tag_type(tag)) {
-        case TAG_A:
-            asize += sizeof(crdt_tag_add_counter);
-            break;
-        case TAG_B:
-            asize += sizeof(crdt_tag_base);
-            break;
-        case TAG_BA:
-            asize += sizeof(crdt_tag_base_and_add_counter);
-            break;
-        case TAG_BAD:
-            asize += sizeof(crdt_tag_base_and_add_del_counter);
-            break;
-        }
-    }
+    size_t asize = get_crdt_element_memory(el);
     return asize;
 }
 
@@ -555,7 +538,7 @@ CrdtTombstone** crdtRcTombstoneFilter2(CrdtTombstone* target, int gid, VectorClo
     }
 
     *length = 1;
-    CrdtTombstone** re = RedisModule_Alloc(sizeof(crdt_rc_tombstone*));
+    CrdtTombstone** re = (CrdtTombstone**)RcCrdtObjectPtrPool;
     re[0] = (CrdtTombstone*)rct;
     return re;
 }
@@ -574,14 +557,13 @@ CrdtTombstone** crdtRcTombstoneFilter(CrdtTombstone* target, int gid, long long 
     }
 
     *length = 1;
-    CrdtTombstone** re = RedisModule_Alloc(sizeof(crdt_rc_tombstone*));
+    CrdtTombstone** re = (CrdtTombstone**)RcCrdtObjectPtrPool;
     re[0] = (CrdtTombstone*)rct;
     return re;
 }
 
 
 void freeCrdtRcTombstoneFilter(CrdtTombstone** filters, int num) {
-    RedisModule_Free(filters);
 }
 
 CrdtTombstone* crdtRcTombstoneMerge(CrdtTombstone* currentVal, CrdtTombstone* value) {
