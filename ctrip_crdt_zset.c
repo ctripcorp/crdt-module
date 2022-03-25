@@ -875,13 +875,13 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
         if(replyed) return CRDT_ERROR;
-        return RedisModule_ReplyWithNull(ctx);
+        return RedisModule_ReplyWithArray(ctx, 0);
     }
     CRDT_SS* current = RedisModule_ModuleTypeGetValue(moduleKey);
     zskiplistNode* ln = zslInRange(current, &range, reverse);
     if(ln == NULL) {
         if(moduleKey) RedisModule_CloseKey(moduleKey);
-        return RedisModule_ReplyWithNull(ctx);
+        return RedisModule_ReplyWithArray(ctx, 0);
     }
     while (ln && offset--) {
         if (reverse) {
@@ -950,7 +950,7 @@ int zcountCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModuleKey* moduleKey = getRedisModuleKey(ctx, argv[1], CrdtSS, REDISMODULE_READ, &replyed);
     if (moduleKey == NULL) {
         if(replyed) return CRDT_ERROR;
-        return RedisModule_ReplyWithNull(ctx);
+        return RedisModule_ReplyWithLongLong(ctx, 0);
     }
     CRDT_SS* current = RedisModule_ModuleTypeGetValue(moduleKey);
     zskiplistNode *zn = zslInRange(current, &range, 0);
@@ -1016,7 +1016,7 @@ int genericZrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
     if (moduleKey == NULL) {
         zslFreeLexRange(&range);
         if(replyed) return CRDT_ERROR;
-        return RedisModule_ReplyWithNull(ctx);
+        return RedisModule_ReplyWithArray(ctx, 0);
     }
     CRDT_SS* current = getCurrentValue(moduleKey);
     if (current == NULL) {
@@ -1029,7 +1029,7 @@ int genericZrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
     /* No "first" element in the specified interval. */
     if (ln == NULL) {
         // addReply(c, shared.emptymultibulk);
-        RedisModule_ReplyWithNull(ctx);
+        RedisModule_ReplyWithArray(ctx, 0);
         zslFreeLexRange(&range);
         RedisModule_CloseKey(moduleKey);
         return 1;
