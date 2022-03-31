@@ -841,9 +841,18 @@ int initSSTombstoneFromSS(CRDT_SSTombstone* tombstone,CrdtMeta* del_meta, CRDT_S
         if(info) {
             del_counters[index++] = info;
         }
-        tde = dictAddRaw(sst->dict, sdsdup(dictGetKey(de)), NULL);
+        sds dupKey = sdsdup(dictGetKey(de));
+        tde = dictAddRaw(sst->dict, dupKey, NULL);
         // dict_set_element(tde, el);
-        dict_set_element(sst->dict, tde, el);
+        if (tde != NULL) {
+            dict_set_element(sst->dict, tde, el);
+        } else {
+            RedisModule_Debug(CRDT_DEFAULT_LOG_LEVEL, "zset tombstone add field fail");
+            tde = dictFind(sst->dict, dupKey);
+            merge_crdt_element(dict_get_element(tde),el);
+            sdsfree(dupKey);
+        }
+        
         
     }
     dictReleaseIterator(next);
