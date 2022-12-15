@@ -31,9 +31,9 @@
 #define __REDIS_UTIL_H
 
 #include <stdint.h>
-#include "include/redismodule.h"
-#include "include/rmutil/sds.h"
-#include "include/rmutil/util.h"
+#include <redismodule.h>
+#include <rmutil/sds.h>
+#include <rmutil/util.h>
 #include <assert.h>
 #define MAX_LONG_DOUBLE_CHARS 5*1024
 int stringmatchlen(const char *p, int plen, const char *s, int slen, int nocase);

@@ -227,7 +227,7 @@ CRDT_Set* createCrdtSet() {
     setType((CrdtObject*)set , CRDT_DATA);
     setDataType((CrdtObject*)set , CRDT_SET_TYPE);
     dict *map = dictCreate(&crdtSetDictType, NULL);
-    set->dict = map;
+    set->dict = (unsigned long long)map;
     set->lastVc = newVectorClock(0);
     return (CRDT_Set* )set;
 }
@@ -271,7 +271,7 @@ int updateCrdtSetLastVcuByVectorClock(CRDT_Set* data, int gid, VectorClock vc) {
 
 dict* getSetDict(CRDT_Set* data) {
     crdt_orset_set* set = retrieve_crdt_orset_set(data);
-    return (dict*)(set->dict);
+    return (dict*)(unsigned long long)(set->dict);
 }
 
 dictIterator* getSetIterator(CRDT_Set* data) {
@@ -364,7 +364,7 @@ void *RdbLoadCrdtORSETSet(RedisModuleIO *rdb, int version, int encver) {
     CRDT_Set* set = createCrdtSet();
     VectorClock lastvc = rdbLoadVectorClock(rdb, version);
     uint64_t len = RedisModule_LoadUnsigned(rdb);
-    if (len >= UINT64_MAX) return NULL;
+    if (len >= RDB_LENERR) return NULL;
     
     size_t strLength;
     dict* map = getSetDict(set);
@@ -407,12 +407,12 @@ sds crdtSetInfo(void *data) {
     sds vcStr = vectorClockToSds(getCrdtSetLastVc((CRDT_Set*)set));
     result = sdscatprintf(result, "type: orset_set,  last-vc: %s\n",
             vcStr);
-    dictIterator* di = dictGetIterator(set->dict);
+    dictIterator* di = dictGetIterator((dict*)(unsigned long long)set->dict);
     dictEntry* de = NULL;
     int num = 5;
     while((de = dictNext(di)) != NULL && num > 0) {
         sds info = set_element_info(de);
-        result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
+        result = sdscatprintf(result, "  key: %s, %s\n", (sds)dictGetKey(de), info);
         sdsfree(info);
         num--;
     }
@@ -534,9 +534,9 @@ CrdtObject** crdtSetFilter(CrdtObject* t, int gid, long long logic_time, long lo
 
 
 crdt_orset_set* replace_set_value(crdt_orset_set* target, crdt_orset_set* other) {
-    dict* d = target->dict;
+    dict* d = (dict*)(unsigned long long)target->dict;
     target->dict = other->dict;
-    other->dict = d;
+    other->dict = (unsigned long long)d;
     
     VectorClock vc = target->lastVc;
     target->lastVc = other->lastVc;
@@ -577,14 +577,14 @@ CRDT_SetTombstone* createCrdtSetTombstone() {
     setType((CrdtObject*)tombstone , CRDT_TOMBSTONE);
     setDataType((CrdtObject*)tombstone , CRDT_SET_TYPE);
     dict *map = dictCreate(&crdtSetDictType, NULL);
-    tombstone->dict = map;
+    tombstone->dict = (unsigned long long)map;
     tombstone->lastVc = newVectorClock(0);
     tombstone->maxDelvectorClock = newVectorClock(0);
     return (CRDT_SetTombstone*)tombstone;
 }
 
 dict* getSetTombstoneDict(crdt_orset_set_tombstone* tombstone) {
-    return (dict*)(tombstone->dict);
+    return (dict*)(unsigned long long)(tombstone->dict);
 }
 
 VectorClock getCrdtSetTombstoneMaxDelVc(CRDT_SetTombstone* t) {
@@ -694,7 +694,7 @@ void *RdbLoadCrdtORSETSetTombstone(RedisModuleIO *rdb, int version, int encver) 
     VectorClock maxdel = rdbLoadVectorClock(rdb, version);
     
     uint64_t len = RedisModule_LoadUnsigned(rdb);
-    if (len >= UINT64_MAX) {
+    if (len >= RDB_LENERR) {
         freeCrdtSetTombstone(tom);
         return NULL;
     }
@@ -911,12 +911,12 @@ sds crdtSetTombstoneInfo(void *data) {
             vcStr, maxVcStr);
     sdsfree(vcStr);
     sdsfree(maxVcStr);
-    dictIterator* di = dictGetIterator(tom->dict);
+    dictIterator* di = dictGetIterator((dict*)(unsigned long long)tom->dict);
     dictEntry* de;
     int num = 5;
     while((de = dictNext(di)) != NULL && num > 0) {
         sds info = set_element_info(de);
-        result = sdscatprintf(result, "  key: %s, vc: %s\n", dictGetKey(de), info);
+        result = sdscatprintf(result, "  key: %s, vc: %s\n", (sds)dictGetKey(de), info);
         sdsfree(info);
         num--;
     }
@@ -1096,8 +1096,8 @@ int setDel(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta) {
         freeVectorClock(tom->lastVc);
     }
     tom->lastVc = dupVectorClock(vc);
-    dictRelease(tom->dict);
-    tom->dict = dictCreate(&crdtSetDictType, NULL);
+    dictRelease((dict*)(unsigned long long)tom->dict);
+    tom->dict = (unsigned long long)dictCreate(&crdtSetDictType, NULL);
     return 1;
 }
 
@@ -1143,9 +1143,9 @@ int setTryDel(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta) {
 }
 
 crdt_orset_set_tombstone* replace_set_tombstone_value(crdt_orset_set_tombstone* target, crdt_orset_set_tombstone* other) {
-    dict* d = target->dict;
+    dict* d = (dict*)(unsigned long long)target->dict;
     target->dict = other->dict;
-    other->dict = d;
+    other->dict = (unsigned long long)d;
     
     VectorClock vc = target->lastVc;
     target->lastVc = other->lastVc;
@@ -1212,14 +1212,14 @@ int isNullSetTombstone(CRDT_SetTombstone* t) {
 
 void setTombstoneTryResizeDict(CRDT_SetTombstone* tombstone) {
     crdt_orset_set_tombstone* st =  retrieve_set_tombstone(tombstone);
-    if(htNeedsResize(st->dict)) {
-        dictResize(st->dict);
+    if(htNeedsResize((dict*)(long long)st->dict)) {
+        dictResize((dict*)(long long)st->dict);
     }
 }
 
 void setTryResizeDict(CRDT_Set* current) {
     crdt_orset_set* s = retrieve_crdt_orset_set(current);
-    if(htNeedsResize(s->dict)) {
-        dictResize(s->dict);
+    if(htNeedsResize((dict*)(long long)(s->dict))) {
+        dictResize((dict*)(long long)s->dict);
     }
 }

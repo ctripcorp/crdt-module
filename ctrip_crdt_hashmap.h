@@ -35,10 +35,10 @@
 
 #include <string.h>
 
-#include "include/rmutil/sds.h"
+#include <rmutil/sds.h>
 #include "ctrip_crdt_common.h"
-#include "include/redismodule.h"
-#include "include/rmutil/dict.h"
+#include <redismodule.h>
+#include <rmutil/dict.h>
 #include "crdt_util.h"
 #define NDEBUG
 #include <assert.h>
@@ -47,14 +47,11 @@
 #define CRDT_HASH_TOMBSOTNE_DATATYPE_NAME "crdt_htom"
 #define HASHTABLE_MIN_FILL        10
 
-#define UINT64_MAX        18446744073709551615ULL
-#define RDB_LENERR UINT64_MAX
 
 #define OBJ_HASH_KEY 1
 #define OBJ_HASH_VALUE 2
 
-static RedisModuleType *CrdtHash;
-static RedisModuleType *CrdtHashTombstone;
+
 int hashStartGc();
 int hashStopGc();
 //common methods
@@ -67,19 +64,11 @@ int crdtHashGc(CrdtObject* target, VectorClock clock);
 VectorClock crdtHashGetLastVC(void* data);
 void crdtHashUpdateLastVC(void* r, VectorClock vc);
 void freeHashFilter(CrdtObject** filters, int num);
-static CrdtObjectMethod HashCommonMethod = {
-    .merge = crdtHashMerge,
-    .filterAndSplit = crdtHashFilter,
-    .filterAndSplit2 = crdtHashFilter2,
-    .freefilter = freeHashFilter
-};
+
+extern struct CrdtObjectMethod HashCommonMethod;
+
 sds crdtHashInfo(void* data);
-static CrdtDataMethod HashDataMethod = {
-    .propagateDel = crdtHashDelete,
-    .getLastVC = crdtHashGetLastVC,
-    .updateLastVC = crdtHashUpdateLastVC,
-    .info = crdtHashInfo,
-};
+extern struct CrdtDataMethod HashDataMethod;
 
 
 typedef struct CRDT_Hash {
@@ -102,12 +91,8 @@ int changeCrdtHash(CRDT_Hash* hash, CrdtMeta* meta);
 CRDT_Hash* dupCrdtHash(CRDT_Hash* data);
 VectorClock getCrdtHashLastVc(CRDT_Hash* data);
 void updateLastVCHash(CRDT_Hash* data, VectorClock vc);
-static CrdtHashMethod Hash_Methods = {
-    .change = changeCrdtHash,
-    .dup = dupCrdtHash,
-    .getLastVC = getCrdtHashLastVc,
-    .updateLastVC = updateLastVCHash,
-};
+extern CrdtHashMethod Hash_Methods;
+
 typedef CrdtMeta* (*updateMaxDelCrdtHashTombstoneFunc)(void* target, CrdtMeta* meta);
 typedef int (*isExpireFunc)(void* target, CrdtMeta* meta);
 typedef void* (*dupFunc)(void* target);
@@ -147,16 +132,8 @@ int crdtHashTombstonePurge(CrdtObject* obj, CrdtObject* tombstone);
 sds crdtHashTombstoneInfo(void* data);
 void freeHashTombstoneFilter(CrdtObject** filters, int num);
 VectorClock clone_ht_vc(void* ht);
-static CrdtTombstoneMethod HashTombstoneCommonMethod = {
-    .merge = crdtHashTombstoneMerge,
-    .filterAndSplit = crdtHashTombstoneFilter,
-    .filterAndSplit2 = crdtHashTombstoneFilter2,
-    .freefilter = freeHashTombstoneFilter,
-    .gc = crdtHashTombstoneGc,
-    .purge = crdtHashTombstonePurge,
-    .info = crdtHashTombstoneInfo,
-    .getVc = clone_ht_vc,
-};
+extern CrdtTombstoneMethod HashTombstoneCommonMethod;
+
 
 
 
@@ -196,30 +173,10 @@ size_t crdtBasicHashTombstoneMemUsageFunc(void* data);
 void dictCrdtRegisterDestructor(void *privdata, void *val);
 
 void dictCrdtRegisterTombstoneDestructor(void *privdata, void *val);
-static dictType crdtHashDictType = {
-        dictSdsHash,                /* hash function */
-        NULL,                       /* key dup */
-        NULL,                       /* val dup */
-        dictSdsKeyCompare,          /* key compare */
-        dictSdsDestructor,          /* key destructor */
-        dictCrdtRegisterDestructor   /* val destructor */
-};
-static dictType crdtHashFileterDictType = {
-        dictSdsHash,                /* hash function */
-        NULL,                       /* key dup */
-        NULL,                       /* val dup */
-        dictSdsKeyCompare,          /* key compare */
-        NULL,          /* key destructor */
-        NULL   /* val destructor */
-};
-static dictType crdtHashTombstoneDictType = {
-        dictSdsHash,                /* hash function */
-        NULL,                       /* key dup */
-        NULL,                       /* val dup */
-        dictSdsKeyCompare,          /* key compare */
-        dictSdsDestructor,          /* key destructor */
-        dictCrdtRegisterTombstoneDestructor   /* val destructor */
-};
+extern dictType crdtHashDictType;
+extern dictType crdtHashFileterDictType;
+extern dictType crdtHashTombstoneDictType;
+
 RedisModuleType* getCrdtHash();
 RedisModuleType* getCrdtHashTombstone();
 

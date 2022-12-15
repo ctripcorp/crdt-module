@@ -1,10 +1,10 @@
 #set environment variable RM_INCLUDE_DIR to the location of redismodule.h
 ifndef RM_INCLUDE_DIR
-	RM_INCLUDE_DIR=./include
+	RM_INCLUDE_DIR=./deps
 endif
 
 ifndef RMUTIL_LIBDIR
-	RMUTIL_LIBDIR=./include/rmutil
+	RMUTIL_LIBDIR=./deps/rmutil
 endif
 
 PYTHONTEST=python -m unittest -v -b
@@ -20,19 +20,26 @@ ifeq ($(COMPILER),clang)
 endif
 
 ifeq ($(COMPILER),gcc)
-    LIBC ?= -lc
+    LIBC ?= -lc -ldl -lm -lrt
 endif
 
+ifneq (,$(filter aarch64 armv,$(uname_M)))
+        CFLAGS+=-funwind-tables
+else
+ifneq (,$(findstring armv,$(uname_M)))
+        CFLAGS+=-funwind-tables
+endif
+endif
 
 # Compile flags for linux / osx
 ifeq ($(uname_S),Linux)
 	SHOBJ_CFLAGS ?=  -fno-common -g -ggdb
-	SHOBJ_LDFLAGS ?= -shared -Bsymbolic
+	SHOBJ_LDFLAGS ?= -shared -Wl,-Bsymbolic
 else
 	SHOBJ_CFLAGS ?= -dynamic -fno-common -g -ggdb
 	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup
 endif
-CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -O0 -g -fPIC -std=gnu99  -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API $(REDIS_CFLAGS)
+CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -O0 -g -fPIC -std=gnu99 -Wno-psabi -w -Wno-address-of-packed-member-msse2 -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API $(REDIS_CFLAGS)
 ifeq ($(uname_S),Darwin)
 	CFLAGS+= -DTCL_TEST -DDEBUG
 	# CFLAGS+= -DDEBUG
@@ -43,67 +50,35 @@ all: rmutil crdt.so
 
 rmutil:
 	$(MAKE) -C $(RMUTIL_LIBDIR)
-crdt.o: crdt.c version.h
-	$(CC) $(CFLAGS) -c -o $@ crdt.c
-crdt_util.o: crdt.o crdt_util.h
-	$(CC) $(CFLAGS) -c -o $@ crdt_util.c
-crdt_pubsub.o: crdt_pubsub.c utils.c crdt_util.o
-	$(CC) $(CFLAGS) -c -o $@ crdt_pubsub.c
-crdt_register.o: crdt_register.c utils.c crdt_util.o crdt_statistics.o
-	$(CC) $(CFLAGS) -c -o $@ crdt_register.c
-crdt_lww_register.o: lww/crdt_lww_register.c crdt_register.o  crdt_util.o 
-	$(CC) $(CFLAGS) -c -o $@ lww/crdt_lww_register.c
-ctrip_crdt_hashmap.o: ctrip_crdt_hashmap.c utils.c crdt_util.o crdt_statistics.o
-	$(CC) $(CFLAGS) -c -o $@ ctrip_crdt_hashmap.c
-crdt_lww_hashmap.o: lww/crdt_lww_hashmap.c ctrip_crdt_hashmap.o  crdt_util.o 
-	$(CC) $(CFLAGS) -c -o $@ lww/crdt_lww_hashmap.c
-crdt_set.o: crdt_set.c utils.c crdt_util.o crdt_statistics.o
-	$(CC) $(CFLAGS) -c -o $@ crdt_set.c
-g_counter.o: gcounter/g_counter.c gcounter/g_counter.h
-	$(CC) $(CFLAGS) -c -o $@ gcounter/g_counter.c
-g_counter_element.o: gcounter/g_counter_element.c gcounter/g_counter_element.h 
-	$(CC) $(CFLAGS) -c -o $@ gcounter/g_counter_element.c
-crdt_orset_set.o: orset/crdt_orset_set.c crdt_set.o crdt_util.o crdt_statistics.o
-	$(CC) $(CFLAGS) -c -o $@ orset/crdt_orset_set.c
-ctrip_crdt_register.o: ctrip_crdt_register.c crdt_register.o crdt_util.o crdt_statistics.o  
-	$(CC) $(CFLAGS) -c -o $@ ctrip_crdt_register.c
-crdt_statistics.o: crdt_statistics.c 
-	$(CC) $(CFLAGS) -c -o $@ crdt_statistics.c
-ctrip_orset_rc.o: ./orset/crdt_orset_rc.c ctrip_crdt_register.o crdt_util.o g_counter.o g_counter_element.o  
-	$(CC) $(CFLAGS) -c -o $@ ./orset/crdt_orset_rc.c
-ctrip_crdt_zset.o: ctrip_crdt_zset.c utils.c  crdt_util.o crdt_statistics.o g_counter.o
-	$(CC) $(CFLAGS) -c -o $@ ctrip_crdt_zset.c
-crdt_orset_zset.o: orset/crdt_orset_zset.c   ctrip_crdt_zset.o crdt_util.o crdt_statistics.o crdt_util.h
-	$(CC) $(CFLAGS) -c -o $@ orset/crdt_orset_zset.c
-ctrip_rdt_expire.o:  ctrip_crdt_expire.c 
-	$(CC) $(CFLAGS) -c -o $@ ctrip_crdt_expire.c
 
-crdt.so: rmutil  g_counter_element.o g_counter.o  ctrip_orset_rc.o ctrip_crdt_register.o ctrip_crdt_zset.o crdt_orset_zset.o crdt_set.o crdt_orset_set.o crdt_statistics.o ctrip_rdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o 
-	$(LD) -o $@  g_counter_element.o g_counter.o  ctrip_orset_rc.o  ctrip_crdt_register.o ctrip_crdt_zset.o crdt_orset_zset.o crdt_set.o crdt_orset_set.o  crdt_statistics.o ctrip_rdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o crdt_lww_register.o crdt_lww_hashmap.o $(SHOBJ_LDFLAGS) $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil $(LIBC)
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@ 
+
+
+CRDT_OBJ = gcounter/g_counter_element.o gcounter/g_counter.o  orset/crdt_orset_rc.o ctrip_crdt_register.o ctrip_crdt_zset.o orset/crdt_orset_zset.o crdt_set.o orset/crdt_orset_set.o crdt_statistics.o ctrip_crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o lww/crdt_lww_register.o lww/crdt_lww_hashmap.o 
+crdt.so: rmutil  $(CRDT_OBJ)
+	$(CC) -o $@  $(CRDT_OBJ) $(SHOBJ_LDFLAGS) $(LIBS) ./deps/rmutil/librmutil.a $(LIBC)
 
 clean:
-	rm -rf *.xo crdt.so *.o *.pyc *.so *.gcno *.gcda
-	@(cd ./include && $(MAKE) clean)
+	rm -rf *.xo crdt.so *.o *.pyc *.so *.gcno *.gcda ./lww/*.o ./orset/*.o ./gcounter/*.o ./tests/*.o
+	@(cd ./deps && $(MAKE) clean)
 
 # tests
 
 # unit tests
-test-lww-element: lww/crdt_lww_element.c lww/crdt_lww_element.h
-	$(CC) -Wnullability-extension lww/crdt_lww_element.c -DLWW_ELEMENT_TEST_MAIN -lm -o /tmp/lww_element_test
-	/tmp/lww_element_test
-
-test-gcounter: gcounter/crdt_g_counter.c gcounter/crdt_g_counter.h
-	$(CC) -Wnullability-extension gcounter/crdt_g_counter.c -DG_COUNTER_TEST_MAIN -lm -o /tmp/gcounter_test
+test-gcounter: clean  gcounter/g_counter.c gcounter/g_counter.h util.o 
+	$(MAKE) -C $(RMUTIL_LIBDIR) CRDT_CFLAGS=-DREDIS_MODULE_TEST
+	$(CC)  -g gcounter/g_counter.c util.o -DCOUNTER_TEST_MAIN  -lm -o /tmp/gcounter_test -I$(RM_INCLUDE_DIR) -I$(RMUTIL_LIBDIR) ./deps/rmutil/librmutil.a
 	/tmp/gcounter_test
 
 test_crdt: tests/unit/test_crdt.c
-	$(CC) -Wall -o $@ $^ -lc -O0
+	$(CC) -Wall -o $@ $^ -lc -O0 -DCOUNTER_TEST_MAIN -I$(RM_INCLUDE_DIR) -I$(RMUTIL_LIBDIR) ./deps/rmutil/librmutil.a
 	@(sh -c ./$@)
 .PHONY: test_crdt
 
 
-test_crdt_register: tests/unit/test_register.c tpl.c include/rmutil/librmutil.a crdt_register.c include/rmutil/sds.c
-	$(CC) -Wall -o $@ $^ $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc -O0
+test_crdt_register: tests/unit/test_register.c  crdt_register.c deps/rmutil/sds.c
+	$(CC) -Wall -o $@ $^ $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc -O0 -DCOUNTER_TEST_MAIN  -lm -o /tmp/gcounter_test -I$(RM_INCLUDE_DIR) -I$(RMUTIL_LIBDIR) ./deps/rmutil/librmutil.a
 	@(sh -c ./$@)
 .PHONY: test_crdt_register
 

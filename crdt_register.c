@@ -30,21 +30,46 @@
 // Created by zhuchen(zhuchen at ctrip dot com) on 2019-04-18.
 //
 
-#include "include/redismodule.h"
-#include "include/rmutil/sds.h"
+#include <redismodule.h>
+#include <rmutil/sds.h>
 
 #include "crdt_register.h"
 #include "ctrip_vector_clock.h"
 #include "utils.h"
 #include "crdt.h"
 #include <strings.h>
-#include "include/rmutil/dict.h"
+#include <rmutil/dict.h>
 #include "crdt_statistics.h"
 #include "ctrip_crdt_expire.h"
 #include <string.h>
+CrdtObjectMethod RegisterCommonMethod = {
+    .merge = crdtRegisterMerge,
+    .filterAndSplit = crdtRegisterFilter,
+    .filterAndSplit2 = crdtRegisterFilter2,
+    .freefilter = freeRegisterFilter,
+};
+
+CrdtDataMethod RegisterDataMethod = {
+    .propagateDel = crdtRegisterDelete,
+    .getLastVC = getCrdtRegisterLastVc,
+    .updateLastVC = crdtRegisterUpdateLastVC,
+    .info = crdtRegisterInfo,
+};
+
+static RedisModuleType *CrdtRegister;
+static RedisModuleType *CrdtRegisterTombstone;
 /**
  * ==============================================Pre-defined functions=========================================================*/
-
+CrdtTombstoneMethod RegisterTombstoneMethod = {
+    .merge = crdtRegisterTombstoneMerge,
+    .filterAndSplit =  crdtRegisterTombstoneFilter,
+    .filterAndSplit2 =  crdtRegisterTombstoneFilter2,
+    .freefilter = freeRegisterTombstoneFilter,
+    .gc = crdtRegisterTombstoneGc,
+    .purge = crdtRegisterTombstonePurge,
+    .info = crdtRegisterTombstoneInfo,
+    .getVc = clone_rt_vc,
+};
 int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 int CRDT_SetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 // int getCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);

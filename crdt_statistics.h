@@ -1,5 +1,5 @@
-#include "include/redismodule.h"
-#include "./include/rmutil/sds.h"
+#include <redismodule.h>
+#include <rmutil/sds.h>
 void parse_start();
 void parse_end();
 

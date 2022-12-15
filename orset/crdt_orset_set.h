@@ -1,10 +1,10 @@
 #ifndef XREDIS_crdt_orset_set_H
 #define XREDIS_crdt_orset_set_H
-#include "../include/rmutil/sds.h"
+#include <rmutil/sds.h>
 #include "../crdt_util.h"
 #include "../crdt_set.h"
-#include "../include/rmutil/dict.h"
-#include "../include/redismodule.h"
+#include <rmutil/dict.h>
+#include <redismodule.h>
 #if defined(TCL_TEST)
 typedef struct crdt_orset_set {
     unsigned char  type;

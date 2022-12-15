@@ -158,7 +158,7 @@ sds write_value(int type, union all_type data) {
 }
 
 g_counter_meta* create_g_counter_meta(long long gid, long long vcu) {
-    g_counter_meta* meta = RedisModule_Alloc(sizeof(g_counter_meta));
+    g_counter_meta* meta = counter_malloc(sizeof(g_counter_meta));
     meta->gid = gid;
     meta->vcu = vcu;
     meta->data_type = VALUE_TYPE_NONE;
@@ -167,9 +167,9 @@ g_counter_meta* create_g_counter_meta(long long gid, long long vcu) {
     return meta;
 }
 
-void free_g_counater_maeta(g_counter_meta* meta) {
+void free_g_counter_meta(g_counter_meta* meta) {
     sdsfree(meta->v);
-    counter_meta_free(meta);
+    counter_free(meta);
 }
 
 
@@ -371,7 +371,7 @@ int str_to_g_counter_metas(char* buf, int len, g_counter_meta** metas) {
     
 error:
     for(int i = 0 ; i < meta_len; i++) {
-        free_g_counater_maeta(metas[i]);
+        free_g_counter_meta(metas[i]);
     }
     return -1;
 }
@@ -504,10 +504,11 @@ int tag_data_get_ld(int type, union tag_data t, long double* ld) {
 
 
 
-#if defined(PARSE_TEST_MAIN)
+#if defined(COUNTER_TEST_MAIN)
 #include <stdio.h>
-#include "../libs/testhelp.h"
+#include "../tests/testhelp.h"
 #include "limits.h"
+#include <stdlib.h>
 
 #define UNUSED(x) (void)(x)
 
@@ -566,68 +567,68 @@ int readTest(void) {
         // //test parse LONG LONG
         sds x = sdsnew("1:12354");
         int offset = 0;
-        // int type = 0;
+        int type = 0;
         // union all_type value = {.i = 0};
         ctrip_value value = {.type = VALUE_TYPE_NONE, .value.i = 0};
-        // sds s = read_value(x, sdslen(x), &type, &value, &offset);
-        // test_cond("parse value long long 1",
-        //     offset == 7 && type == VALUE_TYPE_LONGLONG && value.i == 12354)
-        // sdsfree(x);
-        // x = sdsnew("1:12354,");
-        // s = read_value(x, sdslen(x), &type, &value, &offset);
-        // test_cond("parse value long long 2",
-        //     offset == 8 && type == VALUE_TYPE_LONGLONG && value.i == 12354)
-        // sdsfree(x);
+        sds s = read_value(x, sdslen(x),  &value, &offset);
+        test_cond("parse value long long 1",
+            offset == 7 && value.type == VALUE_TYPE_LONGLONG && value.value.i == 12354)
+        sdsfree(x);
+        x = sdsnew("1:12354,");
+        s = read_value(x, sdslen(x), &value, &offset);
+        test_cond("parse value long long 2",
+            offset == 8 && value.type == VALUE_TYPE_LONGLONG && value.value.i == 12354)
+        sdsfree(x);
 
-        // x = sdsnew("1:1.2");
-        // s = read_value(x, sdslen(x), &type, &value, &offset);
-        // test_cond("parse type error long",
-        //     s == NULL)
-        // sdsfree(x);
+        x = sdsnew("1:1.2");
+        s = read_value(x, sdslen(x), &value, &offset);
+        test_cond("parse type error long",
+            offset == 5 && s == NULL)
+        sdsfree(x);
 
-        // printf("========[parse float ]==========\r\n");
-        // x = sdsnew("2:1.2");
-        // s = read_value(x, sdslen(x), &type, &value, &offset);
-        // test_cond("parse type error float",
-        //     offset == 5 && type == VALUE_TYPE_DOUBLE)
-        // sdsfree(x);
+        printf("========[parse float ]==========\r\n");
+        x = sdsnew("2:1.2");
+        s = read_value(x, sdslen(x), &value, &offset);
+        test_cond("parse type double",
+            value.type == VALUE_TYPE_DOUBLE && offset == 5 && value.value.d == 1.2)
+        sdsfree(x);
 
-        // printf("========[parse long double ]==========\r\n");
-        // x = sdsnew("4:1.2");
-        // s = read_value(x, sdslen(x), &type, &value, &offset);
-        // test_cond("parse type error float",
-        //     offset == 5 && type == VALUE_TYPE_LONGDOUBLE)
-        // sdsfree(x);
+        printf("========[parse long double ]==========\r\n");
+        x = sdsnew("4:1.2");
+        s = read_value(x, sdslen(x), &value, &offset);
+        test_cond("parse type error long double",
+            value.type == VALUE_TYPE_LONGDOUBLE && value.value.f == 1.2)
+        sdsfree(x);
 
-        // printf("========[parse string ]==========\r\n");
-        // x = sdsnew("3:4:1234");
-        // s = read_value(x, sdslen(x), &type, &value, &offset);
-        // test_cond("parse string ",
-        //     offset == 8 && type == VALUE_TYPE_SDS && sdslen(value.s) == 4 && memcmp(value.s, "1234\0", 5) == 0)
-        // sdsfree(x);
+        printf("========[parse string ]==========\r\n");
+        x = sdsnew("3:4:1234");
+        s = read_value(x, sdslen(x), &value, &offset);
+        test_cond("parse string ",
+            value.type == VALUE_TYPE_SDS && sdslen(value.value.s) == 4 && memcmp(value.value.s, "1234\0", 5) == 0)
+        sdsfree(x);
 
-        // x = sdsnew("3:5:1234");
-        // s = read_value(x, sdslen(x), &type, &value, &offset);
-        // test_cond("parse string error",
-        //     s == NULL)
-        // sdsfree(x);
-        printf("libc: %s\n", ZMALLOC_LIB);
+        x = sdsnew("3:5:1234");
+        s = read_value(x, sdslen(x), &value, &offset);
+        test_cond("parse string error",
+            s == NULL)
+        sdsfree(x);
+        // printf("libc: %s\n", ZMALLOC_LIB);
         printf("========[parse meta ]==========\r\n");
         g_counter_meta* metas[2];
         x = sdsnew("1:1000:2:1.5,2:2000:1:1000");
         int len = str_to_g_counter_metas(x, sdslen(x), metas);
         test_cond("[meta1] check metas len", len == 2)
         printf("vcu %lld \n", metas[0]->vcu);
-        printf("zmalloc: %s\n", ZMALLOC_LIB);
+        // printf("zmalloc: %s\n", ZMALLOC_LIB);
         test_cond("[meta1] check metas value", metas[0]->gid == 1 && metas[0]->vcu == 1000)
 
         printf("========[parse value and meta ]==========\r\n");
         x = sdsnew("3:3:abc,1:1000:2:1.5,2:2000:1:1000");
         int l = str_2_value_and_g_counter_metas(x, &value, metas);
-        test_cond("[meta1] type ", type == 3)
+        test_cond("[meta1] type ", value.type == 3)
         test_cond("[meta1] check metas len", l == 2)
         printf("vcu %lld \n", metas[0]->vcu);
-        printf("zmalloc: %s\n", ZMALLOC_LIB);
+        // printf("zmalloc: %s\n", ZMALLOC_LIB);
         test_cond("[meta1] check metas value", metas[0]->gid == 1 && metas[0]->vcu == 1000)
     }
     test_report()
@@ -637,7 +638,7 @@ int readTest(void) {
 
 
 
-#ifdef PARSE_TEST_MAIN
+#ifdef COUNTER_TEST_MAIN
 #include<stdio.h>
 #include<sys/time.h>
 typedef int (*TestFunc)(void* value);
@@ -651,7 +652,7 @@ void speedTest(TestFunc func, void* value, int num) {
     gettimeofday(&end_time,NULL);
     long long time_mic = end_time.tv_sec*1000*1000 + end_time.tv_usec - 
             start_time.tv_sec * 1000 * 1000 - start_time.tv_usec;
-    printf("run func %d, used %ld(ns)\n",num, time_mic);
+    printf("run func %d, used %lld(ns)\n",num, time_mic);
 }
 
 int meta2StrTest(void* meta) {
@@ -693,6 +694,7 @@ int main(void) {
     buf[len] = '\0';
     printf("len: %d  str: %s\n", len, buf);
     speedTest(meta2StrTest, meta, 100000);
-    return readTest() + writeTest();
+    // return readTest() + writeTest();
+    return readTest();
 }
 #endif

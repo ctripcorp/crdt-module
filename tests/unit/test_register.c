@@ -29,10 +29,9 @@
 //
 // Created by zhuchen on 2019-04-30.
 //
-#include "../../include/rmutil/test.h"
+#include <rmutil/test.h>
 #include "../../ctrip_crdt_register.h"
-#include "../../tpl.h"
-#include "../../include/rmutil/sds.h"
+#include <rmutil/sds.h>
 
 typedef struct crdtRegisterSerial {
     sds vectorClock;

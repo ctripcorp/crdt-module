@@ -1,6 +1,30 @@
 #include "crdt_set.h"
-#include "include/rmutil/zmalloc.h"
 #include <string.h>
+
+CrdtDataMethod SetDataMethod = {
+    .propagateDel = crdtSetDelete,
+    .info = crdtSetInfo,
+};
+
+CrdtObjectMethod SetCommonMethod = {
+    .merge = crdtSetMerge,
+    .filterAndSplit = crdtSetFilter,
+    .filterAndSplit2 = crdtSetFilter2,
+    .freefilter = freeSetFilter,
+};
+
+CrdtTombstoneMethod SetTombstoneCommonMethod = {
+    .merge = crdtSetTombstoneMerge,
+    .filterAndSplit =  crdtSetTombstoneFilter,
+    .filterAndSplit2 =  crdtSetTombstoneFilter2,
+    .freefilter = freeSetTombstoneFilter,
+    .gc = crdtSetTombstoneGc,
+    .purge = crdtSetTombstonePurge,
+    .info = crdtSetTombstoneInfo,
+    .getVc = clone_st_vc,
+};
+static RedisModuleType *CrdtSet;
+static RedisModuleType *CrdtSetTombstone;
 
 int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
     if(value == NULL) {
@@ -161,7 +185,7 @@ static inline int setTypeRemove(CRDT_Set *setobj, sds value) {
 int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, int setnum,
                               RedisModuleString *dstkey, int op) {
 
-    CRDT_Set **target_sets = zmalloc(sizeof(CRDT_Set *) * setnum);
+    CRDT_Set **target_sets = RedisModule_Alloc(sizeof(CRDT_Set *) * setnum);
     dictIterator *di;
     CRDT_Set *dstset = NULL;
     sds ele;
@@ -175,7 +199,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
                         getRedisModuleKey(ctx, setkeys[j], CrdtSet, REDISMODULE_READ, &replyed);
         if (moduleKey == NULL) {
             if(replyed) {
-                zfree(target_sets);
+                RedisModule_Free(target_sets);
                 return CRDT_ERROR;
             }
             target_sets[j] = NULL;
@@ -183,7 +207,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
         }
         if (RedisModule_ModuleTypeGetType(moduleKey) != CrdtSet) {
             if(replyed) {
-                zfree(target_sets);
+                RedisModule_Free(target_sets);
                 return CRDT_ERROR;
             }
             target_sets[j] = NULL;
@@ -197,7 +221,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
             continue;
         }
         if (setobj->dataType != CRDT_SET_TYPE) {
-            zfree(target_sets);
+            RedisModule_Free(target_sets);
             return CRDT_ERROR;
         }
         target_sets[j] = setobj;
@@ -336,7 +360,7 @@ int sunionDiffGenericCommand(RedisModuleCtx *ctx, RedisModuleString **setkeys, i
 //        signalModifiedKey(c->db,dstkey);
 //        server.dirty++;
     }
-    zfree(target_sets);
+    RedisModule_Free(target_sets);
     return 1;
 }
 

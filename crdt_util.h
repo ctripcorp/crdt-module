@@ -1,8 +1,8 @@
 #ifndef XREDIS_CRDT_CRDT_UTIL_H
 #define XREDIS_CRDT_CRDT_UTIL_H
-#include "include/redismodule.h"
-#include "include/rmutil/dict.h"
-#include "include/rmutil/adlist.h"
+#include <redismodule.h>
+#include <rmutil/dict.h>
+#include <rmutil/adlist.h>
 #include "ctrip_vector_clock.h"
 #include "utils.h"
 #include "crdt.h"

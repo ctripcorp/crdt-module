@@ -307,13 +307,13 @@ mergeFunc (const void *curVal, const void *value) {
     if(value == NULL) {
         return NULL;
     }
-    void *dup = zmalloc(1);
+    void *dup = RedisModule_Alloc(1);
     return dup;
 }
 
 nickObject
 *createNickObject() {
-    nickObject *obj = zmalloc(sizeof(nickObject));
+    nickObject *obj = RedisModule_Alloc(sizeof(nickObject));
     printf("[nickObject]%lu\r\n", sizeof(nickObject));
     obj->content = sdsnew("hello");
 

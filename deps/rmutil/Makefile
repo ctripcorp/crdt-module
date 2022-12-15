@@ -3,12 +3,14 @@
 ifndef RM_INCLUDE_DIR
 	RM_INCLUDE_DIR=../
 endif
-
-CFLAGS ?= -g -fPIC -O3 -std=gnu99 -Wall -Wno-unused-function
+CRDT_CFLAGS ?=
+CFLAGS ?= -g -fPIC -O3 -std=gnu99 -Wall -Wno-unused-function $(CRDT_CFLAGS)
 CFLAGS += -I$(RM_INCLUDE_DIR)
+
+
 CC=gcc
 
-OBJS=ziplist.o util.o strings.o sds.o vector.o alloc.o periodic.o dict.o adlist.o zskiplist.o 
+OBJS=ziplist.o util.o strings.o sds.o vector.o periodic.o dict.o adlist.o zskiplist.o siphash.o
 
 all: librmutil.a
 

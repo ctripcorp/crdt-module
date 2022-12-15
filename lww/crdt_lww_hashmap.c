@@ -297,7 +297,7 @@ sds crdtHashInfo(void* data) {
     int num = 5;
     while((de = dictNext(di)) != NULL && num > 0) {
         sds info = crdtRegisterInfo(dictGetVal(de));
-        result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
+        result = sdscatprintf(result, "  key: %s, %s\n", (sds)dictGetKey(de), info);
         sdsfree(info);
         num--;
     }
@@ -329,7 +329,7 @@ sds crdtHashTombstoneInfo(void* data) {
     int num = 5;
     while((de = dictNext(di)) != NULL && num > 0) {
         sds info = crdtRegisterTombstoneInfo(dictGetVal(de));
-        result = sdscatprintf(result, "  key: %s, %s\n", dictGetKey(de), info);
+        result = sdscatprintf(result, "  key: %s, %s\n", (sds)dictGetKey(de), info);
         sdsfree(info);
         num--;
     }
