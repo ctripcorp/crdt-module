@@ -30,7 +30,7 @@
 // Created by zhuchen(zhuchen at ctrip dot com) on 2019-04-17.
 //
 
-#include "include/redismodule.h"
+#include <redismodule.h>
 
 #include "crdt.h"
 #include "crdt_set.h"

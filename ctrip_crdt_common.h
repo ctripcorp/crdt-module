@@ -33,10 +33,10 @@
 #ifndef REDIS_CTRIP_CRDT_COMMON_H
 #define REDIS_CTRIP_CRDT_COMMON_H
 
-#include "include/rmutil/sds.h"
-#include "include/rmutil/dict.h"
+#include <rmutil/sds.h>
+#include <rmutil/dict.h>
 #include "ctrip_vector_clock.h"
-#include "redismodule.h"
+#include <redismodule.h>
 
 #define CRDT_MODULE_OBJECT_PREFIX "crdt"
 

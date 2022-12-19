@@ -34,7 +34,7 @@
 #define XREDIS_CRDT_CRDT_H
 
 #include "ctrip_vector_clock.h"
-#include "include/redismodule.h"
+#include <redismodule.h>
 
 #define MODULE_NAME "xredis_crdt"
 #define CRDT_OK 1
@@ -45,6 +45,8 @@
 
 #define CRDT_DEFAULT_LOG_LEVEL "warning"
 #define CRDT_DEBUG_LOG_LEVEL "debug"
+
+#define RDB_LENERR 18446744073709551615ULL
 
 char *logLevel;
 

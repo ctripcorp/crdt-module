@@ -1797,7 +1797,7 @@ size_t get_tag_memory(crdt_tag* tag) {
             return sizeof(crdt_tag_base_and_add_del_counter);
         break;
         default:
-            printf("filter type error: type is %lld", tag->type);
+            printf("filter type error: type is %d", tag->type);
             assert( 1 == 0);
         break;
     } 
@@ -2859,7 +2859,7 @@ crdt_element create_element_from_vc_and_g_counter(VectorClock vc, int gcounter_l
         } 
         if(g_index != -1) {
             tag = base_merge_g_meta((crdt_tag_base*)tag, metas[g_index]);
-            free_g_counater_maeta(metas[g_index]);
+            free_g_counter_meta(metas[g_index]);
             metas[g_index] = NULL;
         }
         el = element_add_tag(el, tag);

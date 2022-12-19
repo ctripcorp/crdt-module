@@ -3,7 +3,6 @@
 
 #include <redismodule.h>
 #include <stdarg.h>
-
 /// make sure the response is not NULL or an error, and if it is sends the error to the client and
 /// exit the current function
 #define RMUTIL_ASSERT_NOERROR(ctx, r)                                   \

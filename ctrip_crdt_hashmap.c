@@ -37,6 +37,66 @@
 /*
     util 
 */
+CrdtObjectMethod HashCommonMethod = {
+    .merge = crdtHashMerge,
+    .filterAndSplit = crdtHashFilter,
+    .filterAndSplit2 = crdtHashFilter2,
+    .freefilter = freeHashFilter
+};
+
+CrdtDataMethod HashDataMethod = {
+    .propagateDel = crdtHashDelete,
+    .getLastVC = crdtHashGetLastVC,
+    .updateLastVC = crdtHashUpdateLastVC,
+    .info = crdtHashInfo,
+};
+
+CrdtHashMethod Hash_Methods = {
+    .change = changeCrdtHash,
+    .dup = dupCrdtHash,
+    .getLastVC = getCrdtHashLastVc,
+    .updateLastVC = updateLastVCHash,
+};
+
+CrdtTombstoneMethod HashTombstoneCommonMethod = {
+    .merge = crdtHashTombstoneMerge,
+    .filterAndSplit = crdtHashTombstoneFilter,
+    .filterAndSplit2 = crdtHashTombstoneFilter2,
+    .freefilter = freeHashTombstoneFilter,
+    .gc = crdtHashTombstoneGc,
+    .purge = crdtHashTombstonePurge,
+    .info = crdtHashTombstoneInfo,
+    .getVc = clone_ht_vc,
+};
+
+dictType crdtHashDictType = {
+        dictSdsHash,                /* hash function */
+        NULL,                       /* key dup */
+        NULL,                       /* val dup */
+        dictSdsKeyCompare,          /* key compare */
+        dictSdsDestructor,          /* key destructor */
+        dictCrdtRegisterDestructor   /* val destructor */
+};
+
+dictType crdtHashFileterDictType = {
+        dictSdsHash,                /* hash function */
+        NULL,                       /* key dup */
+        NULL,                       /* val dup */
+        dictSdsKeyCompare,          /* key compare */
+        NULL,          /* key destructor */
+        NULL   /* val destructor */
+};
+
+dictType crdtHashTombstoneDictType = {
+        dictSdsHash,                /* hash function */
+        NULL,                       /* key dup */
+        NULL,                       /* val dup */
+        dictSdsKeyCompare,          /* key compare */
+        dictSdsDestructor,          /* key destructor */
+        dictCrdtRegisterTombstoneDestructor   /* val destructor */
+};
+static RedisModuleType *CrdtHash;
+static RedisModuleType *CrdtHashTombstone;
 int isCrdtHash(void* data) {
     CRDT_Hash* hash = (CRDT_Hash*)data;
     if(hash != NULL && (getDataType((CrdtObject*)hash) == CRDT_HASH_TYPE)) {
@@ -434,7 +494,6 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(argc < 3) return RedisModule_WrongArity(ctx);
     int status = CRDT_OK;
     int deleted = 0;
-    int deleteall = CRDT_NO;
     CrdtMeta hdel_meta = {.gid=0};
     
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
@@ -478,7 +537,6 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH,"hdel", argv[1]);
     }    
     if (dictSize(current->map) == 0) {
-        deleteall = CRDT_OK;
         RedisModule_DeleteKey(moduleKey);
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
     } else {

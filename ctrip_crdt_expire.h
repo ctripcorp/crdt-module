@@ -32,7 +32,7 @@
 #include "crdt.h"
 #include "crdt_util.h"
 #include <assert.h>
-#include "include/redismodule.h"
+#include <redismodule.h>
 #define CRDT_EXPIRE_DATATYPE_NAME "crdt_expi"
 #define CRDT_EXPIRE_TOMBSTONE_DATATYPE_NAME "crdt_expt"
 

@@ -4,7 +4,7 @@
 #include "../ctrip_vector_clock.h"
 #include "../ctrip_crdt_register.h"
 #include "../crdt.h"
-#include "../include/redismodule.h"
+#include <redismodule.h>
 // #include "../gcounter/g_counter_element.h"
 
 #if defined(TCL_TEST)

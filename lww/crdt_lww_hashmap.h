@@ -4,7 +4,7 @@
 #define XREDIS_CRDT_CRDT_LWW_HASHMAP_H
 #include "../ctrip_crdt_hashmap.h"
 #include "../crdt_register.h"
-#include "../include/rmutil/sds.h"
+#include <rmutil/sds.h>
 #include "../crdt_util.h"
 // #define NDEBUG
 #include <assert.h>

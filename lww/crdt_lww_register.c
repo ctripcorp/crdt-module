@@ -322,7 +322,7 @@ sds crdtRegisterTombstoneInfo(void *t) {
     CRDT_LWW_RegisterTombstone* tombstone = retrieveCrdtLWWRegisterTombstone(t);
     sds result = sdsempty();
     sds vcStr = vectorClockToSds(getCrdtLWWRegisterTombstoneVectorClock(tombstone));
-    result = sdscatprintf(result, "type: lww_reigster_tomsbtone, gid: %d, timestamp: %lld, vector-clock: %s",
+    result = sdscatprintf(result, "type: lww_reigster_tombstone, gid: %d, timestamp: %lld, vector-clock: %s",
             getCrdtLWWRegisterTombstoneGid(tombstone), getCrdtLWWRegisterTombstoneTimestamp(tombstone), vcStr);
     sdsfree(vcStr);
     return result;

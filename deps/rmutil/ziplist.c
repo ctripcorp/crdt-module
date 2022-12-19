@@ -188,8 +188,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <limits.h>
-#include "../util.h"
-#include "../redismodule.h"
+#include <assert.h>
+#include "util.h"
 #include "./endianconv.h"
 #include "./redisassert.h"
 

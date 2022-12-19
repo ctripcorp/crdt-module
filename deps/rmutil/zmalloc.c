@@ -42,7 +42,7 @@ void zlibc_free(void *ptr) {
 #include <string.h>
 #include <pthread.h>
 
-#include "zmalloc.h"
+
 #include "atomicvar.h"
 
 #ifdef HAVE_MALLOC_SIZE

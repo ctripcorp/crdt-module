@@ -66,7 +66,7 @@ newVectorClockFromGidAndClock(int gid, long long clock) {
     VectorClock
     newVectorClock(int numVcUnits) {
         if(numVcUnits == 0) return NULL;
-        VectorClock result = vc_malloc(sizeof(VectorClockUnit) * numVcUnits + 1);
+        VectorClock result = vc_malloc(sizeof(VectorClockUnit) * numVcUnits + sizeof(TestVectorClock));
         result->len = numVcUnits;
         return result;
     }
@@ -102,9 +102,9 @@ newVectorClockFromGidAndClock(int gid, long long clock) {
     }
     clk* clocks_address(VectorClock value) {
         if(get_len(value) == 1) {
-            return (clk*)(&value.unit);
+            return &value.unit;
         }
-        return (clk*)value.pvc.pvc;
+        return (clk*)(long long)value.pvc.pvc;
     }
 #endif
 

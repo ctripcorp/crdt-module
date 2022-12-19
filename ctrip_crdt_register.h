@@ -78,24 +78,15 @@ sds crdtRcInfo(void* rc);
 VectorClock  getCrdtRcLastVc(void* rc);
 void freeRcLastVc(VectorClock vc);
 CrdtMeta* getCrdtRcLastMeta(CRDT_RC* rc);
-static CrdtDataMethod RcDataMethod = {
-    .propagateDel = crdtRcDelete,
-    .getLastVC = getCrdtRcLastVc,
-    .updateLastVC = crdtRcUpdateLastVC,
-    .info = crdtRcInfo,
-};
+extern CrdtDataMethod RcDataMethod;
 
 CrdtObject *crdtRcMerge(CrdtObject *currentVal, CrdtObject *value);
 CrdtObject** crdtRcFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
 CrdtObject** crdtRcFilter2(CrdtObject* common, int gid, VectorClock min_vc, long long maxsize, int* length);
 
 void freeRcFilter(CrdtObject** filters, int num);
-static CrdtObjectMethod RcCommonMethod = {
-    .merge = crdtRcMerge,
-    .filterAndSplit = crdtRcFilter,
-    .filterAndSplit2 = crdtRcFilter2,
-    .freefilter = freeRcFilter,
-};
+extern CrdtObjectMethod RcCommonMethod;
+
 //========================= CRDT Tombstone functions =======================
 CRDT_RCTombstone* createCrdtRcTombstone();
 CRDT_RCTombstone* dupCrdtRcTombstone(CRDT_RCTombstone* tombstone);
@@ -109,16 +100,8 @@ int crdtRcTombstonePurge(CRDT_RCTombstone* tombstone, CRDT_RC* r);
 sds crdtRcTombstoneInfo(void* tombstone);
 // int mergeRcTombstone(CRDT_RCTombstone* tombstone, CrdtMeta* meta, int del_len, gcounter_meta** del_counter);
 VectorClock getCrdtRcTombstoneLastVc(void* rt);
-static CrdtTombstoneMethod RcTombstoneCommonMethod = {
-    .merge = crdtRcTombstoneMerge,
-    .filterAndSplit =  crdtRcTombstoneFilter,
-    .filterAndSplit2 =  crdtRcTombstoneFilter2,
-    .freefilter = freeCrdtRcTombstoneFilter,
-    .gc = crdtRcTombstoneGc,
-    .purge = crdtRcTombstonePurge,
-    .info = crdtRcTombstoneInfo,
-    .getVc = getCrdtRcTombstoneLastVc,
-};
+extern CrdtTombstoneMethod RcTombstoneCommonMethod;
+
 void updateRcTombstoneLastVc(CRDT_RCTombstone* rt, VectorClock vc);
 
 //========================= Virtual functions =======================
@@ -140,8 +123,7 @@ void* RdbLoadCrdtOrSetRcTombstone(RedisModuleIO *rdb, int version, int encver);
 //========================= public functions =======================
 int initRcModule(RedisModuleCtx *ctx);
 
-static RedisModuleType *CrdtRC;
-static RedisModuleType *CrdtRCT;
+
 RedisModuleType* getCrdtRc();
 RedisModuleType* getCrdtRcTombstone();
 int rcStopGc();

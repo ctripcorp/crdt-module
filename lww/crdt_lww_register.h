@@ -1,7 +1,7 @@
 #ifndef XREDIS_CRDT_CRDT_LWW_REGISTER_H
 #define XREDIS_CRDT_CRDT_LWW_REGISTER_H
 #include "../crdt_register.h"
-#include "../include/rmutil/sds.h"
+#include <rmutil/sds.h>
 #include "../crdt_util.h"
 #define NDEBUG
 #include <assert.h>

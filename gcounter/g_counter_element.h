@@ -1,18 +1,18 @@
 
 #include "../ctrip_vector_clock.h"
 #include "../ctrip_crdt_common.h"
-#include "../include/rmutil/dict.h"
+#include <rmutil/dict.h>
 #include "g_counter.h"
 
-#ifdef COUNTER_BENCHMARK_MAIN
+#ifdef COUNTER_TEST
 //main
-#define counter_malloc(size) zmalloc(size)
-#define counter_calloc(count) zcalloc(count, 1)
-#define counter_realloc(ptr, size) zrealloc(ptr, size)
-#define counter_free(ptr) zfree(ptr)
+#define counter_malloc(size) malloc(size)
+#define counter_calloc(count) calloc(count, 1)
+#define counter_realloc(ptr, size) realloc(ptr, size)
+#define counter_free(ptr) free(ptr)
 #else
 //build module so
-#include "../include/redismodule.h"
+#include <redismodule.h>
 #define counter_malloc(size) RedisModule_Alloc(size)
 #define counter_calloc(count) RedisModule_Calloc(count, 1)
 #define counter_realloc(ptr, size) RedisModule_Realloc(ptr, size)

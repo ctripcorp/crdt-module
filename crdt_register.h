@@ -33,9 +33,9 @@
 #ifndef XREDIS_CRDT_REGISTER_H
 #define XREDIS_CRDT_REGISTER_H
 
-#include "include/rmutil/sds.h"
+#include <rmutil/sds.h>
 #include "ctrip_crdt_common.h"
-#include "include/redismodule.h"
+#include <redismodule.h>
 #include "crdt_util.h"
 
 #define CRDT_REGISTER_DATATYPE_NAME "crdt_regr"
@@ -110,19 +110,10 @@ CRDT_Register* dupCrdtRegister(CRDT_Register *val);
 void crdtRegisterUpdateLastVC(void *data, VectorClock vc);
 CRDT_Register** filterRegister(CRDT_Register*  common, int gid, long long logic_time, long long maxsize, int* length);
 void freeRegisterFilter(CrdtObject** filters, int num);
-static CrdtObjectMethod RegisterCommonMethod = {
-    .merge = crdtRegisterMerge,
-    .filterAndSplit = crdtRegisterFilter,
-    .filterAndSplit2 = crdtRegisterFilter2,
-    .freefilter = freeRegisterFilter,
-};
+extern CrdtObjectMethod RegisterCommonMethod;
+
 sds crdtRegisterInfo(void *crdtRegister);
-static CrdtDataMethod RegisterDataMethod = {
-    .propagateDel = crdtRegisterDelete,
-    .getLastVC = getCrdtRegisterLastVc,
-    .updateLastVC = crdtRegisterUpdateLastVC,
-    .info = crdtRegisterInfo,
-};
+extern CrdtDataMethod RegisterDataMethod;
 
 void *RdbLoadCrdtRegister(RedisModuleIO *rdb, int encver);
 void RdbSaveCrdtRegister(RedisModuleIO *rdb, void *value);
@@ -150,8 +141,7 @@ int purgeRegisterTombstone(CRDT_RegisterTombstone* tombstone, CRDT_Register* tar
 CrdtMeta* addRegisterTombstone(CRDT_RegisterTombstone* target, CrdtMeta* meta, int* compare);
 int compareCrdtRegisterTombstone(CRDT_RegisterTombstone* tombstone, CrdtMeta* meta);
 
-static RedisModuleType *CrdtRegister;
-static RedisModuleType *CrdtRegisterTombstone;
+
 RedisModuleType* getCrdtRegister();
 RedisModuleType* getCrdtRegisterTombstone();
 int compareTombstoneAndRegister(CRDT_RegisterTombstone* tombstone, CRDT_Register* target);
@@ -169,14 +159,6 @@ int crdtRegisterTombstoneGc(CrdtTombstone* target, VectorClock clock);
 sds crdtRegisterTombstoneInfo(void *t);
 void freeRegisterTombstoneFilter(CrdtObject** filters, int num);
 VectorClock clone_rt_vc(void* rt);
-static CrdtTombstoneMethod RegisterTombstoneMethod = {
-    .merge = crdtRegisterTombstoneMerge,
-    .filterAndSplit =  crdtRegisterTombstoneFilter,
-    .filterAndSplit2 =  crdtRegisterTombstoneFilter2,
-    .freefilter = freeRegisterTombstoneFilter,
-    .gc = crdtRegisterTombstoneGc,
-    .purge = crdtRegisterTombstonePurge,
-    .info = crdtRegisterTombstoneInfo,
-    .getVc = clone_rt_vc,
-};
+extern struct CrdtTombstoneMethod RegisterTombstoneMethod;
+
 #endif //XREDIS_CRDT_CRDT_REGISTER_H

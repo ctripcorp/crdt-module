@@ -30,7 +30,7 @@
 // Created by zhuchen on 2019-04-30.
 //
 
-#include "../../include/rmutil/test.h"
+#include <rmutil/test.h>
 #include "../../crdt.h"
 
 int testBasicMacro() {

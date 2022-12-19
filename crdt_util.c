@@ -1,5 +1,5 @@
 #include "crdt_util.h"
-#include "include/redismodule.h"
+#include <redismodule.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>

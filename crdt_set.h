@@ -1,14 +1,13 @@
 #ifndef XREDIS_CRDT_SET_H
 #define XREDIS_CRDT_SET_H
-#include "include/rmutil/sds.h"
+#include <rmutil/sds.h>
 #include "ctrip_crdt_common.h"
-#include "include/redismodule.h"
+#include <redismodule.h>
 #include "crdt_util.h"
 
 #define CRDT_SET_DATATYPE_NAME "crdt_setr"
 #define CRDT_SET_TOMBSTONE_DATATYPE_NAME "crdt_sett"
-static RedisModuleType *CrdtSet;
-static RedisModuleType *CrdtSetTombstone;
+
 typedef  CrdtTombstone CRDT_SetTombstone;
 typedef CrdtObject CRDT_Set;
 int initCrdtSetModule(RedisModuleCtx *ctx);
@@ -64,21 +63,15 @@ sds setIterInfo(dictEntry* vc);
 
 
 //about method
-static CrdtDataMethod SetDataMethod = {
-    .propagateDel = crdtSetDelete,
-    .info = crdtSetInfo,
-};
+extern CrdtDataMethod SetDataMethod;
+
 CrdtObject *crdtSetMerge(CrdtObject *currentVal, CrdtObject *value);
 CrdtObject** crdtSetFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
 CrdtObject** crdtSetFilter2(CrdtObject* common, int gid, VectorClock min_vc, long long maxsize, int* length);
 
 void freeSetFilter(CrdtObject** filters, int num);
-static CrdtObjectMethod SetCommonMethod = {
-    .merge = crdtSetMerge,
-    .filterAndSplit = crdtSetFilter,
-    .filterAndSplit2 = crdtSetFilter2,
-    .freefilter = freeSetFilter,
-};
+extern CrdtObjectMethod SetCommonMethod;
+
 // int addSetTombstoneDictValue(CRDT_Set* data, sds field, CrdtMeta* meta);
 //about tombstone method
 CrdtTombstone* crdtSetTombstoneMerge(CrdtTombstone* target, CrdtTombstone* other);
@@ -90,16 +83,8 @@ sds crdtSetTombstoneInfo(void *t);
 void freeSetTombstoneFilter(CrdtObject** filters, int num);
 int crdtSetTombstonePurge(CrdtTombstone* tombstone, CrdtObject* target);
 VectorClock clone_st_vc(void* st);
-static CrdtTombstoneMethod SetTombstoneCommonMethod = {
-    .merge = crdtSetTombstoneMerge,
-    .filterAndSplit =  crdtSetTombstoneFilter,
-    .filterAndSplit2 =  crdtSetTombstoneFilter2,
-    .freefilter = freeSetTombstoneFilter,
-    .gc = crdtSetTombstoneGc,
-    .purge = crdtSetTombstonePurge,
-    .info = crdtSetTombstoneInfo,
-    .getVc = clone_st_vc,
-};
+extern CrdtTombstoneMethod SetTombstoneCommonMethod;
+
 int setTryAdd(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta);
 int setAdd(CRDT_Set* current, CRDT_SetTombstone* tombstone, sds field, CrdtMeta* meta);
 int setTryRem(CRDT_Set* s, CRDT_SetTombstone* t, sds field, CrdtMeta* meta);

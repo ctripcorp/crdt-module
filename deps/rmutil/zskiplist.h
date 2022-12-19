@@ -2,7 +2,6 @@
 #include "ziplist.h"
 // #include "include/rmutil/zskiplist.h"
 #include "sds.h"
-#include "../redismodule.h"
 #include "util.h"
 #define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^32 elements */
 #define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */

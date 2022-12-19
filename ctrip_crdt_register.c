@@ -30,8 +30,35 @@
 #include "crdt_register.h"
 #include "ctrip_crdt_register.h"
 #include "ctrip_crdt_expire.h"
-#include <strings.h>
+#include <string.h>
 
+static RedisModuleType *CrdtRC;
+static RedisModuleType *CrdtRCT;
+
+CrdtDataMethod RcDataMethod = {
+    .propagateDel = crdtRcDelete,
+    .getLastVC = getCrdtRcLastVc,
+    .updateLastVC = crdtRcUpdateLastVC,
+    .info = crdtRcInfo,
+};
+
+CrdtObjectMethod RcCommonMethod = {
+    .merge = crdtRcMerge,
+    .filterAndSplit = crdtRcFilter,
+    .filterAndSplit2 = crdtRcFilter2,
+    .freefilter = freeRcFilter,
+};
+
+CrdtTombstoneMethod RcTombstoneCommonMethod = {
+    .merge = crdtRcTombstoneMerge,
+    .filterAndSplit =  crdtRcTombstoneFilter,
+    .filterAndSplit2 =  crdtRcTombstoneFilter2,
+    .freefilter = freeCrdtRcTombstoneFilter,
+    .gc = crdtRcTombstoneGc,
+    .purge = crdtRcTombstonePurge,
+    .info = crdtRcTombstoneInfo,
+    .getVc = getCrdtRcTombstoneLastVc,
+};
 /******************    about type  +************************/
 RedisModuleType* getCrdtRc() {return CrdtRC;};
 RedisModuleType* getCrdtRcTombstone() {return CrdtRCT;}

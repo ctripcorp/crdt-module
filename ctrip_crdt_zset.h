@@ -1,8 +1,8 @@
 #include "./ctrip_vector_clock.h"
-#include "./include/redismodule.h"
+#include <redismodule.h>
 #include "./ctrip_crdt_common.h"
-#include "./include/rmutil/zskiplist.h"
-#include "./include/rmutil/sds.h"
+#include <rmutil/zskiplist.h>
+#include <rmutil/sds.h>
 
 /* Input flags. */
 #define ZADD_NONE 0
@@ -51,38 +51,21 @@ sds crdtZsetTombstoneInfo(void* tombstone);
 int crdtZsetTombstoneGc(CrdtTombstone* target, VectorClock clock);
 VectorClock getCrdtSSTLastVc(CRDT_SSTombstone* data);
 VectorClock clone_sst_vc(void* data);
-static CrdtTombstoneMethod ZsetTombstoneCommonMethod = {
-    .merge = crdtSSTMerge,
-    .filterAndSplit =  crdtSSTFilter,
-    .filterAndSplit2 =  crdtSSTFilter2,
-    .freefilter = freeSSTFilter,
-    .gc = crdtZsetTombstoneGc,
-    .purge = crdtZsetTombstonePurge,
-    .info = crdtZsetTombstoneInfo,
-    .getVc = clone_sst_vc,
-};
+extern CrdtTombstoneMethod ZsetTombstoneCommonMethod;
+
 //about data method
 int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value);
 sds crdtZSetInfo(void *data);
-static CrdtDataMethod ZSetDataMethod = {
-    .propagateDel = crdtZSetDelete,
-    .info = crdtZSetInfo,
-};
+extern CrdtDataMethod ZSetDataMethod;
 
 
 CrdtObject *crdtSSMerge(CrdtObject *currentVal, CrdtObject *value);
 CrdtObject** crdtSSFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
 CrdtObject** crdtSSFilter2(CrdtObject* common, int gid, VectorClock min_vc, long long maxsize, int* length);
-void freeSSFilter(CrdtObject** filters, int num);    
-static CrdtObjectMethod ZSetCommandMethod = {
-    .merge = crdtSSMerge,
-    .filterAndSplit = crdtSSFilter,
-    .filterAndSplit2 = crdtSSFilter2,
-    .freefilter = freeSSFilter,
-};
+void freeSSFilter(CrdtObject** filters, int num);  
+extern CrdtObjectMethod ZSetCommandMethod;
 // moduleType
-static RedisModuleType *CrdtSS;
-static RedisModuleType *CrdtSST;
+
 RedisModuleType* getCrdtSS();
 RedisModuleType* getCrdtSST();
 int zsetStopGc();

@@ -1,15 +1,37 @@
 #include "ctrip_crdt_zset.h"
 #include "util.h"
 #include "crdt_util.h"
-#include "include/rmutil/ziplist.h"
-#include "include/rmutil/sds.h"
+#include <rmutil/ziplist.h>
+#include <rmutil/sds.h>
 #include <assert.h>
 #include <math.h>
 #include <string.h>
 
+static RedisModuleType *CrdtSS;
+static RedisModuleType *CrdtSST;
 
+CrdtTombstoneMethod ZsetTombstoneCommonMethod = {
+    .merge = crdtSSTMerge,
+    .filterAndSplit =  crdtSSTFilter,
+    .filterAndSplit2 =  crdtSSTFilter2,
+    .freefilter = freeSSTFilter,
+    .gc = crdtZsetTombstoneGc,
+    .purge = crdtZsetTombstonePurge,
+    .info = crdtZsetTombstoneInfo,
+    .getVc = clone_sst_vc,
+};
 
+CrdtObjectMethod ZSetCommandMethod = {
+    .merge = crdtSSMerge,
+    .filterAndSplit = crdtSSFilter,
+    .filterAndSplit2 = crdtSSFilter2,
+    .freefilter = freeSSFilter,
+};
 
+CrdtDataMethod ZSetDataMethod = {
+    .propagateDel = crdtZSetDelete,
+    .info = crdtZSetInfo,
+};
 
 /*-----------------------------------------------------------------------------
  * Common sorted set API

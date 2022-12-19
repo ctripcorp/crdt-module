@@ -195,7 +195,7 @@ sds crdtZSetInfo(void *data) {
     while((de = dictNext(it)) != NULL && num > 0) {
         crdt_element element = dict_get_element(de);
         sds element_info = get_element_info(element);
-        result = sdscatprintf(result, "\n1)  key: %s ", dictGetKey(de));
+        result = sdscatprintf(result, "\n1)  key: %s ", (sds)dictGetKey(de));
         result = sdscatprintf(result, "\n%s", element_info);
         sdsfree(element_info);
         num--;
@@ -680,7 +680,7 @@ sds crdtZsetTombstoneInfo(void* tombstone) {
     while((de = dictNext(it)) != NULL) {
         crdt_element element = dict_get_element(de);
         sds element_info = get_element_info(element);
-        result = sdscatprintf(result, "\n1) tombstone key: %s ", dictGetKey(de));
+        result = sdscatprintf(result, "\n1) tombstone key: %s ", (sds)dictGetKey(de));
         result = sdscatprintf(result, "\n%s", element_info);
         sdsfree(element_info);
         num--;
@@ -1605,7 +1605,7 @@ sds getZsetElementInfo(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field)
             if(result == NULL) result = sdsempty();
             crdt_element element = dict_get_element(de);
             sds element_info = get_element_info(element);
-            result = sdscatprintf(result, "value)  key: %s \n", dictGetKey(de));
+            result = sdscatprintf(result, "value)  key: %s \n", (sds)dictGetKey(de));
             result = sdscatprintf(result, "%s", element_info);
             sdsfree(element_info);
         }
@@ -1618,7 +1618,7 @@ sds getZsetElementInfo(CRDT_SS* current, CRDT_SSTombstone* tombstone, sds field)
             if(result == NULL) result = sdsempty();
             crdt_element element = dict_get_element(de);
             sds element_info = get_element_info(element);
-            result = sdscatprintf(result, "tombstone)  key: %s \n", dictGetKey(de));
+            result = sdscatprintf(result, "tombstone)  key: %s \n", (sds)dictGetKey(de));
             result = sdscatprintf(result, "%s", element_info);
             sdsfree(element_info);
         }

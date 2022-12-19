@@ -1,6 +1,6 @@
 
 #include <limits.h>
-#include "../include/rmutil/sds.h"
+#include <rmutil/sds.h>
 #define VALUE_TYPE_NONE 0
 #define VALUE_TYPE_LONGLONG 1
 #define VALUE_TYPE_DOUBLE  2
