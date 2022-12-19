@@ -39,7 +39,7 @@ else
 	SHOBJ_CFLAGS ?= -dynamic -fno-common -g -ggdb
 	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup
 endif
-CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -O0 -g -fPIC -std=gnu99 -Wno-psabi -w -Wno-address-of-packed-member-msse2 -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API $(REDIS_CFLAGS)
+CFLAGS = -I./include -I$(RM_INCLUDE_DIR)/ -Wall -O0 -g -fPIC -std=gnu99 -Wno-psabi -w -Wno-address-of-packed-member-msse2 -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API $(REDIS_CFLAGS)
 ifeq ($(uname_S),Darwin)
 	CFLAGS+= -DTCL_TEST -DDEBUG
 	# CFLAGS+= -DDEBUG
@@ -52,7 +52,7 @@ rmutil:
 	$(MAKE) -C $(RMUTIL_LIBDIR)
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@ 
+	$(CC) $(CFLAGS) -c $< -o $@
 
 
 CRDT_OBJ = gcounter/g_counter_element.o gcounter/g_counter.o  orset/crdt_orset_rc.o ctrip_crdt_register.o ctrip_crdt_zset.o orset/crdt_orset_zset.o crdt_set.o orset/crdt_orset_set.o crdt_statistics.o ctrip_crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o lww/crdt_lww_register.o lww/crdt_lww_hashmap.o 
@@ -68,17 +68,17 @@ clean:
 # unit tests
 test-gcounter: clean  gcounter/g_counter.c gcounter/g_counter.h util.o 
 	$(MAKE) -C $(RMUTIL_LIBDIR) CRDT_CFLAGS=-DREDIS_MODULE_TEST
-	$(CC)  -g gcounter/g_counter.c util.o -DCOUNTER_TEST_MAIN  -lm -o /tmp/gcounter_test -I$(RM_INCLUDE_DIR) -I$(RMUTIL_LIBDIR) ./deps/rmutil/librmutil.a
+	$(CC)  -g gcounter/g_counter.c util.o -DCOUNTER_TEST_MAIN  -lm -o /tmp/gcounter_test -I./include -I$(RMUTIL_LIBDIR) ./deps/rmutil/librmutil.a
 	/tmp/gcounter_test
 
 test_crdt: tests/unit/test_crdt.c
-	$(CC) -Wall -o $@ $^ -lc -O0 -DCOUNTER_TEST_MAIN -I$(RM_INCLUDE_DIR) -I$(RMUTIL_LIBDIR) ./deps/rmutil/librmutil.a
+	$(CC) -Wall -o $@ $^ -lc -O0 -DCOUNTER_TEST_MAIN -I./include -I$(RMUTIL_LIBDIR) ./deps/rmutil/librmutil.a
 	@(sh -c ./$@)
 .PHONY: test_crdt
 
 
 test_crdt_register: tests/unit/test_register.c  crdt_register.c deps/rmutil/sds.c
-	$(CC) -Wall -o $@ $^ $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc -O0 -DCOUNTER_TEST_MAIN  -lm -o /tmp/gcounter_test -I$(RM_INCLUDE_DIR) -I$(RMUTIL_LIBDIR) ./deps/rmutil/librmutil.a
+	$(CC) -Wall -o $@ $^ $(LIBS) -L$(RMUTIL_LIBDIR) -lrmutil -lc -O0 -DCOUNTER_TEST_MAIN  -lm -o /tmp/gcounter_test -I./include -I$(RMUTIL_LIBDIR) ./deps/rmutil/librmutil.a
 	@(sh -c ./$@)
 .PHONY: test_crdt_register
 

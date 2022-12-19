@@ -190,7 +190,6 @@
 #include <limits.h>
 #include <assert.h>
 #include "util.h"
-#include "../redismodule.h"
 #include "./endianconv.h"
 #include "./redisassert.h"
 
