@@ -567,6 +567,7 @@ end:
 
 
 int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
+    sds* del_counters = NULL;
     RedisModuleKey *moduleKey = (RedisModuleKey *)key;
     CrdtMeta del_meta = {.gid = 0};
     initIncrMeta(&del_meta);
@@ -579,7 +580,8 @@ int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSST, tombstone);
     }
     int len = crdtZsetLength(value);
-    sds del_counters[len];
+    
+    del_counters = RedisModule_Alloc(len * sizeof(sds));
     int dlen = initSSTombstoneFromSS(tombstone, &del_meta, value, del_counters);
     crdtAssert(dlen <= len);
     sds vcSds = vectorClockToSds(getMetaVectorClock(&del_meta));
@@ -589,6 +591,7 @@ int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
         sdsfree(del_counters[i]);
     }
     freeIncrMeta(&del_meta);
+    if(del_counters != NULL) RedisModule_Free(del_counters);
     return CRDT_OK;
 }
 
@@ -862,6 +865,9 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
     unsigned long rangelen = 0;
     int minidx, maxidx;
 
+    sds* fields = NULL;
+    double* scores = NULL;
+
     if(reverse) {
         maxidx = 2; minidx = 3;
     } else {
@@ -913,8 +919,9 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
         }
     }
     int max_len = crdtZsetLength(current);
-    sds fields[max_len];
-    double scores[max_len];
+    
+    fields = RedisModule_Alloc(max_len * sizeof(sds));
+    scores = RedisModule_Alloc(max_len * sizeof(double));
     while (ln && limit--) {
         /* Abort when the node is no longer in range. */
         if (reverse) {
@@ -948,6 +955,8 @@ int genericZrangebyscoreCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
         }
     }
     if(moduleKey) RedisModule_CloseKey(moduleKey);
+    if (fields != NULL) RedisModule_Free(fields);
+    if (scores != NULL) RedisModule_Free(scores);
     return 1;
 }
 
@@ -1002,6 +1011,7 @@ int genericZrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
     long offset = 0, limit = -1;
     unsigned long rangelen = 0;
     int minidx, maxidx;
+    sds* fields = NULL;
 
     /* Parse the range arguments. */
     if (reverse) {
@@ -1061,7 +1071,8 @@ int genericZrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
         * list, so we push this object that will represent the multi-bulk
         * length in the output buffer, and will "fix" it later */
     int max_len = crdtZsetLength(current);
-    sds fields[max_len];
+    
+    fields = RedisModule_Alloc(max_len * sizeof(sds));
     /* If there is an offset, just traverse the number of elements without
         * checking the score because that is done in the next loop. */
     while (ln && offset--) {
@@ -1095,6 +1106,7 @@ int genericZrangebylexCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int
         RedisModule_ReplyWithStringBuffer(ctx, fields[i], sdslen(fields[i]));
     }
     RedisModule_CloseKey(moduleKey);
+    if (fields != NULL) RedisModule_Free(fields);
     return 1;
     
 }
@@ -1204,6 +1216,7 @@ int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
     zlexrangespec lexrange;
     long long start, end, llen;
     CrdtMeta meta = {.gid = 0};
+    sds* callback_items = NULL;
     /* Step 1: Parse the range. */
     if (rangetype == ZRANGE_RANK) {
         if(RedisModule_StringToLongLong(argv[2], &start) != REDISMODULE_OK ||
@@ -1231,11 +1244,12 @@ int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
         if (rangetype == ZRANGE_LEX) zslFreeLexRange(&lexrange);
         return RedisModule_ReplyWithLongLong(ctx , 0);
     }
-    sds callback_items[crdtZsetLength(current)];
+    
+    llen = crdtZsetLength(current);
     
     if (rangetype == ZRANGE_RANK) {
         /* Sanitize indexes. */
-        llen = crdtZsetLength(current);
+        
         if (start < 0) start = llen+start;
         if (end < 0) end = llen+end;
         if (start < 0) start = 0;
@@ -1262,6 +1276,7 @@ int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
     appendVCForMeta(&meta, getCrdtSSLastVc(current));
     
     long long callback_byte_size = 0;
+    callback_items = RedisModule_Alloc(sizeof(sds) * llen);
     switch(rangetype) {
     case ZRANGE_RANK:
         deleted = zslDeleteRangeByRank(current, tombstone, &meta, start+1, end+1, callback_items, &callback_byte_size);
@@ -1292,6 +1307,7 @@ cleanup:
     if (rangetype == ZRANGE_LEX) zslFreeLexRange(&lexrange);
     if (meta.gid) {freeIncrMeta(&meta);}
     if (moduleKey) {RedisModule_CloseKey(moduleKey);}
+    if (callback_items != NULL) RedisModule_Free(callback_items);
     return REDISMODULE_OK;
 }
 
