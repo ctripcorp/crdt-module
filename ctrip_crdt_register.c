@@ -101,12 +101,12 @@ int replicationFeedCrdtCounterCommand(RedisModuleCtx* ctx, char* cmdbuf, sds key
 int replicationCrdtCounterCommand(RedisModuleCtx *ctx, sds key,CrdtMeta* meta, int type, sds data) {
     // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.COUNTER", "sllcllll", argv[1], getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vc_info, g->start_clock, g->end_clock, (size_t)g->type, g->conv.i);
     int alllen = 24 + sdslen(key) + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + 8+ sdslen(data);
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char *cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if (cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtCounterCommand(ctx, cmdbuf, key, meta, type, data);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen]; 
         replicationFeedCrdtCounterCommand(ctx, cmdbuf, key, meta, type, data);
     }
     return 1;
@@ -134,12 +134,12 @@ int replicationFeedCrdtRCCommand(RedisModuleCtx* ctx, char* cmdbuf,sds key,CrdtM
 
 int replicationCrdtRcCommand(RedisModuleCtx* ctx, sds key, CrdtMeta* meta, sds value, long long expire) {
     size_t alllen = sdslen(key) + sdslen(value) + crdt_rc_basic_str_len;
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char *cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if(cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtRCCommand(ctx, cmdbuf, key , meta, value, expire);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen]; 
         replicationFeedCrdtRCCommand(ctx, cmdbuf, key, meta, value, expire);
     }
     return alllen;
@@ -165,12 +165,12 @@ int replicationFeedCrdtRCCommand2(RedisModuleCtx* ctx, char* cmdbuf,sds key,Crdt
 }
 int replicationCrdtRcCommand2(RedisModuleCtx* ctx, sds key, CrdtMeta* meta, char* value, int value_len, long long expire) {
     size_t alllen = sdslen(key) + value_len + crdt_rc_basic_str_len;
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char *cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if (cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtRCCommand2(ctx, cmdbuf, key , meta, value, value_len, expire);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen]; 
         replicationFeedCrdtRCCommand2(ctx, cmdbuf, key, meta, value, value_len,  expire);
     }
     return alllen;
@@ -527,12 +527,12 @@ int replicationCrdtSetCommand(RedisModuleCtx* ctx, sds key, sds val, CrdtMeta* s
     // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.SET", "ssllcl", key, val, getMetaGid(set_meta), getMetaTimestamp(set_meta), vcSds, expire);
     // sdsfree(vcSds);
     size_t alllen = sdslen(key) + sdslen(val) + crdt_set_basic_str_len;
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char *cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if (cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtSetCommand(ctx, cmdbuf, key, val,set_meta, expire_time);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen]; 
         replicationFeedCrdtSetCommand(ctx, cmdbuf, key, val,set_meta, expire_time);
     }
     return 1;
@@ -977,12 +977,12 @@ int replicationFeedCrdtMsetCommand(RedisModuleCtx* ctx, char* cmdbuf, char* head
 }
 int msetGeneric(RedisModuleCtx* ctx, char* head, MSetExecFunc exec, int len, RedisModuleKey** modulekeys, sds* keys, sds* values, CrdtMeta* mset_meta, size_t size) {
     int alllen = strlen(head) + size + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + 8;
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char *cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if (cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtMsetCommand(ctx, cmdbuf, head, exec, len , modulekeys, keys, values, mset_meta);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen];
         replicationFeedCrdtMsetCommand(ctx, cmdbuf, head, exec, len , modulekeys, keys, values, mset_meta);
     }
     return 1;
@@ -1025,12 +1025,12 @@ int replicationFeedCrdtMsetCommandByRc(RedisModuleCtx* ctx, char* cmdbuf, int le
 }
 int msetGenericByRc(RedisModuleCtx* ctx, int len, RedisModuleString** keys, void** crdt_vals, void* crdt_toms,  sds* values, CrdtMeta* mset_meta, size_t size) {
     int alllen = strlen(crdt_rc_mset_head) + size + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + 8;
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char *cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if(cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtMsetCommandByRc(ctx, cmdbuf, len , keys, crdt_vals, crdt_toms, values, mset_meta);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen];
         replicationFeedCrdtMsetCommandByRc(ctx, cmdbuf, len , keys, crdt_vals, crdt_toms, values, mset_meta);
     }
     return 1;
@@ -1083,12 +1083,12 @@ int replicationFeedCrdtMsetCommandByReg(RedisModuleCtx* ctx, char* cmdbuf, int l
 int msetGenericByReg(RedisModuleCtx* ctx, int len, RedisModuleString** keys, void** crdt_vals, void* crdt_toms,  sds* values, CrdtMeta* mset_meta, size_t size) {
     // (char *)crdt_mset_head,
     int alllen = strlen(crdt_mset_head) + size + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + 8;
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char *cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if(cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtMsetCommandByReg(ctx, cmdbuf, len , keys, crdt_vals, crdt_toms, values, mset_meta);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen];
         replicationFeedCrdtMsetCommandByReg(ctx, cmdbuf, len , keys, crdt_vals, crdt_toms, values, mset_meta);
     }
     return 1;

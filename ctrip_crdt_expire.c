@@ -74,12 +74,12 @@ end:
         size_t keylen = 0;
         const char* keystr = RedisModule_StringPtrLen(key, &keylen);
         size_t alllen = keylen  + crdt_expireat_basic_str_len;
-        if(keylen > MAXSTACKSIZE) {
-            char* cmdbuf = RedisModule_Alloc(alllen);
+        char* cmdbuf = RedisModule_GetSharedBuffer(alllen);
+        if(cmdbuf == NULL) {
+            cmdbuf = RedisModule_Alloc(alllen);
             replicationFeedCrdtExpireAtCommand(ctx, cmdbuf, keystr, keylen, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
             RedisModule_Free(cmdbuf);
         } else {
-            char cmdbuf[alllen]; 
             replicationFeedCrdtExpireAtCommand(ctx, cmdbuf, keystr, keylen, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
         }
 

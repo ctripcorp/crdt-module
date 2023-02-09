@@ -653,16 +653,16 @@ int sendCrdtSaddCommand(struct RedisModuleCtx *ctx, CrdtMeta *meta, RedisModuleS
         field_lens[i] = sdslen(fields[i]);
         bytes_len += field_lens[i] + REPLICATION_MAX_STR_LEN;
     }
-    if (bytes_len > MAXSTACKSIZE)
+    char* cmdbuf = RedisModule_GetSharedBuffer(bytes_len);
+    if (cmdbuf == NULL)
     {
-        char *cmdbuf = RedisModule_Alloc(bytes_len);
+        cmdbuf = RedisModule_Alloc(bytes_len);
         int size = replicationFeedCrdtSaddCommand(ctx, cmdbuf, key, meta, fields, field_lens, fields_len);
         assert(size < bytes_len);
         RedisModule_Free(cmdbuf);
     }
     else
     {
-        char cmdbuf[bytes_len];
         int size = replicationFeedCrdtSaddCommand(ctx, cmdbuf, key, meta, fields, field_lens, fields_len);
         assert(size < bytes_len);
     }
