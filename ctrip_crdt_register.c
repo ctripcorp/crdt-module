@@ -994,6 +994,7 @@ int msetGeneric(RedisModuleCtx* ctx, char* head, MSetExecFunc exec, int len, Red
 
 
 int max_del_counter_size = (21 + 17 + 3) * 16 ;
+#define MAX_BUFFER_SIZE (4 * 1024 * 1024)
 int replicationFeedCrdtMsetCommandByRc(RedisModuleCtx* ctx, char* cmdbuf, int len,  RedisModuleString** keys, void** crdt_vals, void** crdt_toms, sds* values, CrdtMeta* mset_meta) {
     int cmdlen = 0;
     static int crdt_rc_mset_head_str_len = 0;
@@ -1006,16 +1007,19 @@ int replicationFeedCrdtMsetCommandByRc(RedisModuleCtx* ctx, char* cmdbuf, int le
     cmdlen += feedBuf(cmdbuf + cmdlen , crdt_rc_mset_head, crdt_rc_mset_head_str_len);
     cmdlen += feedGid2Buf(cmdbuf + cmdlen, getMetaGid(mset_meta));
     cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, getMetaTimestamp(mset_meta));
+    char* shared_buf = RedisModule_Alloc(MAX_BUFFER_SIZE);
     for(int i = 0; i < len; i++) {
         // CrdtMeta* m = dupMeta(mset_meta);
         CrdtMeta m = {.gid = getMetaGid(mset_meta), .timestamp = getMetaTimestamp(mset_meta),.vectorClock = dupVectorClock(getMetaVectorClock(mset_meta))};
         
         int max_len = sdslen(values[i]) + max_del_counter_size;
         int need_free_buf = 0;;
-        char* value_buf = RedisModule_GetSharedBuffer(max_len);
-        if (value_buf == NULL) {
+        char* value_buf = NULL;
+        if (max_len > MAX_BUFFER_SIZE) {
             value_buf = RedisModule_Alloc(max_len);
             need_free_buf = 1;
+        } else {
+            value_buf = shared_buf;
         }
         int value_len = add_rc_by_key(ctx, crdt_vals[i], crdt_toms[i], &m, keys[i], values[i], value_buf);
         sds key = RedisModule_GetSds(keys[i]);
@@ -1030,6 +1034,7 @@ int replicationFeedCrdtMsetCommandByRc(RedisModuleCtx* ctx, char* cmdbuf, int le
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "set", keys[i]);
         RedisModule_SignalModifiedKey(ctx, keys[i]);
     }
+    RedisModule_Free(shared_buf);
     // RedisModule_Debug(logLevel, "cmd: %d - %s", cmdlen, cmdbuf);
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
