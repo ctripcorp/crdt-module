@@ -437,7 +437,8 @@ int check_type(sds val, RedisModuleKey* moduleKey) {
         } else if(isCrdtRcTombstone(t)) {
             return CRDT_RC_TYPE;
         } 
-    } 
+    }
+    if (sdslen(val) == 0) return CRDT_REGISTER_TYPE;
     ctrip_value v = {.type = VALUE_TYPE_SDS,.value.s = val};
     if(value_to_ld(&v)) {
         return CRDT_RC_TYPE;
