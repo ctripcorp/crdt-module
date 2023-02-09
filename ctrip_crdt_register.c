@@ -1009,11 +1009,21 @@ int replicationFeedCrdtMsetCommandByRc(RedisModuleCtx* ctx, char* cmdbuf, int le
     for(int i = 0; i < len; i++) {
         // CrdtMeta* m = dupMeta(mset_meta);
         CrdtMeta m = {.gid = getMetaGid(mset_meta), .timestamp = getMetaTimestamp(mset_meta),.vectorClock = dupVectorClock(getMetaVectorClock(mset_meta))};
-        char value_buf[sdslen(values[i]) + max_del_counter_size];
+        
+        int max_len = sdslen(values[i]) + max_del_counter_size;
+        int need_free_buf = 0;;
+        char* value_buf = RedisModule_GetSharedBuffer(max_len);
+        if (value_buf == NULL) {
+            value_buf = RedisModule_Alloc(max_len);
+            need_free_buf = 1;
+        }
         int value_len = add_rc_by_key(ctx, crdt_vals[i], crdt_toms[i], &m, keys[i], values[i], value_buf);
         sds key = RedisModule_GetSds(keys[i]);
         cmdlen += feedStr2Buf(cmdbuf + cmdlen , key, sdslen(key));
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, value_buf, value_len);
+        if (need_free_buf) {
+            RedisModule_Free(value_buf);
+        }
         cmdlen += feedVectorClock2Buf(cmdbuf + cmdlen, getMetaVectorClock(&m));
         freeVectorClock(getMetaVectorClock(&m));
         // sdsfree(value);

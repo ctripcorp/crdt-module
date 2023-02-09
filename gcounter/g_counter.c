@@ -226,9 +226,10 @@ int value_to_str(char* buf, int data_type, union all_type v) {
 
 sds value_to_sds(int data_type, union all_type v) {
     int max_len = get_value_max_len(data_type, v);
-    char buf[max_len];
+    sds buf = sdsMakeRoomFor(sdsempty(), max_len + 1);
     int len = value_to_str(buf, data_type, v);
-    return sdsnewlen(buf, len);
+    sdsIncrLen(buf, len);
+    return buf;
 }
 
 int g_counter_meta_to_str(g_counter_meta* meta, char* buf) {
