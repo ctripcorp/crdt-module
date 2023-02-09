@@ -422,6 +422,7 @@ end:
 
 //spop key
 int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+    sds* fields = NULL;
     if (argc < 2) return RedisModule_WrongArity(ctx);
     long long num = 0;
     if (argc == 2) {
@@ -457,7 +458,7 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     int keylen = getSetSize(current);
     num = min(keylen, num);
-    sds fields[num];
+    fields = RedisModule_Alloc(sizeof(sds) * num);
     appendVCForMeta(&meta, getCrdtSetLastVc(current));
     if(num < keylen) {
         for(int i = 0; i < num; i += 1) {
@@ -501,6 +502,7 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
     if(meta.gid != 0) freeIncrMeta(&meta);
+    if(fields != NULL) RedisModule_Free(fields);
     return CRDT_OK;
 }
 
@@ -539,13 +541,13 @@ int sendCrdtSaddCommand(struct RedisModuleCtx* ctx, CrdtMeta* meta, RedisModuleS
         field_lens[i] = sdslen(fields[i]);
         bytes_len += field_lens[i] + REPLICATION_MAX_STR_LEN;
     }
-    if(bytes_len > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(bytes_len);
+    char* cmdbuf = RedisModule_GetSharedBuffer(bytes_len);
+    if(cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(bytes_len);
         int size =replicationFeedCrdtSaddCommand(ctx, cmdbuf, key, meta, fields, field_lens, fields_len);
         assert(size < bytes_len);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[bytes_len];
         int size = replicationFeedCrdtSaddCommand(ctx, cmdbuf, key, meta, fields, field_lens, fields_len);
         assert(size < bytes_len);
     }
