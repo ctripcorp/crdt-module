@@ -2651,7 +2651,7 @@ sds get_base_value_sds_from_element(crdt_element el, int gid) {
         break;
     }
     max_len += get_value_max_len(data_type, v);
-    char* buf = sdsMakeRoomFor(sdsempty(), max_len + 1);
+    sds buf = sdsMakeRoomFor(sdsempty(), max_len + 1);
     len += value_to_str(buf + len, data_type, v);
     sds dr = get_delete_counter_sds_from_element(el);
     if(dr != NULL) {
@@ -2660,8 +2660,7 @@ sds get_base_value_sds_from_element(crdt_element el, int gid) {
         len += sdslen(dr);
         sdsfree(dr);
     }
-    buf[len] = '\0';
-    sdssetlen(buf, len);
+    sdsIncrLen(buf, len);
     return buf;
 }
 
