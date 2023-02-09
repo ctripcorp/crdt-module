@@ -83,12 +83,12 @@ int replicationCrdtZaddCommand(RedisModuleCtx* ctx, CrdtMeta* meta, sds key, sds
     + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN
     + (callback_len + 1) * (REPLICATION_MAX_LONGLONG_LEN + 2) 
     + callback_byte_size ;
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char* cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if(cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtZaddCommand(ctx, cmdbuf, meta, key, callback, callback_len);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen]; 
         replicationFeedCrdtZaddCommand(ctx, cmdbuf, meta, key, callback, callback_len);
     }
     return 1;
@@ -130,12 +130,12 @@ int replicationCrdtDelSSCommand(int dbId, CrdtMeta* meta, sds key, sds* callback
     + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN
     + (callback_len + 1) * (REPLICATION_MAX_LONGLONG_LEN + 2) 
     + callback_byte_size ;
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char* cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if(cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtDelSSCommand(dbId, cmdbuf, meta, key, callback, callback_len);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen]; 
         replicationFeedCrdtDelSSCommand(dbId, cmdbuf, meta, key, callback, callback_len);
     }
     return 1;
@@ -172,12 +172,12 @@ int replicationCrdtZincrCommand(RedisModuleCtx* ctx, CrdtMeta* meta, sds key, sd
     + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN
     + (callback_len + 1) * (REPLICATION_MAX_LONGLONG_LEN + 2) 
     + callback_byte_size ;
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char* cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if(cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtZincrCommand(ctx, cmdbuf, meta, key, callback, callback_len);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen]; 
         replicationFeedCrdtZincrCommand(ctx, cmdbuf, meta, key, callback, callback_len);
     }
     return 1;
@@ -207,12 +207,12 @@ int replicationCrdtZremCommand(RedisModuleCtx* ctx, sds key, CrdtMeta* meta ,sds
     + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN
     + (callback_len + 1) * (REPLICATION_MAX_LONGLONG_LEN + 2) 
     + callback_byte_size ;
-    if(alllen > MAXSTACKSIZE) {
-        char* cmdbuf = RedisModule_Alloc(alllen);
+    char* cmdbuf = RedisModule_GetSharedBuffer(alllen);
+    if(cmdbuf == NULL) {
+        cmdbuf = RedisModule_Alloc(alllen);
         replicationFeedCrdtZremCommand(ctx, cmdbuf, meta, key, callback, callback_len);
         RedisModule_Free(cmdbuf);
     } else {
-        char cmdbuf[alllen]; 
         replicationFeedCrdtZremCommand(ctx, cmdbuf, meta, key, callback, callback_len);
     }
     return 1;

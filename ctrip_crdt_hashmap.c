@@ -391,12 +391,12 @@ int hsetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
         write_bakclog_start();
     #endif
         size_t alllen = crdt_hset_basic_str_len + keylen + fieldAndValAllStrLen;
-        if(alllen > MAXSTACKSIZE) { 
-            char *cmdbuf = RedisModule_Alloc(alllen);
+        char *cmdbuf = RedisModule_GetSharedBuffer(alllen);
+        if (cmdbuf == NULL) { 
+            cmdbuf = RedisModule_Alloc(alllen);
             replicationFeedCrdtHsetCommand(ctx, cmdbuf,  keystr, keylen, &meta, getCrdtHashLastVc(current),argc - 2, fieldAndValStr, fieldAndValStrLen);
             RedisModule_Free(cmdbuf);
         }else {
-            char cmdbuf[alllen]; 
             replicationFeedCrdtHsetCommand(ctx, cmdbuf, keystr, keylen, &meta, getCrdtHashLastVc(current),argc - 2, fieldAndValStr, fieldAndValStrLen);
         }
     #if defined(HSET_STATISTICS) 
