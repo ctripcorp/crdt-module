@@ -81,6 +81,7 @@ end:
             RedisModule_Free(cmdbuf);
         } else {
             replicationFeedCrdtExpireAtCommand(ctx, cmdbuf, keystr, keylen, RedisModule_CurrentGid(), RedisModule_Milliseconds(), expireTime, (long long)(getDataType(data)));
+            RedisModule_ReturnSharedBuffer(cmdbuf);
         }
 
 

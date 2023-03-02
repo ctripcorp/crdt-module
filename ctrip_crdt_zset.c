@@ -90,6 +90,7 @@ int replicationCrdtZaddCommand(RedisModuleCtx* ctx, CrdtMeta* meta, sds key, sds
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtZaddCommand(ctx, cmdbuf, meta, key, callback, callback_len);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
 }
@@ -137,6 +138,7 @@ int replicationCrdtDelSSCommand(int dbId, CrdtMeta* meta, sds key, sds* callback
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtDelSSCommand(dbId, cmdbuf, meta, key, callback, callback_len);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
 }
@@ -179,6 +181,7 @@ int replicationCrdtZincrCommand(RedisModuleCtx* ctx, CrdtMeta* meta, sds key, sd
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtZincrCommand(ctx, cmdbuf, meta, key, callback, callback_len);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
 }
@@ -214,6 +217,7 @@ int replicationCrdtZremCommand(RedisModuleCtx* ctx, sds key, CrdtMeta* meta ,sds
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtZremCommand(ctx, cmdbuf, meta, key, callback, callback_len);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
 }

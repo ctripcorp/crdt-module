@@ -550,6 +550,7 @@ int sendCrdtSaddCommand(struct RedisModuleCtx* ctx, CrdtMeta* meta, RedisModuleS
     } else {
         int size = replicationFeedCrdtSaddCommand(ctx, cmdbuf, key, meta, fields, field_lens, fields_len);
         assert(size < bytes_len);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
 }
