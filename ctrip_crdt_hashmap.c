@@ -398,6 +398,7 @@ int hsetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
             RedisModule_Free(cmdbuf);
         }else {
             replicationFeedCrdtHsetCommand(ctx, cmdbuf, keystr, keylen, &meta, getCrdtHashLastVc(current),argc - 2, fieldAndValStr, fieldAndValStrLen);
+            RedisModule_ReturnSharedBuffer(cmdbuf);
         }
     #if defined(HSET_STATISTICS) 
         write_backlog_end();

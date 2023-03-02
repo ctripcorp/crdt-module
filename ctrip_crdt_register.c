@@ -108,6 +108,7 @@ int replicationCrdtCounterCommand(RedisModuleCtx *ctx, sds key,CrdtMeta* meta, i
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtCounterCommand(ctx, cmdbuf, key, meta, type, data);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
 }
@@ -141,6 +142,7 @@ int replicationCrdtRcCommand(RedisModuleCtx* ctx, sds key, CrdtMeta* meta, sds v
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtRCCommand(ctx, cmdbuf, key, meta, value, expire);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return alllen;
 }
@@ -172,6 +174,7 @@ int replicationCrdtRcCommand2(RedisModuleCtx* ctx, sds key, CrdtMeta* meta, char
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtRCCommand2(ctx, cmdbuf, key, meta, value, value_len,  expire);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return alllen;
 }
@@ -535,6 +538,7 @@ int replicationCrdtSetCommand(RedisModuleCtx* ctx, sds key, sds val, CrdtMeta* s
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtSetCommand(ctx, cmdbuf, key, val,set_meta, expire_time);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
 }
@@ -985,6 +989,7 @@ int msetGeneric(RedisModuleCtx* ctx, char* head, MSetExecFunc exec, int len, Red
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtMsetCommand(ctx, cmdbuf, head, exec, len , modulekeys, keys, values, mset_meta);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
 }
@@ -1048,6 +1053,7 @@ int msetGenericByRc(RedisModuleCtx* ctx, int len, RedisModuleString** keys, void
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtMsetCommandByRc(ctx, cmdbuf, len , keys, crdt_vals, crdt_toms, values, mset_meta);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
 }
@@ -1106,6 +1112,7 @@ int msetGenericByReg(RedisModuleCtx* ctx, int len, RedisModuleString** keys, voi
         RedisModule_Free(cmdbuf);
     } else {
         replicationFeedCrdtMsetCommandByReg(ctx, cmdbuf, len , keys, crdt_vals, crdt_toms, values, mset_meta);
+        RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
 }
