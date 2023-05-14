@@ -1376,7 +1376,7 @@ CrdtObject *crdtHashMerge(CrdtObject *currentVal, CrdtObject *value) {
     freeCrdtMeta(meta);
     return (CrdtObject*)result;
 }
-int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value) {
+int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value, long long deltime) {
     if(value == NULL) {
         return CRDT_ERROR;
     }
@@ -1384,6 +1384,7 @@ int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value) {
         return CRDT_ERROR;
     }
     CrdtMeta* meta = createIncrMeta();
+    meta->timestamp = deltime;
     CrdtMeta* del_meta = dupMeta(meta);
     CRDT_Hash* current = (CRDT_Hash*) value;
     appendVCForMeta(del_meta, getCrdtHashLastVc(current));

@@ -81,7 +81,7 @@ int initCrdtObject(CrdtObject* obj);
 typedef CrdtObject CrdtData;
 typedef CrdtObject CrdtTombstone;
 typedef CrdtObject *(*crdtMergeFunc)(CrdtObject *curVal, CrdtObject *value);
-typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
+typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj,long long deltime);
 typedef CrdtObject** (*crdtFilterSplitFunc)(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
 typedef CrdtObject** (*crdtFilterSplitFunc2)(CrdtObject* obj,int gid, VectorClock min_vc, long long maxsize, int* length);
 typedef void (*crdtFreeFilterResultFunc)(CrdtObject** common, int num);

@@ -706,10 +706,11 @@ int setCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     }
 }
 
-int crdtRcDelete(int dbId, void *keyRobj, void *key, void *value) {
+int crdtRcDelete(int dbId, void *keyRobj, void *key, void *value, long long deltime) {
     RedisModuleKey *moduleKey = (RedisModuleKey *)key;
     CrdtMeta del_meta = {.gid = 0};
     initIncrMeta(&del_meta);
+    del_meta.timestamp = deltime;
     VectorClock lastVc = getCrdtRcLastVc(value);
     appendVCForMeta(&del_meta, lastVc);
    

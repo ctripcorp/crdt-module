@@ -70,7 +70,7 @@ void freeCrdtRc(void *crdtRegister);
 void crdtRcDigestFunc(RedisModuleDigest *md, void *value);
 
 //========================= CRDT Data functions =======================
-int crdtRcDelete(int dbId, void *keyRobj, void *key, void *value);
+int crdtRcDelete(int dbId, void *keyRobj, void *key, void *value, long long deltime);
 void crdtRcUpdateLastVC(void* rc, VectorClock vc);
 void initCrdtRcFromTombstone(CRDT_RC* rc, CRDT_RCTombstone* t);
 sds crdtRcInfo(void* rc);

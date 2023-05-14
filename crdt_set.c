@@ -26,7 +26,7 @@ CrdtTombstoneMethod SetTombstoneCommonMethod = {
 static RedisModuleType *CrdtSet;
 static RedisModuleType *CrdtSetTombstone;
 
-int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
+int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value, long long deltime) {
     if(value == NULL) {
         return CRDT_ERROR;
     }
@@ -34,6 +34,7 @@ int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
         return CRDT_ERROR;
     }
     CrdtMeta* meta = createIncrMeta();
+    meta->timestamp = deltime;
     CRDT_Set* current = (CRDT_Set*) value;
     RedisModuleKey *moduleKey = (RedisModuleKey*) key;
     CRDT_SetTombstone* tombstone = getTombstone(moduleKey);

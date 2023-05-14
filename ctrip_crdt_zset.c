@@ -570,11 +570,12 @@ end:
 }
 
 
-int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
+int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value, long long deltime) {
     sds* del_counters = NULL;
     RedisModuleKey *moduleKey = (RedisModuleKey *)key;
     CrdtMeta del_meta = {.gid = 0};
     initIncrMeta(&del_meta);
+    del_meta.timestamp = deltime;
     VectorClock lastVc = getCrdtSSLastVc(value);
     appendVCForMeta(&del_meta, lastVc);
     
