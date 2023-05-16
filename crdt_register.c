@@ -54,6 +54,7 @@ CrdtDataMethod RegisterDataMethod = {
     .getLastVC = getCrdtRegisterLastVc,
     .updateLastVC = crdtRegisterUpdateLastVC,
     .info = crdtRegisterInfo,
+    .getLastGid = getCrdtRegisterLastGid,
 };
 
 static RedisModuleType *CrdtRegister;

@@ -4,6 +4,7 @@
 CrdtDataMethod SetDataMethod = {
     .propagateDel = crdtSetDelete,
     .info = crdtSetInfo,
+    .getLastGid = NULL,
 };
 
 CrdtObjectMethod SetCommonMethod = {

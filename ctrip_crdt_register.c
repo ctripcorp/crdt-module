@@ -40,6 +40,7 @@ CrdtDataMethod RcDataMethod = {
     .getLastVC = getCrdtRcLastVc,
     .updateLastVC = crdtRcUpdateLastVC,
     .info = crdtRcInfo,
+    .getLastGid = NULL,
 };
 
 CrdtObjectMethod RcCommonMethod = {
