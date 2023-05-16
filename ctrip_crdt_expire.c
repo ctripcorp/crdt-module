@@ -234,8 +234,10 @@ int crdtPersistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
             if(data == NULL) {
                 goto end;
             }
+        } else {
+            goto end;
         }
-    }
+    } 
     if(getDataType(data) != dataType) {
         goto end;
     }

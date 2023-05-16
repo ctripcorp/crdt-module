@@ -113,11 +113,13 @@ typedef struct CrdtObjectMethod {
 typedef VectorClock (*crdtGetLastVCFunc)(void* value);
 typedef void (*crdtUpdateLastVCFunc)(void* value,VectorClock data);
 typedef sds (*crdtInfoFunc)(void* value);
+typedef int (*crdtGetLastGidFunc)(void* value);
 typedef struct CrdtDataMethod {
     crdtGetLastVCFunc getLastVC;
     crdtUpdateLastVCFunc updateLastVC;
     crdtPropagateDelFunc propagateDel;
     crdtInfoFunc info;
+    crdtGetLastGidFunc getLastGid;
 } CrdtDataMethod;
 typedef VectorClock (*crdtGetVcFunc)(void* value);
 typedef struct CrdtTombstoneMethod {

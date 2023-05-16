@@ -49,6 +49,7 @@ CrdtDataMethod HashDataMethod = {
     .getLastVC = crdtHashGetLastVC,
     .updateLastVC = crdtHashUpdateLastVC,
     .info = crdtHashInfo,
+    .getLastGid = NULL,
 };
 
 CrdtHashMethod Hash_Methods = {
