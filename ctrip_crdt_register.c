@@ -492,10 +492,10 @@ long long setExpireByModuleKey(RedisModuleKey* moduleKey, int flags, RedisModule
     long long expire_time = -2;
     if(expire) {
         expire_time = getMetaTimestamp(meta) + milliseconds;
-        RedisModule_SetExpire(moduleKey, milliseconds);
+        RedisModule_SetExpireAt(moduleKey, expire_time);
     }else if(!(flags & OBJ_SET_KEEPTTL)){
-        RedisModule_SetExpire(moduleKey, -1);
-        expire_time = -1;
+        RedisModule_SetExpire(moduleKey, REDISMODULE_NO_EXPIRE);
+        expire_time = REDISMODULE_NO_EXPIRE;
     }
     return expire_time;
 }
