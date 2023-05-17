@@ -28,14 +28,6 @@
  */
 #include "crdt_register.h"
 #include <string.h>
-int setExpire(RedisModuleKey *key, long long expiteTime) {
-    if(expiteTime == REDISMODULE_NO_EXPIRE) {
-        RedisModule_SetExpire(key, REDISMODULE_NO_EXPIRE); 
-    }else{
-        RedisModule_SetExpire(key, expiteTime - RedisModule_Milliseconds());
-    }
-    return CRDT_OK;
-}
 const char* crdt_expireat_head = "*6\r\n$11\r\nCRDT.EXPIRE\r\n";
 //CRDT.EXPIRE key gid time  expireTime type
 const size_t crdt_expireat_basic_str_len = 23 + REPLICATION_MAX_STR_LEN + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN * 3; 
@@ -68,7 +60,9 @@ int expireAt(RedisModuleCtx* ctx, RedisModuleString *key, long long expireTime) 
     } else {
         goto end;
     }
-    result = setExpire(moduleKey, expireTime);
+    if (RedisModule_SetExpireAt(moduleKey, expireTime) == REDISMODULE_OK) {
+        result = CRDT_OK;
+    }
 end:
     if(data != NULL) {
         size_t keylen = 0;
@@ -130,8 +124,9 @@ int trySetExpire(RedisModuleKey* moduleKey, RedisModuleString* key, long long  t
         }
     }
     long long et = RedisModule_GetExpire(moduleKey);
-    if(expireTime > et) {
-        RedisModule_SetExpire(moduleKey, expireTime - RedisModule_Milliseconds());
+    //select the maximum 
+    if((expireTime - RedisModule_Milliseconds()) > et) {
+        RedisModule_SetExpireAt(moduleKey, expireTime);
     }
     return CRDT_OK;
 }
@@ -206,7 +201,10 @@ int persistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
     if(et == REDISMODULE_NO_EXPIRE) {
         goto end;
     }
-    result = setExpire(moduleKey, REDISMODULE_NO_EXPIRE);
+    if (RedisModule_SetExpire(moduleKey, REDISMODULE_NO_EXPIRE) == REDISMODULE_OK) {
+        result = 1;
+    }
+    
     RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.persist", "sll", argv[1], RedisModule_CurrentGid() ,  (long long )getDataType(data));
     
 end:  
@@ -228,6 +226,7 @@ int crdtPersistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     }
     CrdtData* data = NULL;
     RedisModuleKey *moduleKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE);
+    int result = 0;
     if(moduleKey != NULL) {
         if (RedisModule_KeyType(moduleKey) != REDISMODULE_KEYTYPE_EMPTY) {
             data = RedisModule_ModuleTypeGetValue(moduleKey);
@@ -241,11 +240,13 @@ int crdtPersistCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
     if(getDataType(data) != dataType) {
         goto end;
     }
-    RedisModule_SetExpire(moduleKey, REDISMODULE_NO_EXPIRE);
+    if (RedisModule_SetExpire(moduleKey, REDISMODULE_NO_EXPIRE) == REDISMODULE_OK) {
+        result = 1;
+    }
 end: 
     RedisModule_CrdtReplicateVerbatim(gid, ctx);
     if(moduleKey != NULL) RedisModule_CloseKey(moduleKey);
-    return RedisModule_ReplyWithLongLong(ctx, 0);
+    return RedisModule_ReplyWithLongLong(ctx, result);
 }
 
 
