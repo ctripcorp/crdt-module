@@ -1299,7 +1299,7 @@ crdt_tag* try_clean_tag(crdt_tag* tag, long long base_vcu, g_counter_meta* meta)
         break;
     case TAG_B: {
         crdt_tag_base* b = (crdt_tag_base*)tag;
-        if(b->base_vcu < base_vcu) {
+        if(b->base_vcu <= base_vcu) {
             if(meta) {
                 bad = B2BAD(b);
                 goto callback_base_add_del;
@@ -1317,7 +1317,7 @@ crdt_tag* try_clean_tag(crdt_tag* tag, long long base_vcu, g_counter_meta* meta)
     break;
     case TAG_BA:
         ba = (crdt_tag_base_and_add_counter*)tag;
-        if(ba->base_vcu < base_vcu) {
+        if(ba->base_vcu <= base_vcu) {
             if(meta) {
                 bad = BA2BAD(ba);
                 goto callback_base_add_del;
@@ -1338,14 +1338,14 @@ crdt_tag* try_clean_tag(crdt_tag* tag, long long base_vcu, g_counter_meta* meta)
     }
 
 callback_base_add:
-    if(ba->base_vcu < base_vcu) {
+    if(ba->base_vcu <= base_vcu) {
         ba->base_vcu = base_vcu;
         ba->base_timespace = DELETED_TIME;
         clean_base(ba);
     }
     return (crdt_tag*)ba;
 callback_base_add_del:
-    if(bad->base_vcu < base_vcu) {
+    if(bad->base_vcu <= base_vcu) {
         bad->base_vcu = base_vcu;
         bad->base_timespace = DELETED_TIME;
         clean_base(bad);
