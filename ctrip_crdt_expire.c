@@ -130,8 +130,9 @@ int trySetExpire(RedisModuleKey* moduleKey, RedisModuleString* key, long long  t
         }
     }
     long long et = RedisModule_GetExpire(moduleKey);
-    if(expireTime > et) {
-        RedisModule_SetExpire(moduleKey, expireTime - RedisModule_Milliseconds());
+    long long nowtime = RedisModule_Milliseconds();
+    if((expireTime - nowtime)> et) {
+        RedisModule_SetExpire(moduleKey, expireTime - nowtime);
     }
     return CRDT_OK;
 }
