@@ -56,7 +56,7 @@ int hashStartGc();
 int hashStopGc();
 //common methods
 CrdtObject *crdtHashMerge(CrdtObject *currentVal, CrdtObject *value);
-int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value);
+int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value, long long deltime);
 CrdtObject** crdtHashFilter(CrdtObject* common, int gid, long long logic_time,long long maxsize,int* length);
 CrdtObject** crdtHashFilter2(CrdtObject* common, int gid, VectorClock min_vc,long long maxsize,int* length);
 

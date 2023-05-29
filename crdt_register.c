@@ -86,7 +86,6 @@ CrdtObject** crdtRegisterFilter(CrdtObject* common, int gid, long long logic_tim
 
 void crdtRegisterDigestFunc(RedisModuleDigest *md, void *value);
 
-int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value);
 
 
 int CRDT_DelRegCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
@@ -216,10 +215,10 @@ int initRegisterModule(RedisModuleCtx *ctx) {
  * return 1: delete 1 crdt register
  * broadcast the CRDT.DEL_REG then
  * */
-int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value) {
+int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value, long long deltime) {
     RedisModuleKey *moduleKey = (RedisModuleKey *)key;
     CRDT_Register *current = (CRDT_Register*) value;
-    CrdtMeta del_meta = {.gid = 0};
+    CrdtMeta del_meta = {.gid = 0, .timestamp = deltime};
     initIncrMeta(&del_meta);
     appendVCForMeta(&del_meta, getCrdtRegisterLastVc(current));
     CRDT_RegisterTombstone *tombstone = getTombstone(moduleKey);

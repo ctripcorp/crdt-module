@@ -54,7 +54,7 @@ VectorClock clone_sst_vc(void* data);
 extern CrdtTombstoneMethod ZsetTombstoneCommonMethod;
 
 //about data method
-int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value);
+int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value, long long deltime);
 sds crdtZSetInfo(void *data);
 extern CrdtDataMethod ZSetDataMethod;
 
