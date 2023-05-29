@@ -27,14 +27,15 @@ CrdtTombstoneMethod SetTombstoneCommonMethod = {
 static RedisModuleType *CrdtSet;
 static RedisModuleType *CrdtSetTombstone;
 
-int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
+int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value, long long deltime) {
     if(value == NULL) {
         return CRDT_ERROR;
     }
     if(!isCrdtSet(value)) {
         return CRDT_ERROR;
     }
-    CrdtMeta* meta = createIncrMeta();
+    CrdtMeta meta = {.gid=0,.timestamp=deltime};
+    initIncrMeta(&meta);
     CRDT_Set* current = (CRDT_Set*) value;
     RedisModuleKey *moduleKey = (RedisModuleKey*) key;
     CRDT_SetTombstone* tombstone = getTombstone(moduleKey);
@@ -42,13 +43,13 @@ int crdtSetDelete(int dbId, void* keyRobj, void *key, void *value) {
         tombstone = createCrdtSetTombstone();
         RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
     }
-    setDel(current, tombstone, meta);
-    sds vcSds = vectorClockToSds(getMetaVectorClock(meta));
+    setDel(current, tombstone, &meta);
+    sds vcSds = vectorClockToSds(getMetaVectorClock(&meta));
     sds maxdelSds = vectorClockToSds(getCrdtSetTombstoneMaxDelVc(tombstone));
-    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Set", "sllcc", keyRobj, getMetaGid(meta), getMetaTimestamp(meta), vcSds, maxdelSds);
+    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Set", "sllcc", keyRobj, getMetaGid(&meta), getMetaTimestamp(&meta), vcSds, maxdelSds);
     sdsfree(vcSds);
     sdsfree(maxdelSds);
-    freeCrdtMeta(meta);
+    if(meta.gid != 0) freeIncrMeta(&meta);
     return CRDT_OK;
 }
 
@@ -378,7 +379,7 @@ int sunionCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 int sremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
     int result = 0;
-    CrdtMeta meta = {.gid=0}; 
+    CrdtMeta meta = {.gid=0, .timestamp=-1}; 
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSet);
     if (moduleKey == NULL) {
         return CRDT_ERROR;
@@ -435,7 +436,7 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     } else {
         return RedisModule_ReplyWithError(ctx, "ERR syntax error");
     }
-    CrdtMeta meta = {.gid=0}; 
+    CrdtMeta meta = {.gid=0,.timestamp=-1}; 
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSet);
     if (moduleKey == NULL) {
         return CRDT_ERROR;
@@ -561,7 +562,7 @@ int sendCrdtSaddCommand(struct RedisModuleCtx* ctx, CrdtMeta* meta, RedisModuleS
 int saddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
     int result = 0;
-    CrdtMeta meta = {.gid=0};
+    CrdtMeta meta = {.gid=0,.timestamp=-1};
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSet);
     if (moduleKey == NULL) {
         return CRDT_ERROR;

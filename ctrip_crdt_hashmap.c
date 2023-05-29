@@ -294,7 +294,7 @@ int hsetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     // RedisModule_AutoMemory(ctx);
     
     int result = 0;
-    CrdtMeta meta = {.gid=0};
+    CrdtMeta meta = {.gid=0,.timestamp=-1};
     #if defined(HSET_STATISTICS) 
         get_modulekey_start();
     #endif
@@ -496,7 +496,7 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(argc < 3) return RedisModule_WrongArity(ctx);
     int status = CRDT_OK;
     int deleted = 0;
-    CrdtMeta hdel_meta = {.gid=0};
+    CrdtMeta hdel_meta = {.gid=0,.timestamp=-1};
     
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
     if(moduleKey == NULL) {
@@ -1377,15 +1377,16 @@ CrdtObject *crdtHashMerge(CrdtObject *currentVal, CrdtObject *value) {
     freeCrdtMeta(meta);
     return (CrdtObject*)result;
 }
-int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value) {
+int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value, long long deltime) {
     if(value == NULL) {
         return CRDT_ERROR;
     }
     if(!isCrdtHash(value)) {
         return CRDT_ERROR;
     }
-    CrdtMeta* meta = createIncrMeta();
-    CrdtMeta* del_meta = dupMeta(meta);
+    CrdtMeta meta = {.gid=0,.timestamp=deltime};
+    initIncrMeta(&meta);
+    CrdtMeta* del_meta = dupMeta(&meta);
     CRDT_Hash* current = (CRDT_Hash*) value;
     appendVCForMeta(del_meta, getCrdtHashLastVc(current));
     RedisModuleKey *moduleKey = (RedisModuleKey *) key;
@@ -1408,10 +1409,10 @@ int crdtHashDelete(int dbId, void *keyRobj, void *key, void *value) {
     changeCrdtHashTombstone(tombstone, del_meta);
     sds vcSds = vectorClockToSds(getMetaVectorClock(result));
     sds maxDeletedVclock = vectorClockToSds(getCrdtHashLastVc(current));
-    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Hash", "sllcc", keyRobj, getMetaGid(meta), getMetaTimestamp(meta), vcSds, vcSds);
+    RedisModule_ReplicationFeedAllSlaves(dbId, "CRDT.DEL_Hash", "sllcc", keyRobj, getMetaGid(&meta), getMetaTimestamp(&meta), vcSds, vcSds);
     sdsfree(vcSds);
     sdsfree(maxDeletedVclock);
-    freeCrdtMeta(meta);
+    if(meta.gid != 0) freeIncrMeta(&meta);
     freeCrdtMeta(del_meta);
     return CRDT_OK;
 }

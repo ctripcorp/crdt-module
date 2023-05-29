@@ -100,7 +100,7 @@ int initRegisterModule(RedisModuleCtx *ctx);
 
 //register command methods
 CrdtObject *crdtRegisterMerge(CrdtObject *currentVal, CrdtObject *value);
-int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value);
+int crdtRegisterDelete(int dbId, void *keyRobj, void *key, void *value, long long deltime);
 CrdtObject** crdtRegisterFilter(CrdtObject* common, int gid, long long logic_time, long long maxsize, int* length);
 CrdtObject** crdtRegisterFilter2(CrdtObject* common, int gid, VectorClock min_vc, long long maxsize, int* length);
 

@@ -151,21 +151,15 @@ void initIncrMeta(CrdtMeta* meta) {
     VectorClock result = getMonoVectorClock(currentVectorClock, gid);
     meta->vectorClock = result;
     meta->gid = gid;
-    long long timestamp = RedisModule_Milliseconds();
-    meta->timestamp = timestamp;
+    if (meta->timestamp == -1) {
+        meta->timestamp = RedisModule_Milliseconds();
+    }
+    
 }
 void freeIncrMeta(CrdtMeta* meta) {
     setMetaVectorClock(meta, newVectorClock(0));
 }
-CrdtMeta* createIncrMeta() {
-    long long gid = RedisModule_CurrentGid();
-    RedisModule_IncrLocalVectorClock(1);
-    long long cvc = RedisModule_CurrentVectorClock();
-    VectorClock currentVectorClock = LL2VC(cvc);
-    VectorClock result = getMonoVectorClock(currentVectorClock, gid);
-    long long timestamp = RedisModule_Milliseconds();
-    return createMeta(gid, timestamp, result);
-};
+
 void freeCrdtMeta(CrdtMeta* meta) {
     if(meta == NULL) {
         return;

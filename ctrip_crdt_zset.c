@@ -230,7 +230,7 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     int result = 0;
     double score = 0, newscore;
     // double* scores = NULL;
-    CrdtMeta zadd_meta = {.gid = 0};
+    CrdtMeta zadd_meta = {.gid = 0,.timestamp=-1};
     int scoreidx = 2;
     /* The following vars are used in order to track what the command actually
      * did during the execution, to reply to the client and to trigger the
@@ -571,10 +571,10 @@ end:
 }
 
 
-int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value) {
+int crdtZSetDelete(int dbId, void* keyRobj, void *key, void *value,long long deltime) {
     sds* del_counters = NULL;
     RedisModuleKey *moduleKey = (RedisModuleKey *)key;
-    CrdtMeta del_meta = {.gid = 0};
+    CrdtMeta del_meta = {.gid = 0,.timestamp=deltime};
     initIncrMeta(&del_meta);
     VectorClock lastVc = getCrdtSSLastVc(value);
     appendVCForMeta(&del_meta, lastVc);
@@ -717,7 +717,7 @@ int zrevrangeCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 //ZREM KEY FILED
 int zremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(argc < 3) { return RedisModule_WrongArity(ctx);}
-    CrdtMeta zrem_meta = {.gid = 0};
+    CrdtMeta zrem_meta = {.gid = 0,.timestamp=-1};
     int deleted = 0, keyremoved = 0, i;
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSS);
     if(moduleKey == NULL) {
@@ -1221,7 +1221,7 @@ int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
     zrangespec range;
     zlexrangespec lexrange;
     long long start, end, llen;
-    CrdtMeta meta = {.gid = 0};
+    CrdtMeta meta = {.gid = 0,.timestamp=-1};
     sds* callback_items = NULL;
     /* Step 1: Parse the range. */
     if (rangetype == ZRANGE_RANK) {
