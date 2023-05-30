@@ -294,7 +294,7 @@ int hsetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     // RedisModule_AutoMemory(ctx);
     
     int result = 0;
-    CrdtMeta meta = {.gid=0,.timestamp=-1};
+    CrdtMeta meta = {.gid=0,.timestamp=INIT_TIMESTAMP};
     #if defined(HSET_STATISTICS) 
         get_modulekey_start();
     #endif
@@ -496,7 +496,7 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(argc < 3) return RedisModule_WrongArity(ctx);
     int status = CRDT_OK;
     int deleted = 0;
-    CrdtMeta hdel_meta = {.gid=0,.timestamp=-1};
+    CrdtMeta hdel_meta = {.gid=0,.timestamp=INIT_TIMESTAMP};
     
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtHash);
     if(moduleKey == NULL) {

@@ -186,7 +186,7 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString* key, int type, 
     RedisModuleKey* moduleKey = RedisModule_OpenKey(ctx, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
     //register to 
     
-    CrdtMeta set_meta = {.gid  = 0, .timestamp=-1};
+    CrdtMeta set_meta = {.gid  = 0, .timestamp=INIT_TIMESTAMP};
     CrdtObject* current = getCurrentValue(moduleKey);
     RedisModuleType* mtype= RedisModule_ModuleTypeGetType(moduleKey) ;
     CRDT_RC* rc = NULL;
@@ -564,7 +564,7 @@ int add_rc_by_key(RedisModuleCtx* ctx, void* val, void* tom, CrdtMeta* meta, Red
 
 int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags, RedisModuleString* key, RedisModuleString* val, RedisModuleString* expire, int unit, int sendtype) {
     int result = 0;
-    CrdtMeta set_meta = {.gid = 0,.timestamp=-1};
+    CrdtMeta set_meta = {.gid = 0,.timestamp=INIT_TIMESTAMP};
     //get value
     if(moduleKey == NULL) {
         moduleKey = RedisModule_OpenKey(ctx, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE);
@@ -1207,7 +1207,7 @@ int msetGenericCommand2(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
             #endif
         }
     }
-    CrdtMeta mset_meta = {.gid=0,.timestamp=-1};
+    CrdtMeta mset_meta = {.gid=0,.timestamp=INIT_TIMESTAMP};
     initIncrMeta(&mset_meta);
     
     #if defined(MSET_STATISTICS)    
