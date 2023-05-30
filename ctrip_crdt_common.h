@@ -65,7 +65,7 @@
 
 #define CRDT_RDB_VERSION 1ll
 
-
+#define INIT_TIMESTAMP -1
 
 
 typedef struct CrdtObject {

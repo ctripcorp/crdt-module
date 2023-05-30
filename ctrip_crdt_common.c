@@ -151,7 +151,7 @@ void initIncrMeta(CrdtMeta* meta) {
     VectorClock result = getMonoVectorClock(currentVectorClock, gid);
     meta->vectorClock = result;
     meta->gid = gid;
-    if (meta->timestamp == -1) {
+    if (meta->timestamp == INIT_TIMESTAMP) {
         meta->timestamp = RedisModule_Milliseconds();
     }
     

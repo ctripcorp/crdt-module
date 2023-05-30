@@ -477,59 +477,6 @@ int CRDT_MSETCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return RedisModule_ReplyWithLongLong(ctx, result); 
 }
 
-//CRDT.MSET <gid> <time> {k v vc} ...
-// int msetGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-//     int arraylen = (argc-1)/2;
-//     int index = 0;
-//     CRDT_Register* vals[arraylen];
-
-//     const char* keyOrValStr[arraylen*2];
-//     size_t keyOrValStrLen[arraylen*2];
-//     int budget_key_val_strlen = 0;
-//     for (int i = 1; i < argc; i+=2) {
-//         int error = 0;
-//         #if defined(MSET_STATISTICS)    
-//             get_modulekey_start();
-//         #endif
-//         vals[index++] = RedisModule_DbGetValue(ctx, argv[i], CrdtRegister, &error);
-//         if(error != 0) {
-//             RedisModule_ReplyWithError(ctx,"mset value type error");
-//             return CRDT_ERROR;
-//         }
-//         #if defined(MSET_STATISTICS)    
-//             get_modulekey_end();
-//         #endif
-//         size_t keylen = 0;
-//         keyOrValStr[i-1] = RedisModule_StringPtrLen(argv[i], &keylen);
-//         keyOrValStrLen[i-1] = keylen;
-//         size_t vallen = 0;
-//         keyOrValStr[i] = RedisModule_StringPtrLen(argv[i+1], &vallen);
-//         keyOrValStrLen[i] = vallen;
-//         budget_key_val_strlen += keylen + vallen + 2 * REPLICATION_MAX_STR_LEN + REPLICATION_MAX_VC_LEN;
-//     }
-//     CrdtMeta mset_meta;
-//     initIncrMeta(&mset_meta);
-//     long long vc = RedisModule_CurrentVectorClock();
-//     appendVCForMeta(&mset_meta, LL2VC(vc));
-//     #if defined(MSET_STATISTICS)    
-//         write_bakclog_start();
-//     #endif
-//     size_t alllen = crdt_mset_basic_str_len + budget_key_val_strlen;
-//     if(alllen > MAXSTACKSIZE) {
-//         char* cmdbuf = RedisModule_Alloc(alllen);
-//         replicationFeedCrdtMSetCommand(ctx, argv, cmdbuf, &mset_meta, arraylen, vals, keyOrValStr, keyOrValStrLen);
-//         RedisModule_Free(cmdbuf);
-//     } else {
-//         char cmdbuf[alllen]; 
-//         replicationFeedCrdtMSetCommand(ctx, argv, cmdbuf, &mset_meta, arraylen, vals, keyOrValStr,keyOrValStrLen);
-//     }
-//     #if defined(MSET_STATISTICS)    
-//         write_backlog_end();
-//     #endif
-//     freeIncrMeta(&mset_meta);
-//     return CRDT_OK;
-// }
-
 
 
 // CRDT.SET key <val> <gid> <timestamp> <vc> <expire-at-milli> 

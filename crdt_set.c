@@ -379,7 +379,7 @@ int sunionCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 int sremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
     int result = 0;
-    CrdtMeta meta = {.gid=0, .timestamp=-1}; 
+    CrdtMeta meta = {.gid=0, .timestamp=INIT_TIMESTAMP}; 
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSet);
     if (moduleKey == NULL) {
         return CRDT_ERROR;
@@ -436,7 +436,7 @@ int spopCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     } else {
         return RedisModule_ReplyWithError(ctx, "ERR syntax error");
     }
-    CrdtMeta meta = {.gid=0,.timestamp=-1}; 
+    CrdtMeta meta = {.gid=0,.timestamp=INIT_TIMESTAMP}; 
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSet);
     if (moduleKey == NULL) {
         return CRDT_ERROR;
@@ -562,7 +562,7 @@ int sendCrdtSaddCommand(struct RedisModuleCtx* ctx, CrdtMeta* meta, RedisModuleS
 int saddCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (argc < 3) return RedisModule_WrongArity(ctx);
     int result = 0;
-    CrdtMeta meta = {.gid=0,.timestamp=-1};
+    CrdtMeta meta = {.gid=0,.timestamp=INIT_TIMESTAMP};
     RedisModuleKey* moduleKey = getWriteRedisModuleKey(ctx, argv[1], CrdtSet);
     if (moduleKey == NULL) {
         return CRDT_ERROR;
