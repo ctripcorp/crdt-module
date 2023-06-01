@@ -639,7 +639,6 @@ int crdtDelSSCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             zsetTryResizeDict(current);
         }
     } 
-    RedisModule_Debug(CRDT_DEFAULT_LOG_LEVEL, "crdt.del");
     updateCrdtSSTLastVc(tombstone, getMetaVectorClock(&meta));
     updateCrdtSSTMaxDel(tombstone, getMetaVectorClock(&meta));
     RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_SET, "del", argv[1]);
