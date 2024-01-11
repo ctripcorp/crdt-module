@@ -508,9 +508,10 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(t != NULL && isCrdtHashTombstone(t)) {
         tombstone = retrieveCrdtHashTombstone(t);
     }
+    int createTombstoned = 0;
     if(tombstone == NULL) {
         tombstone = createCrdtHashTombstone();
-        RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHashTombstone, tombstone);
+        createTombstoned = 1;
     }
 
     initIncrMeta(&hdel_meta);
@@ -536,8 +537,16 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     
     if(deleted > 0) {
         changeCrdtHashTombstone(tombstone, &hdel_meta);
+        if (createTombstoned) {
+            RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtHashTombstone, tombstone);
+        }
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH,"hdel", argv[1]);
-    }    
+    } else {
+        if (createTombstoned) {
+            freeCrdtHashTombstone(tombstone);
+            tombstone = NULL;
+        }
+    }   
     if (dictSize(current->map) == 0) {
         RedisModule_DeleteKey(moduleKey);
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_GENERIC, "del", argv[1]);
