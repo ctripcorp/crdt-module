@@ -153,8 +153,7 @@ int isNullCrdtLWWHashTombstone(CRDT_LWW_HashTombstone* data) {
     if (dictSize(data->map) != 0) {
         return 0;
     }
-
-    if (!isNullVectorClock(data->lastVc)) {
+    if (!isNullVectorClock(data->maxDelvectorClock)) {
         return 0;
     }
     return 1;
