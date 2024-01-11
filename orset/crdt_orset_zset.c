@@ -705,6 +705,9 @@ int crdtZsetTombstoneGc(CrdtTombstone* target, VectorClock clock) {
     if(!zset_gc_stats) {
         return 0;
     }
+    if (isNullZsetTombstone(target)) {
+        return 1;
+    }
     int result = isVectorClockMonoIncr(getCrdtSSTLastVc(target), clock);
     if(result) {
         #if defined(DEBUG)  
