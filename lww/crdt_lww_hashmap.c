@@ -148,8 +148,23 @@ CRDT_HashTombstone* dupCrdtLWWHashTombstone(void* data) {
     }
     return (CRDT_HashTombstone*)result;
 }
+
+int isNullCrdtLWWHashTombstone(CRDT_LWW_HashTombstone* data) {
+    if (dictSize(data->map) != 0) {
+        return 0;
+    }
+
+    if (!isNullVectorClock(data->lastVc)) {
+        return 0;
+    }
+    return 1;
+}
+
 int gcCrdtLWWHashTombstone(void* data, VectorClock clock) {
     CRDT_LWW_HashTombstone* target = retrieveCrdtLWWHashTombstone(data);
+    if (isNullCrdtLWWHashTombstone(data)) {
+        return CRDT_OK;
+    }
     if(isVectorClockMonoIncr(getCrdtLWWHashTombstoneLastVc(target), clock) == CRDT_OK) {
         return CRDT_OK;
     }
