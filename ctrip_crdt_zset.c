@@ -1281,9 +1281,10 @@ int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
     if(tombstone != NULL && !isCrdtSSTombstone(tombstone) ) {
         tombstone = NULL;
     }
+    int createTombstoned = 0;
     if(tombstone == NULL) {
         tombstone = createCrdtZsetTombstone();
-        RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSST, tombstone);
+        createTombstoned = 1;
     }
     initIncrMeta(&meta);
     appendVCForMeta(&meta, getCrdtSSLastVc(current));
@@ -1305,14 +1306,23 @@ int zremrangeGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int a
         RedisModule_DeleteKey(moduleKey);
         keyremoved = 1;
     }
-    updateCrdtSSTLastVc(tombstone, getMetaVectorClock(&meta));
-    replicationCrdtZremCommand(ctx, RedisModule_GetSds(argv[1]), &meta ,callback_items, deleted, callback_byte_size);
+    
     /* Step 4: Notifications and reply. */
     if (deleted) {
+        updateCrdtSSTLastVc(tombstone, getMetaVectorClock(&meta));
+        replicationCrdtZremCommand(ctx, RedisModule_GetSds(argv[1]), &meta ,callback_items, deleted, callback_byte_size);
+        if (createTombstoned) {
+            RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSST, tombstone);
+        }
         char *event[3] = {"zremrangebyrank","zremrangebyscore","zremrangebylex"};
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_ZSET, event[rangetype], argv[1]);
         if (keyremoved)
             RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_ZSET, "del", argv[1]);
+    } else {
+        if (createTombstoned) {
+            freeCrdtSST(tombstone);
+            tombstone = NULL;
+        }
     }
     RedisModule_ReplyWithLongLong(ctx,deleted);
 
