@@ -394,9 +394,10 @@ int sremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(t != NULL && isCrdtSetTombstone(t)) {
         tombstone = retrieveCrdtSetTombstone(t);
     }
+    int createTombstoned = 0;
     if(tombstone == NULL) {
         tombstone = createCrdtSetTombstone();
-        RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
+        createTombstoned = 1;
     }
 
     appendVCForMeta(&meta, getCrdtSetLastVc(current));
@@ -404,17 +405,30 @@ int sremCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         sds field = RedisModule_GetSds(argv[i]);
         result += setRem(current, tombstone, field, &meta);
     }
-    RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "srem", argv[1]);
-    if(current && getSetSize(current) == 0) {
-        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "del", argv[1]);
-        RedisModule_DeleteKey(moduleKey);
+    
+    
+    if (result > 0) {
+        updateCrdtSetTombstoneLastVcByMeta(tombstone, &meta);
+        if (createTombstoned) {
+            RedisModule_ModuleTombstoneSetValue(moduleKey, CrdtSetTombstone, tombstone);
+        }
+        RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "srem", argv[1]);
+        if(current && getSetSize(current) == 0) {
+            RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_HASH, "del", argv[1]);
+            RedisModule_DeleteKey(moduleKey);
+        } else {
+            updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
+        }
+        
+        char buf[256];
+        vectorClockToString(buf, getMetaVectorClock(&meta));
+        RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Srem", "sllcv", argv[1], getMetaGid(&meta),getMetaTimestamp(&meta), buf, (void *) (argv + 2), (size_t)(argc-2));
     } else {
-        updateCrdtSetLastVc(current, getMetaVectorClock(&meta));
+        if (createTombstoned) {
+            freeCrdtSetTombstone(tombstone);
+            tombstone = NULL;
+        }
     }
-    updateCrdtSetTombstoneLastVcByMeta(tombstone, &meta);
-    char buf[256];
-    vectorClockToString(buf, getMetaVectorClock(&meta));
-    RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.Srem", "sllcv", argv[1], getMetaGid(&meta),getMetaTimestamp(&meta), buf, (void *) (argv + 2), (size_t)(argc-2));
 end:
     if(meta.gid != 0) freeIncrMeta(&meta);
     if(moduleKey != NULL ) RedisModule_CloseKey(moduleKey);

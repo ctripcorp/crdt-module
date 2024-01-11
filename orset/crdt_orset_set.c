@@ -751,6 +751,9 @@ int crdtSetTombstoneGc(CrdtTombstone* data, VectorClock clock) {
     if(!set_gc_stats) {
         return 0;
     }
+    if (isNullSetTombstone((CRDT_SetTombstone*)data)) {
+        return 1;
+    }
     crdt_orset_set_tombstone* tom = retrieve_set_tombstone(data);
     int result = isVectorClockMonoIncr(getCrdtSetTombstoneLastVc((CRDT_SetTombstone*)tom), clock);
     if(result) {
