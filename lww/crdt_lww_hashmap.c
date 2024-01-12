@@ -162,12 +162,12 @@ int isNullCrdtLWWHashTombstone(CRDT_LWW_HashTombstone* data) {
 int gcCrdtLWWHashTombstone(void* data, VectorClock clock) {
     CRDT_LWW_HashTombstone* target = retrieveCrdtLWWHashTombstone(data);
     if (isNullCrdtLWWHashTombstone(data)) {
-        return CRDT_OK;
+        return 1;
     }
     if(isVectorClockMonoIncr(getCrdtLWWHashTombstoneLastVc(target), clock) == CRDT_OK) {
-        return CRDT_OK;
+        return 1;
     }
-    return CRDT_NO;
+    return 0;
 }
 
 int changeCrdtLWWHashTombstone(void* data, CrdtMeta* meta) {
