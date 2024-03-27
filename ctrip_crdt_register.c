@@ -580,12 +580,12 @@ int setGenericCommand(RedisModuleCtx *ctx, RedisModuleKey* moduleKey, int flags,
     if (expire) {
         if (RedisModule_StringToLongLong(expire, &milliseconds) != REDISMODULE_OK) {
             result = 0;
-            if(sendtype) RedisModule_ReplyWithSimpleString(ctx, "ERR syntax error");
+            if(sendtype) RedisModule_ReplyWithError(ctx, "ERR syntax error");
             goto error;
         }
         if (milliseconds <= 0) {
             result = 0;
-            if(sendtype) RedisModule_ReplyWithSimpleString(ctx,"invalid expire time in set");
+            if(sendtype) RedisModule_ReplyWithError(ctx,"ERR invalid expire time in set");
             goto error;
         }
         if (unit == UNIT_SECONDS) milliseconds *= 1000;
