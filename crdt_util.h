@@ -28,7 +28,7 @@
 #define REPLICATION_MAX_GID_LEN  (9)//$(1) + gidlen(2) + \r(1) + \n(1) + gid(2) + \r(1) + \n(1)
 #define REPLICATION_MAX_LONGLONG_LEN  (28)//$(1) + long long max len 21(2) + \r(1) + \n(1) + long long(21) + \r(1) + \n(1)
 #define REPLICATION_MAX_VC_LEN (402) //$(1) + long long(21) + \r(1) + \n(1) + [;(1) + gid(2) + :(1) + long long(21)] * 15 + \r(1) +\n(1)
-
+#define REPLICATION_MAX_LONGDOUBLE_LEN (MAX_LONG_DOUBLE_CHARS + 9) //$(1) + long double max (5*1024) (4) + \r(1) + \n(1) + long double (5 * 1024) + \r(1) + \n(1)
 
 #define crdtAssert(_e) ((_e)?(void)0 : (_crdtAssert(#_e,__FILE__,__LINE__),exit(1)))
 void _crdtAssert(char *estr, char *file, int line);
@@ -52,6 +52,8 @@ size_t feedStr2Buf(char *buf, const char* str, size_t strlen);
 size_t feedRobj2Buf(char *buf, RedisModuleString* src);
 size_t feedGid2Buf(char *buf, int gid);
 size_t feedLongLong2Buf(char *buf, long long v);
+size_t feedLongDouble2Buf(char *buf, long double v);
+size_t feedDouble2Buf(char *buf, double v);
 size_t feedVectorClock2Buf(char *buf, VectorClock vc);
 size_t feedMeta2Buf(char *buf, int gid, long long time, VectorClock vc);
 size_t feedArgc(char* buf, int argc);
