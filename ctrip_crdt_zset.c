@@ -145,7 +145,7 @@ int replicationCrdtDelSSCommand(int dbId, CrdtMeta* meta, sds key, sds* callback
 }
 
 const char* crdt_zincr_head = "$12\r\nCRDT.Zincrby\r\n";
-int replicationFeedCrdtZincrCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta* meta, sds key, sds* callback, int callback_len) {
+int replicationFeedCrdtZincrCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta* meta, sds key, sds* callback, int callback_len, double score) {
     // sds vcSds = vectorClockToSds(getMetaVectorClock(meta));
     // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.zincrby", "sllca", key,  getMetaGid(set_meta), getMetaTimestamp(set_meta), vcSds, callback, callback_len);
     // sdsfree(vcSds);
@@ -155,7 +155,7 @@ int replicationFeedCrdtZincrCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta
     }
 
     size_t cmdlen = 0;
-    cmdlen += feedArgc(cmdbuf + cmdlen, callback_len + 5);
+    cmdlen += feedArgc(cmdbuf + cmdlen, callback_len + 5 + 1);
     cmdlen += feedBuf(cmdbuf + cmdlen, crdt_zincr_head, crdt_zincr_head_size);
     // cmdlen += feedBuf(cmdbuf + cmdlen, crdt_zadd_head, crdt_zadd_head_size);
     cmdlen += feedStr2Buf(cmdbuf + cmdlen, key, sdslen(key));
@@ -164,24 +164,26 @@ int replicationFeedCrdtZincrCommand(RedisModuleCtx* ctx,  char* cmdbuf, CrdtMeta
         cmdlen += feedStr2Buf(cmdbuf + cmdlen, callback[i], sdslen(callback[i]));
         sdsfree(callback[i]);
     }
+    cmdlen += feedDouble2Buf(cmdbuf + cmdlen, score);
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
 
 
-int replicationCrdtZincrCommand(RedisModuleCtx* ctx, CrdtMeta* meta, sds key, sds* callback, int callback_len, int callback_byte_size) {
+int replicationCrdtZincrCommand(RedisModuleCtx* ctx, CrdtMeta* meta, sds key, sds* callback, int callback_len, int callback_byte_size, double score) {
     size_t alllen = 20 
     + sdslen(key)
     + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN
     + (callback_len + 1) * (REPLICATION_MAX_LONGLONG_LEN + 2) 
-    + callback_byte_size ;
+    + callback_byte_size 
+    + REPLICATION_MAX_LONGDOUBLE_LEN;
     char* cmdbuf = RedisModule_GetSharedBuffer(alllen);
     if(cmdbuf == NULL) {
         cmdbuf = RedisModule_Alloc(alllen);
-        replicationFeedCrdtZincrCommand(ctx, cmdbuf, meta, key, callback, callback_len);
+        replicationFeedCrdtZincrCommand(ctx, cmdbuf, meta, key, callback, callback_len, score);
         RedisModule_Free(cmdbuf);
     } else {
-        replicationFeedCrdtZincrCommand(ctx, cmdbuf, meta, key, callback, callback_len);
+        replicationFeedCrdtZincrCommand(ctx, cmdbuf, meta, key, callback, callback_len, score);
         RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
@@ -348,7 +350,7 @@ int zaddGenericCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, 
     }
     
     if (incr) {
-        replicationCrdtZincrCommand(ctx, &zadd_meta, RedisModule_GetSds(argv[1]), callback_items, callback_len, callback_byte_size);
+        replicationCrdtZincrCommand(ctx, &zadd_meta, RedisModule_GetSds(argv[1]), callback_items, callback_len, callback_byte_size, score);
     } else {
         replicationCrdtZaddCommand(ctx, &zadd_meta, RedisModule_GetSds(argv[1]), callback_items, callback_len, callback_byte_size);
     }
@@ -458,7 +460,7 @@ end:
 
 //crdt.zincrby
 int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
-    if (argc < 7 || argc % 2 == 0) return RedisModule_WrongArity(ctx);
+    if (argc < 7 || argc > 8 ) return RedisModule_WrongArity(ctx);
     CrdtMeta meta = {.gid = 0};
     int status = CRDT_OK;
     if (readMeta(ctx, argv, 2, &meta) != CRDT_OK) {
@@ -485,11 +487,11 @@ int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
         need_add = 1;
     } 
     int result = 0;
-    for(int i = 5; i < argc; i += 2) {
-        sds field = RedisModule_GetSds(argv[i]);
-        sds score = RedisModule_GetSds(argv[i+1]);
+    // for(int i = 5; i < argc - 1; i += 2) {
+        sds field = RedisModule_GetSds(argv[5]);
+        sds score = RedisModule_GetSds(argv[6]);
         result += zsetTryIncrby(current, tombstone, field, &meta, score);
-    }
+    // }
     if(result == 0) {
         if(need_add) {
             freeCrdtSS(current);

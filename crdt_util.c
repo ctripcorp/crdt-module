@@ -127,6 +127,19 @@ size_t feedLongLong2Buf(char *buf, long long v) {
     buf[len++] = '\n';
     return len;
 }
+
+size_t feedLongDouble2Buf(char *buf, long double v) {
+    char ldbuf[MAX_LONG_DOUBLE_CHARS];
+    int ldlen = ld2string(ldbuf,sizeof(ldbuf), v, 1);
+    return feedStr2Buf(buf, ldbuf, ldlen);
+}
+
+size_t feedDouble2Buf(char *buf, double v) {
+    char dbuf[MAX_LONG_DOUBLE_CHARS];
+    int dlen = d2string(dbuf,sizeof(dbuf), v);
+    return feedStr2Buf(buf, dbuf, dlen);
+}
+
 size_t feedMeta2Buf(char *buf, int gid, long long time, VectorClock vc) {
     size_t len = 0;
     // len += sprintf(buf, meta_template, gid > 9? 2: 1, gid, llstrlen(time), time, vectorClockToStringLen(vc));

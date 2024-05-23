@@ -83,32 +83,45 @@ int isCrdtRc(CrdtObject* data) {
 
 /*****************  send command *************************/
 const char* crdt_counter_head = "*7\r\n$12\r\nCRDT.COUNTER\r\n";
-int replicationFeedCrdtCounterCommand(RedisModuleCtx* ctx, char* cmdbuf, sds key, CrdtMeta* meta, int type, sds data) {
+const char* crdt_counter_value_head = "*8\r\n$12\r\nCRDT.COUNTER\r\n";
+int replicationFeedCrdtCounterCommand(RedisModuleCtx* ctx, char* cmdbuf, sds key, CrdtMeta* meta, int type, sds data, ctrip_value v) {
     size_t cmdlen = 0;
     static int crdt_counter_head_str_len = 0;
     if(crdt_counter_head_str_len == 0) {
         crdt_counter_head_str_len = strlen(crdt_counter_head);
     }
-    cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_counter_head, crdt_counter_head_str_len);
+    cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_counter_value_head, crdt_counter_head_str_len);
     cmdlen += feedStr2Buf(cmdbuf + cmdlen, key, sdslen(key));
     cmdlen += feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(meta), getMetaTimestamp(meta), getMetaVectorClock(meta));
     cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, type);
     cmdlen += feedStr2Buf(cmdbuf + cmdlen, data, sdslen(data));
+    switch (v.type)
+    {
+    case VALUE_TYPE_LONGLONG:
+        cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, v.value.i);
+        break;
+    case VALUE_TYPE_LONGDOUBLE:
+        cmdlen += feedLongDouble2Buf(cmdbuf + cmdlen, v.value.f);
+        break;
+    default:
+        break;
+    }
+    
     RedisModule_ReplicationFeedStringToAllSlaves(RedisModule_GetSelectedDb(ctx), cmdbuf, cmdlen);
     return cmdlen;
 }
 
 //CRDT.COUNTER key gid time vc type value
-int replicationCrdtCounterCommand(RedisModuleCtx *ctx, sds key,CrdtMeta* meta, int type, sds data) {
+int replicationCrdtCounterCommand(RedisModuleCtx *ctx, sds key,CrdtMeta* meta, int type, sds data, ctrip_value v) {
     // RedisModule_ReplicationFeedAllSlaves(RedisModule_GetSelectedDb(ctx), "CRDT.COUNTER", "sllcllll", argv[1], getMetaGid(&set_meta), getMetaTimestamp(&set_meta), vc_info, g->start_clock, g->end_clock, (size_t)g->type, g->conv.i);
-    int alllen = 24 + sdslen(key) + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + 8+ sdslen(data);
+    int alllen = 24 + sdslen(key) + REPLICATION_MAX_GID_LEN + REPLICATION_MAX_LONGLONG_LEN + REPLICATION_MAX_VC_LEN + 8+ sdslen(data) + REPLICATION_MAX_LONGDOUBLE_LEN;
     char *cmdbuf = RedisModule_GetSharedBuffer(alllen);
     if (cmdbuf == NULL) {
         cmdbuf = RedisModule_Alloc(alllen);
-        replicationFeedCrdtCounterCommand(ctx, cmdbuf, key, meta, type, data);
+        replicationFeedCrdtCounterCommand(ctx, cmdbuf, key, meta, type, data, v);
         RedisModule_Free(cmdbuf);
     } else {
-        replicationFeedCrdtCounterCommand(ctx, cmdbuf, key, meta, type, data);
+        replicationFeedCrdtCounterCommand(ctx, cmdbuf, key, meta, type, data, v);
         RedisModule_ReturnSharedBuffer(cmdbuf);
     }
     return 1;
@@ -282,15 +295,18 @@ int incrbyGenericCommand(RedisModuleCtx *ctx, RedisModuleString* key, int type, 
     } 
     
     sds result = rcIncrby(rc, &set_meta, incr_value.type, &incr_value.value);
-    replicationCrdtCounterCommand(ctx, RedisModule_GetSds(key), &set_meta, type, result);
+
+    ctrip_value v = {.type = VALUE_TYPE_NONE, .value.i = 0};
+    crdtAssert(get_crdt_rc_value(rc, &v));
+    replicationCrdtCounterCommand(ctx, RedisModule_GetSds(key), &set_meta, type, result, v);
+    
     sdsfree(result);
     if(type == VALUE_TYPE_LONGDOUBLE) {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrbyfloat", key);
     } else {
         RedisModule_NotifyKeyspaceEvent(ctx, REDISMODULE_NOTIFY_STRING, "incrby", key);
     }
-    ctrip_value v = {.type = VALUE_TYPE_NONE, .value.i = 0};
-    crdtAssert(get_crdt_rc_value(rc, &v));
+    
     switch (v.type)
     {
     case VALUE_TYPE_LONGLONG:
@@ -366,7 +382,7 @@ int decrCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 //crdt.counter key gid time vc type value
 int crdtCounterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if (argc != 7) return RedisModule_WrongArity(ctx);
+    if (argc < 7 && argc > 8) return RedisModule_WrongArity(ctx);
     CrdtMeta meta = {.gid = 0};
     int status = CRDT_OK;
     if (readMeta(ctx, argv, 2, &meta) != CRDT_OK) {
