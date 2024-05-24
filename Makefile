@@ -45,14 +45,28 @@ ifeq ($(uname_S),Darwin)
 	# CFLAGS+= -DDEBUG
 endif
 
+GCC_VERSION := $(shell $(CC) -dumpversion | cut -d. -f1)
+
+ifeq ($(shell expr $(GCC_VERSION) \> 10),1)
+# The new version of alma is installed with gcc11
+# Add compilation options or rules for GCC 10 and above here
+# Mainly for multiple references to files
+# The old version of gcc is defined as 1 reference, gcc10 is defined multiple times and needs to be changed to extern
+# -fcommon restores the old behavior
+	CFLAGS += -fcommon
+	SHOBJ_LDFLAGS += -fcommon
+	CRDT_CFLAGS += -fcommon
+endif 
+
+
 all: rmutil crdt.so
 	@echo "BUILD SUCCESS VIA $(COMPILER)"
 
 rmutil:
-	$(MAKE) -C $(RMUTIL_LIBDIR)
+	$(MAKE) -C $(RMUTIL_LIBDIR) CRDT_CFLAGS=$(CRDT_CFLAGS)
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS)  -c $< -o $@
 
 
 CRDT_OBJ = gcounter/g_counter_element.o gcounter/g_counter.o  orset/crdt_orset_rc.o ctrip_crdt_register.o ctrip_crdt_zset.o orset/crdt_orset_zset.o crdt_set.o orset/crdt_orset_set.o crdt_statistics.o ctrip_crdt_expire.o crdt_pubsub.o crdt.o crdt_register.o  ctrip_crdt_hashmap.o ctrip_crdt_common.o ctrip_vector_clock.o util.o crdt_util.o lww/crdt_lww_register.o lww/crdt_lww_hashmap.o 
