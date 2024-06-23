@@ -460,7 +460,8 @@ end:
 
 //crdt.zincrby
 int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
-    if (argc < 7 || argc > 8 ) return RedisModule_WrongArity(ctx);
+    //7 (version <= 1.0.21), 8 (version 1.0.22)
+    if (argc != 7 && argc != 8 ) return RedisModule_WrongArity(ctx);
     CrdtMeta meta = {.gid = 0};
     int status = CRDT_OK;
     if (readMeta(ctx, argv, 2, &meta) != CRDT_OK) {
@@ -487,11 +488,9 @@ int crdtZincrbyCommand(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) 
         need_add = 1;
     } 
     int result = 0;
-    // for(int i = 5; i < argc - 1; i += 2) {
-        sds field = RedisModule_GetSds(argv[5]);
-        sds score = RedisModule_GetSds(argv[6]);
-        result += zsetTryIncrby(current, tombstone, field, &meta, score);
-    // }
+    sds field = RedisModule_GetSds(argv[5]);
+    sds score = RedisModule_GetSds(argv[6]);
+    result += zsetTryIncrby(current, tombstone, field, &meta, score);
     if(result == 0) {
         if(need_add) {
             freeCrdtSS(current);

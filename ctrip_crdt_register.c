@@ -82,15 +82,14 @@ int isCrdtRc(CrdtObject* data) {
 
 
 /*****************  send command *************************/
-const char* crdt_counter_head = "*7\r\n$12\r\nCRDT.COUNTER\r\n";
-const char* crdt_counter_value_head = "*8\r\n$12\r\nCRDT.COUNTER\r\n";
+const char* crdt_counter_head = "*8\r\n$12\r\nCRDT.COUNTER\r\n";
 int replicationFeedCrdtCounterCommand(RedisModuleCtx* ctx, char* cmdbuf, sds key, CrdtMeta* meta, int type, sds data, ctrip_value v) {
     size_t cmdlen = 0;
     static int crdt_counter_head_str_len = 0;
     if(crdt_counter_head_str_len == 0) {
         crdt_counter_head_str_len = strlen(crdt_counter_head);
     }
-    cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_counter_value_head, crdt_counter_head_str_len);
+    cmdlen +=  feedBuf(cmdbuf + cmdlen, crdt_counter_head, crdt_counter_head_str_len);
     cmdlen += feedStr2Buf(cmdbuf + cmdlen, key, sdslen(key));
     cmdlen += feedMeta2Buf(cmdbuf + cmdlen, getMetaGid(meta), getMetaTimestamp(meta), getMetaVectorClock(meta));
     cmdlen += feedLongLong2Buf(cmdbuf + cmdlen, type);
@@ -382,7 +381,8 @@ int decrCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 //crdt.counter key gid time vc type value
 int crdtCounterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-    if (argc < 7 && argc > 8) return RedisModule_WrongArity(ctx);
+    //7 (version <= 1.0.21), 8 (version 1.0.22)
+    if (argc !=7 && argc != 8) return RedisModule_WrongArity(ctx);
     CrdtMeta meta = {.gid = 0};
     int status = CRDT_OK;
     if (readMeta(ctx, argv, 2, &meta) != CRDT_OK) {
