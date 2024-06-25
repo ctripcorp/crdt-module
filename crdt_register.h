@@ -44,7 +44,7 @@ int registerStartGc();
 int registerStopGc();
 
 typedef CrdtObject CRDT_Register ;
-int getCrdtRegisterLastGid(CRDT_Register* r);
+int getCrdtRegisterLastGid(void* r);
 sds getCrdtRegisterLastValue(CRDT_Register* r);
 long long getCrdtRegisterLastTimestamp(CRDT_Register* r);
 VectorClock getCrdtRegisterLastVc(void* r);

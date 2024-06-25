@@ -508,16 +508,17 @@ int hdelCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if(t != NULL && isCrdtHashTombstone(t)) {
         tombstone = retrieveCrdtHashTombstone(t);
     }
-    int createTombstoned = 0;
-    if(tombstone == NULL) {
-        tombstone = createCrdtHashTombstone();
-        createTombstoned = 1;
-    }
+    
 
     initIncrMeta(&hdel_meta);
     CRDT_Hash* current = getCurrentValue(moduleKey);
     if(current == NULL) {
         goto end;
+    }
+    int createTombstoned = 0;
+    if(tombstone == NULL) {
+        tombstone = createCrdtHashTombstone();
+        createTombstoned = 1;
     }
     appendVCForMeta(&hdel_meta, getCrdtHashLastVc(current));
     RedisModuleString** deleted_objs = RedisModule_PoolAlloc(ctx, sizeof(RedisModuleString*) * (argc-2));
