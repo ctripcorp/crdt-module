@@ -19,7 +19,7 @@ long long getCrdtRegisterLastTimestamp(CRDT_Register* r) {
     return getCrdtLWWRegisterTimestamp((CRDT_LWW_Register*)r);
 }
 int getCrdtLWWRegisterGid(CRDT_LWW_Register* r);
-int getCrdtRegisterLastGid(CRDT_Register* r) {
+int getCrdtRegisterLastGid(void* r) {
     return getCrdtLWWRegisterGid((CRDT_LWW_Register*)r);
 }
 sds getCrdtLWWRegisterValue(CRDT_LWW_Register* r);

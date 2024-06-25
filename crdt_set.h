@@ -134,4 +134,10 @@ static inline CRDT_SetTombstone* retrieveCrdtSetTombstone(void* t) {
 
 void setTombstoneTryResizeDict(CRDT_SetTombstone* tombstone);
 void setTryResizeDict(CRDT_Set* current);
+
+dict* getSetDict(CRDT_Set* data);
+void setSetDict(CRDT_Set* data, dict* dict);
+void setSetTombstoneDict(CRDT_SetTombstone* tombstone, dict* dict);
+dict* getSetTombstoneDict(CRDT_SetTombstone* tombstone);
+
 #endif

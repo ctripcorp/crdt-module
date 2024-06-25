@@ -227,7 +227,7 @@ CRDT_Set* createCrdtSet() {
     setType((CrdtObject*)set , CRDT_DATA);
     setDataType((CrdtObject*)set , CRDT_SET_TYPE);
     dict *map = dictCreate(&crdtSetDictType, NULL);
-    set->dict = (unsigned long long)map;
+    setSetDict(set, map);
     set->lastVc = newVectorClock(0);
     return (CRDT_Set* )set;
 }
@@ -267,6 +267,24 @@ int updateCrdtSetLastVcuByVectorClock(CRDT_Set* data, int gid, VectorClock vc) {
     mergeLogicClock(&v, &vc, gid);
     s->lastVc = v;
     return 1;
+}
+
+void setSetDict(CRDT_Set* data, dict* dict) {
+    crdt_orset_set* set = retrieve_crdt_orset_set(data);
+    #if defined(TCL_TEST)
+        set->dict = dict;
+    #else 
+        set->dict = (unsigned long long)(dict);
+    #endif
+}
+
+void setSetTombstoneDict(CRDT_SetTombstone* t, dict* dict) {
+    crdt_orset_set_tombstone* tombstone = retrieve_set_tombstone(t);
+    #if defined(TCL_TEST)
+        tombstone->dict = dict;
+    #else 
+        tombstone->dict = (unsigned long long)(dict);
+    #endif
 }
 
 dict* getSetDict(CRDT_Set* data) {
@@ -536,8 +554,7 @@ CrdtObject** crdtSetFilter(CrdtObject* t, int gid, long long logic_time, long lo
 crdt_orset_set* replace_set_value(crdt_orset_set* target, crdt_orset_set* other) {
     dict* d = (dict*)(unsigned long long)target->dict;
     target->dict = other->dict;
-    other->dict = (unsigned long long)d;
-    
+    setSetDict(other, d);
     VectorClock vc = target->lastVc;
     target->lastVc = other->lastVc;
     other->lastVc = vc;
@@ -577,13 +594,14 @@ CRDT_SetTombstone* createCrdtSetTombstone() {
     setType((CrdtObject*)tombstone , CRDT_TOMBSTONE);
     setDataType((CrdtObject*)tombstone , CRDT_SET_TYPE);
     dict *map = dictCreate(&crdtSetDictType, NULL);
-    tombstone->dict = (unsigned long long)map;
+    setSetTombstoneDict(tombstone, map);
     tombstone->lastVc = newVectorClock(0);
     tombstone->maxDelvectorClock = newVectorClock(0);
     return (CRDT_SetTombstone*)tombstone;
 }
 
-dict* getSetTombstoneDict(crdt_orset_set_tombstone* tombstone) {
+dict* getSetTombstoneDict(CRDT_SetTombstone* t) {
+    crdt_orset_set_tombstone* tombstone = retrieve_set_tombstone(t);
     return (dict*)(unsigned long long)(tombstone->dict);
 }
 
@@ -1100,7 +1118,7 @@ int setDel(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta) {
     }
     tom->lastVc = dupVectorClock(vc);
     dictRelease((dict*)(unsigned long long)tom->dict);
-    tom->dict = (unsigned long long)dictCreate(&crdtSetDictType, NULL);
+    setSetTombstoneDict(tom, dictCreate(&crdtSetDictType, NULL));
     return 1;
 }
 
@@ -1148,7 +1166,7 @@ int setTryDel(CRDT_Set* s, CRDT_SetTombstone* t, CrdtMeta* meta) {
 crdt_orset_set_tombstone* replace_set_tombstone_value(crdt_orset_set_tombstone* target, crdt_orset_set_tombstone* other) {
     dict* d = (dict*)(unsigned long long)target->dict;
     target->dict = other->dict;
-    other->dict = (unsigned long long)d;
+    setSetTombstoneDict(other, d);
     
     VectorClock vc = target->lastVc;
     target->lastVc = other->lastVc;
